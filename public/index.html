@@ -5,6 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>agent-404 — Agent-friendly 404 pages</title>
   <meta name="description" content="Make your 404 pages useful for AI agents. One script tag. Structured suggestions. Zero config.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -19,11 +22,11 @@
       --green: #22c55e;
       --orange: #f97316;
       --red: #ef4444;
-      --mono: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+      --mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
     }
 
     body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
       background: var(--bg);
       color: var(--text);
       line-height: 1.6;
@@ -88,6 +91,7 @@
 
     /* Code block */
     .code-block {
+      position: relative;
       background: var(--surface);
       border: 1px solid var(--border);
       border-radius: 12px;
@@ -97,6 +101,25 @@
       max-width: 640px;
       overflow-x: auto;
     }
+    .copy-btn {
+      position: absolute;
+      top: 0.75rem;
+      right: 0.75rem;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text-secondary);
+      padding: 0.3rem 0.5rem;
+      font-size: 0.7rem;
+      font-family: var(--mono);
+      cursor: pointer;
+      transition: all 0.15s;
+      display: flex;
+      align-items: center;
+      gap: 0.3rem;
+    }
+    .copy-btn:hover { color: var(--text); border-color: var(--text-secondary); }
+    .copy-btn.copied { color: var(--green); border-color: var(--green); }
     .code-block .label {
       font-family: var(--mono);
       font-size: 0.7rem;
@@ -311,40 +334,42 @@
 
     <div class="hero">
       <div class="badge">open source &middot; MIT licensed</div>
-      <h1>Your 404 pages are<br><span class="highlight">blind spots for AI</span></h1>
-      <p>When an agent hits a dead link, it gives up or hallucinates. agent-404 returns structured suggestions so agents recover gracefully. One script tag.</p>
+      <h1>Turn dead links into<br><span class="highlight">smart redirects for AI</span></h1>
+      <p>AI agents hit a broken link and give up. Add one script tag and your 404 pages start suggesting the right page — in a format agents already understand.</p>
     </div>
 
     <div class="code-block">
       <div class="label">Add to your 404 page &mdash; that's it</div>
-      <pre><span class="tag">&lt;script</span> <span class="attr">src</span>=<span class="str">"https://agent404.dev/agent-404.min.js"</span>
+      <pre><span class="tag">&lt;script</span>
+  <span class="attr">src</span>=<span class="str">"https://agent404.dev/agent-404.min.js"</span>
   <span class="attr">data-site-id</span>=<span class="str">"your-site-id"</span>
   <span class="attr">data-api-key</span>=<span class="str">"your-api-key"</span>
-  <span class="attr">defer</span><span class="tag">&gt;&lt;/script&gt;</span></pre>
+  <span class="attr">defer</span>
+<span class="tag">&gt;&lt;/script&gt;</span></pre>
     </div>
 
     <div class="section" id="how-it-works">
       <h2>How it works</h2>
       <div class="flow">
         <div class="flow-card">
-          <div class="step">Live pages</div>
-          <h3>Beacon metadata</h3>
-          <p>On every non-404 page, the script silently beacons URL, title, and headings to build your site index. Non-blocking, uses <code>fetch</code> with <code>keepalive</code>.</p>
+          <div class="step">Step 1</div>
+          <h3>Your site teaches itself</h3>
+          <p>As real users browse your site, the script quietly learns every page — its URL, title, and headings. Your site index builds itself over time, no sitemap required.</p>
         </div>
         <div class="flow-card">
-          <div class="step">404 pages</div>
-          <h3>Suggest alternatives</h3>
-          <p>On 404 pages, the script fetches ranked suggestions and injects a human-readable list + a <code>schema.org/ItemList</code> JSON-LD block.</p>
+          <div class="step">Step 2</div>
+          <h3>A dead link gets hit</h3>
+          <p>An agent follows an outdated link and lands on your 404. The script recognizes it's a dead end and asks: "what did they probably mean?"</p>
         </div>
         <div class="flow-card">
-          <div class="step">Fuzzy matching</div>
-          <h3>Three-signal ranking</h3>
-          <p>Path segment similarity (version-tolerant: <code>v2→v3</code>), Levenshtein distance for typos, and keyword overlap against titles and headings.</p>
+          <div class="step">Step 3</div>
+          <h3>The right page is found</h3>
+          <p>The URL is fuzzy-matched against your index. Version changes (<code>v2→v3</code>), typos, restructured paths — it figures out where the content moved.</p>
         </div>
         <div class="flow-card">
-          <div class="step">For agents</div>
-          <h3>schema.org JSON-LD</h3>
-          <p>Suggestions are injected as <code>ItemList</code> — a format AI agents and crawlers already parse. No custom namespace. No extra integration.</p>
+          <div class="step">Step 4</div>
+          <h3>Agents understand it instantly</h3>
+          <p>Suggestions appear as a human-readable list and as <code>schema.org</code> JSON-LD — a format AI agents already know how to parse. No integration needed on their side.</p>
         </div>
       </div>
 
@@ -366,34 +391,34 @@
     </div>
 
     <div class="section">
-      <h2>Use cases</h2>
+      <h2>Who it's for</h2>
       <div class="use-cases">
         <div class="use-case">
           <div class="icon">📚</div>
           <div>
-            <h3>Docs version migrations</h3>
-            <p>You shipped v3 of your API. Every agent trained on v2 links now hits 404s. agent-404 detects the version change and points them to the v3 equivalent.</p>
+            <h3>"We just shipped v3 and everything broke"</h3>
+            <p>You migrated your docs from v2 to v3. Now every AI agent, every Stack Overflow answer, every tutorial links to pages that don't exist anymore. <span style="white-space:nowrap">agent-404</span> notices the version shift and sends them to the right v3 page.</p>
           </div>
         </div>
         <div class="use-case">
           <div class="icon">🔗</div>
           <div>
-            <h3>URL restructures</h3>
-            <p>Moved <code>/blog/post-slug</code> to <code>/articles/post-slug</code>? Instead of maintaining redirect maps forever, let the fuzzy matcher handle it.</p>
+            <h3>"We restructured our URLs last quarter"</h3>
+            <p>You moved <code>/blog/</code> to <code>/articles/</code> and set up redirects for the top 20 posts. But there were 200 more you forgot about. The fuzzy matcher catches those without you maintaining a redirect map.</p>
           </div>
         </div>
         <div class="use-case">
           <div class="icon">🤖</div>
           <div>
-            <h3>AI agent recovery</h3>
-            <p>LLM agents, RAG pipelines, and coding assistants follow links from training data. When those links rot, they hallucinate. Give them structured alternatives instead.</p>
+            <h3>"Claude keeps linking to our old API docs"</h3>
+            <p>LLM agents, coding assistants, and RAG pipelines follow links baked into training data. When those links go stale, they hallucinate answers. Give them a structured path to the current content instead.</p>
           </div>
         </div>
         <div class="use-case">
           <div class="icon">🔍</div>
           <div>
-            <h3>SEO & crawl health</h3>
-            <p>Search engines discover your 404s. With JSON-LD suggestions in the page, crawlers find the right content instead of indexing a dead page.</p>
+            <h3>"Our 404 rate is climbing in Search Console"</h3>
+            <p>Search crawlers find your dead pages and index them as errors. With JSON-LD suggestions embedded in the 404, crawlers discover the right content instead of flagging another broken link.</p>
           </div>
         </div>
       </div>
@@ -425,10 +450,12 @@
       </div>
       <div class="code-block" style="margin: 1rem 0 0; max-width: none;">
         <div class="label">2. Add the script tag to your site</div>
-        <pre><span class="tag">&lt;script</span> <span class="attr">src</span>=<span class="str">"https://agent404.dev/agent-404.min.js"</span>
+        <pre><span class="tag">&lt;script</span>
+  <span class="attr">src</span>=<span class="str">"https://agent404.dev/agent-404.min.js"</span>
   <span class="attr">data-site-id</span>=<span class="str">"abc-123"</span>
   <span class="attr">data-api-key</span>=<span class="str">"key_..."</span>
-  <span class="attr">defer</span><span class="tag">&gt;&lt;/script&gt;</span>
+  <span class="attr">defer</span>
+<span class="tag">&gt;&lt;/script&gt;</span>
 
 <span class="comment">&lt;!-- Live pages: beacons metadata automatically --&gt;</span>
 <span class="comment">&lt;!-- 404 pages: fetches &amp; injects suggestions --&gt;</span></pre>
@@ -464,5 +491,25 @@
       Built by <a href="https://github.com/bharath31">bharath31</a> &middot; <a href="https://github.com/bharath31/agent-404">Source</a>
     </footer>
   </div>
+  <script>
+    document.querySelectorAll('.code-block').forEach(block => {
+      const pre = block.querySelector('pre');
+      if (!pre) return;
+      const btn = document.createElement('button');
+      btn.className = 'copy-btn';
+      btn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>Copy';
+      btn.addEventListener('click', () => {
+        navigator.clipboard.writeText(pre.textContent).then(() => {
+          btn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>Copied';
+          btn.classList.add('copied');
+          setTimeout(() => {
+            btn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>Copy';
+            btn.classList.remove('copied');
+          }, 2000);
+        });
+      });
+      block.appendChild(btn);
+    });
+  </script>
 </body>
 </html>
