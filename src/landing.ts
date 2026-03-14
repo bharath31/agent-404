@@ -154,28 +154,45 @@ export const landingPageHtml = `<!DOCTYPE html>
     }
 
     .flow {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 1rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      position: relative;
     }
     @media (max-width: 600px) {
-      .flow { grid-template-columns: 1fr; }
       .hero h1 { font-size: 2rem; }
     }
 
     .flow-card {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 1.5rem;
+      display: flex;
+      gap: 1.25rem;
+      padding: 1.5rem 0;
+      position: relative;
+    }
+    .flow-card + .flow-card {
+      border-top: 1px dashed var(--border);
+    }
+    .flow-card .step-num {
+      flex-shrink: 0;
+      width: 2.5rem;
+      height: 2.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--accent);
+      color: white;
+      border-radius: 50%;
+      font-family: var(--mono);
+      font-size: 0.9rem;
+      font-weight: 700;
     }
     .flow-card .step {
       font-family: var(--mono);
       font-size: 0.7rem;
-      color: var(--accent);
+      color: var(--text-secondary);
       text-transform: uppercase;
       letter-spacing: 0.08em;
-      margin-bottom: 0.5rem;
+      margin-bottom: 0.25rem;
     }
     .flow-card h3 {
       font-size: 1rem;
@@ -338,38 +355,63 @@ export const landingPageHtml = `<!DOCTYPE html>
       <p>AI agents hit a broken link and give up. Add one script tag and your 404 pages start suggesting the right page — in a format agents already understand.</p>
     </div>
 
-    <div class="code-block">
-      <div class="label">Add to your 404 page &mdash; that's it</div>
-      <pre><span class="tag">&lt;script</span>
-  <span class="attr">src</span>=<span class="str">"https://agent404.dev/agent-404.min.js"</span>
-  <span class="attr">data-site-id</span>=<span class="str">"your-site-id"</span>
-  <span class="attr">data-api-key</span>=<span class="str">"your-api-key"</span>
-  <span class="attr">defer</span>
-<span class="tag">&gt;&lt;/script&gt;</span></pre>
+    <div class="code-block" id="get-started-block">
+      <div class="label">Get your script tag</div>
+      <div id="register-form">
+        <div style="display:flex;gap:0.5rem;align-items:stretch">
+          <input type="text" id="domain-input" placeholder="your-site.com"
+            style="flex:1;padding:0.6rem 0.8rem;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--mono);font-size:0.85rem;outline:none"
+            onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border)'"
+          >
+          <button id="register-btn" onclick="registerSite()"
+            style="padding:0.6rem 1.25rem;background:var(--accent);color:white;border:none;border-radius:8px;font-size:0.85rem;font-weight:600;cursor:pointer;white-space:nowrap;transition:background 0.15s"
+            onmouseover="this.style.background='var(--accent-dim)'" onmouseout="this.style.background='var(--accent)'"
+          >Generate</button>
+        </div>
+        <p style="margin-top:0.5rem;font-size:0.75rem;color:var(--text-secondary)">Enter your domain to get a ready-to-paste script tag</p>
+      </div>
+      <div id="snippet-result" style="display:none">
+        <pre id="snippet-pre"></pre>
+        <p style="margin-top:0.75rem;font-size:0.75rem;color:var(--text-secondary)">
+          <span id="registered-domain" style="color:var(--green)"></span> &mdash; paste this into every page on your site
+        </p>
+      </div>
     </div>
 
     <div class="section" id="how-it-works">
       <h2>How it works</h2>
       <div class="flow">
         <div class="flow-card">
-          <div class="step">Step 1</div>
-          <h3>Your site teaches itself</h3>
-          <p>As real users browse your site, the script quietly learns every page — its URL, title, and headings. Your site index builds itself over time, no sitemap required.</p>
+          <div class="step-num">1</div>
+          <div>
+            <div class="step">Index</div>
+            <h3>Your site teaches itself</h3>
+            <p>As real users browse your site, the script quietly learns every page — its URL, title, and headings. Your site index builds itself over time, no sitemap required.</p>
+          </div>
         </div>
         <div class="flow-card">
-          <div class="step">Step 2</div>
-          <h3>A dead link gets hit</h3>
-          <p>An agent follows an outdated link and lands on your 404. The script recognizes it's a dead end and asks: "what did they probably mean?"</p>
+          <div class="step-num">2</div>
+          <div>
+            <div class="step">Detect</div>
+            <h3>A dead link gets hit</h3>
+            <p>An agent follows an outdated link and lands on your 404. The script recognizes it's a dead end and asks: "what did they probably mean?"</p>
+          </div>
         </div>
         <div class="flow-card">
-          <div class="step">Step 3</div>
-          <h3>The right page is found</h3>
-          <p>The URL is fuzzy-matched against your index. Version changes (<code>v2→v3</code>), typos, restructured paths — it figures out where the content moved.</p>
+          <div class="step-num">3</div>
+          <div>
+            <div class="step">Match</div>
+            <h3>The right page is found</h3>
+            <p>The URL is fuzzy-matched against your index. Version changes (<code>v2→v3</code>), typos, restructured paths — it figures out where the content moved.</p>
+          </div>
         </div>
         <div class="flow-card">
-          <div class="step">Step 4</div>
-          <h3>Agents understand it instantly</h3>
-          <p>Suggestions appear as a human-readable list and as <code>schema.org</code> JSON-LD — a format AI agents already know how to parse. No integration needed on their side.</p>
+          <div class="step-num">4</div>
+          <div>
+            <div class="step">Recover</div>
+            <h3>Agents understand it instantly</h3>
+            <p>Suggestions appear as a human-readable list and as <code>schema.org</code> JSON-LD — a format AI agents already know how to parse. No integration needed on their side.</p>
+          </div>
         </div>
       </div>
 
@@ -425,44 +467,6 @@ export const landingPageHtml = `<!DOCTYPE html>
     </div>
 
     <div class="section">
-      <h2>404 detection</h2>
-      <p style="color: var(--text-secondary); margin-bottom: 1rem; font-size: 0.9rem;">HTTP status codes aren't available in client-side JS. The script uses three fallback strategies (in order):</p>
-      <div class="code-block" style="margin: 0; max-width: none;">
-        <pre><span class="comment">// 1. CSS selector you provide</span>
-<span class="tag">&lt;script</span> ... <span class="attr">data-404-selector</span>=<span class="str">".not-found-page"</span><span class="tag">&gt;&lt;/script&gt;</span>
-
-<span class="comment">// 2. Meta tag in your 404 template</span>
-<span class="tag">&lt;meta</span> <span class="attr">name</span>=<span class="str">"agent-404:status"</span> <span class="attr">content</span>=<span class="str">"404"</span><span class="tag">&gt;</span>
-
-<span class="comment">// 3. Title heuristic (contains "404" or "not found")</span></pre>
-      </div>
-    </div>
-
-    <div class="section">
-      <h2>Quick start</h2>
-      <div class="code-block" style="margin: 0; max-width: none;">
-        <div class="label">1. Register your site</div>
-        <pre>curl -X POST https://agent404.dev/api/sites \\
-  -H <span class="str">"Content-Type: application/json"</span> \\
-  -d <span class="str">'{"domain": "your-site.com"}'</span>
-
-<span class="comment"># → { "id": "abc-123", "apiKey": "key_..." }</span></pre>
-      </div>
-      <div class="code-block" style="margin: 1rem 0 0; max-width: none;">
-        <div class="label">2. Add the script tag to your site</div>
-        <pre><span class="tag">&lt;script</span>
-  <span class="attr">src</span>=<span class="str">"https://agent404.dev/agent-404.min.js"</span>
-  <span class="attr">data-site-id</span>=<span class="str">"abc-123"</span>
-  <span class="attr">data-api-key</span>=<span class="str">"key_..."</span>
-  <span class="attr">defer</span>
-<span class="tag">&gt;&lt;/script&gt;</span>
-
-<span class="comment">&lt;!-- Live pages: beacons metadata automatically --&gt;</span>
-<span class="comment">&lt;!-- 404 pages: fetches &amp; injects suggestions --&gt;</span></pre>
-      </div>
-    </div>
-
-    <div class="section">
       <h2>Stack</h2>
       <p style="color: var(--text-secondary); font-size: 0.9rem;">Fully open source. Self-host or use the hosted version.</p>
       <div class="stack-list">
@@ -492,9 +496,12 @@ export const landingPageHtml = `<!DOCTYPE html>
     </footer>
   </div>
   <script>
-    document.querySelectorAll('.code-block').forEach(block => {
+    // Copy buttons for code blocks
+    function addCopyBtn(block) {
       const pre = block.querySelector('pre');
       if (!pre) return;
+      const existing = block.querySelector('.copy-btn');
+      if (existing) existing.remove();
       const btn = document.createElement('button');
       btn.className = 'copy-btn';
       btn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>Copy';
@@ -509,7 +516,72 @@ export const landingPageHtml = `<!DOCTYPE html>
         });
       });
       block.appendChild(btn);
-    });
+    }
+    document.querySelectorAll('.code-block').forEach(addCopyBtn);
+
+    // Domain registration
+    const domainInput = document.getElementById('domain-input');
+    domainInput.addEventListener('keydown', e => { if (e.key === 'Enter') registerSite(); });
+
+    async function registerSite() {
+      let domain = domainInput.value.trim();
+      if (!domain) { domainInput.focus(); return; }
+      domain = domain.replace(/^https?:\\/\\//, '').replace(/\\/+\$/, '');
+
+      const btn = document.getElementById('register-btn');
+      const origText = btn.textContent;
+      btn.textContent = 'Generating...';
+      btn.disabled = true;
+      btn.style.opacity = '0.7';
+
+      try {
+        const res = await fetch('/api/sites', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ domain })
+        });
+
+        if (!res.ok) {
+          const err = await res.json();
+          if (res.status === 409) {
+            alert('This domain is already registered. Contact support if you need your credentials.');
+          } else {
+            alert(err.error || 'Something went wrong');
+          }
+          return;
+        }
+
+        const site = await res.json();
+        showSnippet(domain, site.id, site.apiKey);
+      } catch {
+        alert('Network error — please try again');
+      } finally {
+        btn.textContent = origText;
+        btn.disabled = false;
+        btn.style.opacity = '1';
+      }
+    }
+
+    function showSnippet(domain, siteId, apiKey) {
+      document.getElementById('register-form').style.display = 'none';
+      const result = document.getElementById('snippet-result');
+      result.style.display = 'block';
+
+      const pre = document.getElementById('snippet-pre');
+      pre.innerHTML =
+        '<span class="tag">&lt;script</span>\\n' +
+        '  <span class="attr">src</span>=<span class="str">"https://agent404.dev/agent-404.min.js"</span>\\n' +
+        '  <span class="attr">data-site-id</span>=<span class="str">"' + siteId + '"</span>\\n' +
+        '  <span class="attr">data-api-key</span>=<span class="str">"' + apiKey + '"</span>\\n' +
+        '  <span class="attr">defer</span>\\n' +
+        '<span class="tag">&gt;&lt;/script&gt;</span>';
+
+      document.getElementById('registered-domain').textContent = domain;
+
+      // Add copy button to the generated snippet
+      const block = document.getElementById('get-started-block');
+      addCopyBtn(block);
+    }
   </script>
 </body>
 </html>
