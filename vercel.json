@@ -1,6 +1,6 @@
 {
   "rewrites": [
-    { "source": "/api/:path*", "destination": "/api/index" }
+    { "source": "/(.*)", "destination": "/api/index" }
   ],
   "crons": [
     { "path": "/api/cron", "schedule": "0 3 * * *" }
