@@ -1,8 +1,8 @@
 import { Hono } from "hono";
-import type { D1Storage } from "../../storage/d1.js";
+import type { PostgresStorage } from "../../storage/postgres.js";
 import { crawlSitemap } from "../../engine/sitemap.js";
 
-type Env = { Bindings: { DB: D1Database }; Variables: { storage: D1Storage; siteId: string } };
+type Env = { Variables: { storage: PostgresStorage; siteId: string } };
 
 const sites = new Hono<Env>();
 
@@ -19,12 +19,8 @@ sites.post("/", async (c) => {
 	try {
 		const site = await storage.createSite(domain);
 
-		// Trigger sitemap crawl in background (non-blocking)
-		try {
-			c.executionCtx.waitUntil(crawlSitemap(domain, site.id, storage));
-		} catch {
-			// executionCtx may not be available in test environments
-		}
+		// Trigger sitemap crawl (best-effort, don't block response)
+		crawlSitemap(domain, site.id, storage).catch(() => {});
 
 		return c.json(
 			{
@@ -36,14 +32,14 @@ sites.post("/", async (c) => {
 			201,
 		);
 	} catch (err: any) {
-		if (err?.message?.includes("UNIQUE constraint failed")) {
+		if (err?.message?.includes("unique") || err?.message?.includes("duplicate")) {
 			return c.json({ error: "Domain already registered" }, 409);
 		}
 		throw err;
 	}
 });
 
-// Get site stats (requires auth)
+// Get site stats
 sites.get("/:id/stats", async (c) => {
 	const id = c.req.param("id");
 	const storage = c.get("storage");

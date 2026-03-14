@@ -44,21 +44,7 @@
 			).slice(0, 20),
 		});
 
-		if (navigator.sendBeacon) {
-			const blob = new Blob([data], { type: "application/json" });
-			const sent = navigator.sendBeacon(apiBase + "/api/register", blob);
-			// sendBeacon doesn't support custom headers; fall back to fetch
-			if (!sent) fetchBeacon(data);
-			else {
-				// sendBeacon can't set x-api-key; use fetch instead
-				fetchBeacon(data);
-			}
-		} else {
-			fetchBeacon(data);
-		}
-	}
-
-	function fetchBeacon(data: string): void {
+		// sendBeacon can't set custom headers, so we use fetch with keepalive
 		fetch(apiBase + "/api/register", {
 			method: "POST",
 			headers,

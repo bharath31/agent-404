@@ -1,11 +1,11 @@
 # agent-404
 
-Make your 404 pages agent-friendly. When AI agents and crawlers hit a dead link, they give up or hallucinate. **agent-404** returns structured suggestions of the next best pages — so agents can recover gracefully.
+Make your 404 pages agent-friendly. When AI agents and crawlers hit a dead link, they give up or hallucinate. **agent-404** returns structured suggestions of the next best pages — so agents recover gracefully.
 
 One script tag. That's it.
 
 ```html
-<script src="https://agent-404.dev/agent-404.min.js"
+<script src="https://agent404.dev/agent-404.min.js"
   data-site-id="your-site-id"
   data-api-key="your-api-key"
   defer></script>
@@ -37,7 +37,7 @@ Suggestions are ranked using three signals:
 ### Register a site
 
 ```bash
-curl -X POST https://agent-404.dev/api/sites \
+curl -X POST https://agent404.dev/api/sites \
   -H "Content-Type: application/json" \
   -d '{"domain": "example.com"}'
 ```
@@ -47,7 +47,7 @@ Returns `siteId` and `apiKey`. The sitemap is crawled automatically on registrat
 ### Beacon a page (client script does this automatically)
 
 ```bash
-curl -X POST https://agent-404.dev/api/register \
+curl -X POST https://agent404.dev/api/register \
   -H "Content-Type: application/json" \
   -H "x-api-key: your-api-key" \
   -d '{"url": "https://example.com/docs/auth", "title": "Auth Guide", "headings": ["OAuth", "API Keys"]}'
@@ -56,7 +56,7 @@ curl -X POST https://agent-404.dev/api/register \
 ### Get suggestions for a dead URL
 
 ```bash
-curl -X POST https://agent-404.dev/api/suggest \
+curl -X POST https://agent404.dev/api/suggest \
   -H "Content-Type: application/json" \
   -H "x-api-key: your-api-key" \
   -d '{"url": "https://example.com/docs/v2/auth"}'
@@ -75,24 +75,26 @@ Response:
 
 ## Self-hosting
 
-Built on Cloudflare Workers + D1.
-
 ```bash
-# Install
 npm install
 
-# Local dev
+# Set up Vercel Postgres
+# 1. Create a Postgres database in Vercel Dashboard → Storage
+# 2. Link it to your project
+# 3. Pull env vars:
+vercel env pull .env.local
+
+# Run migration
 npm run db:migrate
+
+# Local dev
 npm run dev
 
 # Build client script
 npm run build:script
 
 # Deploy
-wrangler d1 create agent-404-db          # create D1 database
-# update database_id in wrangler.jsonc
-wrangler d1 migrations apply agent-404-db # run migrations
-npm run deploy
+vercel --prod
 
 # Tests
 npm test
@@ -100,8 +102,8 @@ npm test
 
 ## Stack
 
-- **Runtime**: Cloudflare Workers (Hono)
-- **Database**: Cloudflare D1 (SQLite at the edge)
+- **Runtime**: Vercel Edge Functions (Hono)
+- **Database**: Vercel Postgres (Neon)
 - **Client**: Vanilla JS, <3KB
 - **Indexing**: Sitemap.xml crawl + client-side beacons
 

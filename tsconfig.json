@@ -4,7 +4,6 @@
     "module": "ES2022",
     "moduleResolution": "bundler",
     "lib": ["ES2022"],
-    "types": ["@cloudflare/workers-types"],
     "strict": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
@@ -15,6 +14,6 @@
     "jsx": "react-jsx",
     "jsxImportSource": "hono/jsx"
   },
-  "include": ["src/**/*.ts", "script/**/*.ts"],
+  "include": ["src/**/*.ts", "api/**/*.ts", "script/**/*.ts", "migrations/**/*.ts"],
   "exclude": ["node_modules", "dist"]
 }

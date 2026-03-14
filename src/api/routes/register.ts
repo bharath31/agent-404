@@ -1,8 +1,8 @@
 import { Hono } from "hono";
-import type { D1Storage } from "../../storage/d1.js";
+import type { PostgresStorage } from "../../storage/postgres.js";
 import { registerPage } from "../../engine/indexer.js";
 
-type Env = { Bindings: { DB: D1Database }; Variables: { storage: D1Storage; siteId: string } };
+type Env = { Variables: { storage: PostgresStorage; siteId: string } };
 
 const register = new Hono<Env>();
 
