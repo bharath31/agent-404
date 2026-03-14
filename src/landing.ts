@@ -1,0 +1,469 @@
+export const landingPageHtml = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>agent-404 — Agent-friendly 404 pages</title>
+  <meta name="description" content="Make your 404 pages useful for AI agents. One script tag. Structured suggestions. Zero config.">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0a0a0b;
+      --surface: #141416;
+      --border: #27272a;
+      --text: #fafafa;
+      --text-secondary: #a1a1aa;
+      --accent: #3b82f6;
+      --accent-dim: #1d4ed8;
+      --green: #22c55e;
+      --orange: #f97316;
+      --red: #ef4444;
+      --mono: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    .container { max-width: 800px; margin: 0 auto; padding: 0 1.5rem; }
+
+    /* Nav */
+    nav {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 1.25rem 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .logo {
+      font-family: var(--mono);
+      font-size: 1rem;
+      font-weight: 700;
+      color: var(--text);
+    }
+    .logo span { color: var(--text-secondary); }
+    nav .links { display: flex; gap: 1.5rem; font-size: 0.875rem; }
+    nav .links a { color: var(--text-secondary); }
+    nav .links a:hover { color: var(--text); text-decoration: none; }
+
+    /* Hero */
+    .hero {
+      padding: 5rem 0 3rem;
+      text-align: center;
+    }
+    .hero .badge {
+      display: inline-block;
+      padding: 0.25rem 0.75rem;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      font-size: 0.75rem;
+      font-family: var(--mono);
+      color: var(--green);
+      margin-bottom: 1.5rem;
+      letter-spacing: 0.02em;
+    }
+    .hero h1 {
+      font-size: 3rem;
+      font-weight: 800;
+      line-height: 1.1;
+      letter-spacing: -0.03em;
+      margin-bottom: 1rem;
+    }
+    .hero h1 .highlight { color: var(--accent); }
+    .hero p {
+      font-size: 1.2rem;
+      color: var(--text-secondary);
+      max-width: 560px;
+      margin: 0 auto 2rem;
+      line-height: 1.5;
+    }
+
+    /* Code block */
+    .code-block {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.5rem;
+      text-align: left;
+      margin: 0 auto 3rem;
+      max-width: 640px;
+      overflow-x: auto;
+    }
+    .code-block .label {
+      font-family: var(--mono);
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-secondary);
+      margin-bottom: 0.75rem;
+    }
+    .code-block pre {
+      font-family: var(--mono);
+      font-size: 0.85rem;
+      line-height: 1.7;
+      color: var(--text);
+      white-space: pre;
+      overflow-x: auto;
+    }
+    .code-block .tag { color: var(--red); }
+    .code-block .attr { color: var(--orange); }
+    .code-block .str { color: var(--green); }
+    .code-block .comment { color: #52525b; }
+
+    /* How it works */
+    .section {
+      padding: 3rem 0;
+      border-top: 1px solid var(--border);
+    }
+    .section h2 {
+      font-size: 1.5rem;
+      font-weight: 700;
+      margin-bottom: 2rem;
+      letter-spacing: -0.02em;
+    }
+
+    .flow {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+    }
+    @media (max-width: 600px) {
+      .flow { grid-template-columns: 1fr; }
+      .hero h1 { font-size: 2rem; }
+    }
+
+    .flow-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.5rem;
+    }
+    .flow-card .step {
+      font-family: var(--mono);
+      font-size: 0.7rem;
+      color: var(--accent);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 0.5rem;
+    }
+    .flow-card h3 {
+      font-size: 1rem;
+      font-weight: 600;
+      margin-bottom: 0.5rem;
+    }
+    .flow-card p {
+      font-size: 0.875rem;
+      color: var(--text-secondary);
+      line-height: 1.5;
+    }
+
+    /* Response preview */
+    .response-preview {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.5rem;
+      margin-top: 2rem;
+    }
+    .response-preview .label {
+      font-family: var(--mono);
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-secondary);
+      margin-bottom: 0.75rem;
+    }
+    .response-preview pre {
+      font-family: var(--mono);
+      font-size: 0.8rem;
+      line-height: 1.6;
+      color: var(--text-secondary);
+      overflow-x: auto;
+    }
+    .response-preview .key { color: var(--accent); }
+    .response-preview .str { color: var(--green); }
+    .response-preview .num { color: var(--orange); }
+
+    /* Use cases */
+    .use-cases {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 0.75rem;
+    }
+    .use-case {
+      display: flex;
+      align-items: flex-start;
+      gap: 1rem;
+      padding: 1.25rem;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+    }
+    .use-case .icon {
+      font-size: 1.25rem;
+      flex-shrink: 0;
+      width: 2rem;
+      height: 2rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--bg);
+      border-radius: 8px;
+    }
+    .use-case h3 {
+      font-size: 0.95rem;
+      font-weight: 600;
+      margin-bottom: 0.25rem;
+    }
+    .use-case p {
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+      line-height: 1.4;
+    }
+
+    /* Stack */
+    .stack-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-top: 1rem;
+    }
+    .stack-tag {
+      font-family: var(--mono);
+      font-size: 0.8rem;
+      padding: 0.35rem 0.75rem;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text-secondary);
+    }
+
+    /* CTA */
+    .cta {
+      text-align: center;
+      padding: 4rem 0;
+      border-top: 1px solid var(--border);
+    }
+    .cta h2 {
+      font-size: 1.5rem;
+      font-weight: 700;
+      margin-bottom: 0.75rem;
+      letter-spacing: -0.02em;
+    }
+    .cta p {
+      color: var(--text-secondary);
+      margin-bottom: 1.5rem;
+      font-size: 0.95rem;
+    }
+    .cta .btn-group { display: flex; gap: 0.75rem; justify-content: center; flex-wrap: wrap; }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.6rem 1.25rem;
+      border-radius: 8px;
+      font-size: 0.875rem;
+      font-weight: 500;
+      transition: all 0.15s;
+    }
+    .btn-primary {
+      background: var(--accent);
+      color: white;
+    }
+    .btn-primary:hover { background: var(--accent-dim); text-decoration: none; }
+    .btn-secondary {
+      background: var(--surface);
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+    .btn-secondary:hover { border-color: var(--text-secondary); text-decoration: none; }
+
+    /* Footer */
+    footer {
+      padding: 2rem 0;
+      border-top: 1px solid var(--border);
+      text-align: center;
+      font-size: 0.8rem;
+      color: #52525b;
+    }
+    footer a { color: #52525b; }
+    footer a:hover { color: var(--text-secondary); }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <nav>
+      <div class="logo">agent<span>-</span>404</div>
+      <div class="links">
+        <a href="https://github.com/bharath31/agent-404">GitHub</a>
+        <a href="#how-it-works">How it works</a>
+        <a href="/api/health">API Status</a>
+      </div>
+    </nav>
+
+    <div class="hero">
+      <div class="badge">open source &middot; MIT licensed</div>
+      <h1>Your 404 pages are<br><span class="highlight">blind spots for AI</span></h1>
+      <p>When an agent hits a dead link, it gives up or hallucinates. agent-404 returns structured suggestions so agents recover gracefully. One script tag.</p>
+    </div>
+
+    <div class="code-block">
+      <div class="label">Add to your 404 page &mdash; that's it</div>
+      <pre><span class="tag">&lt;script</span> <span class="attr">src</span>=<span class="str">"https://agent404.dev/agent-404.min.js"</span>
+  <span class="attr">data-site-id</span>=<span class="str">"your-site-id"</span>
+  <span class="attr">data-api-key</span>=<span class="str">"your-api-key"</span>
+  <span class="attr">defer</span><span class="tag">&gt;&lt;/script&gt;</span></pre>
+    </div>
+
+    <div class="section" id="how-it-works">
+      <h2>How it works</h2>
+      <div class="flow">
+        <div class="flow-card">
+          <div class="step">Live pages</div>
+          <h3>Beacon metadata</h3>
+          <p>On every non-404 page, the script silently beacons URL, title, and headings to build your site index. Non-blocking, uses <code>fetch</code> with <code>keepalive</code>.</p>
+        </div>
+        <div class="flow-card">
+          <div class="step">404 pages</div>
+          <h3>Suggest alternatives</h3>
+          <p>On 404 pages, the script fetches ranked suggestions and injects a human-readable list + a <code>schema.org/ItemList</code> JSON-LD block.</p>
+        </div>
+        <div class="flow-card">
+          <div class="step">Fuzzy matching</div>
+          <h3>Three-signal ranking</h3>
+          <p>Path segment similarity (version-tolerant: <code>v2→v3</code>), Levenshtein distance for typos, and keyword overlap against titles and headings.</p>
+        </div>
+        <div class="flow-card">
+          <div class="step">For agents</div>
+          <h3>schema.org JSON-LD</h3>
+          <p>Suggestions are injected as <code>ItemList</code> — a format AI agents and crawlers already parse. No custom namespace. No extra integration.</p>
+        </div>
+      </div>
+
+      <div class="response-preview">
+        <div class="label">POST /api/suggest &rarr; response</div>
+        <pre>{
+  <span class="key">"deadUrl"</span>: <span class="str">"https://docs.acme.com/v2/auth"</span>,
+  <span class="key">"suggestions"</span>: [
+    {
+      <span class="key">"url"</span>: <span class="str">"https://docs.acme.com/v3/auth"</span>,
+      <span class="key">"title"</span>: <span class="str">"Authentication Guide"</span>,
+      <span class="key">"score"</span>: <span class="num">0.85</span>,
+      <span class="key">"matchType"</span>: <span class="str">"moved"</span>
+    }
+  ],
+  <span class="key">"jsonLd"</span>: { <span class="key">"@context"</span>: <span class="str">"https://schema.org"</span>, ... }
+}</pre>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>Use cases</h2>
+      <div class="use-cases">
+        <div class="use-case">
+          <div class="icon">📚</div>
+          <div>
+            <h3>Docs version migrations</h3>
+            <p>You shipped v3 of your API. Every agent trained on v2 links now hits 404s. agent-404 detects the version change and points them to the v3 equivalent.</p>
+          </div>
+        </div>
+        <div class="use-case">
+          <div class="icon">🔗</div>
+          <div>
+            <h3>URL restructures</h3>
+            <p>Moved <code>/blog/post-slug</code> to <code>/articles/post-slug</code>? Instead of maintaining redirect maps forever, let the fuzzy matcher handle it.</p>
+          </div>
+        </div>
+        <div class="use-case">
+          <div class="icon">🤖</div>
+          <div>
+            <h3>AI agent recovery</h3>
+            <p>LLM agents, RAG pipelines, and coding assistants follow links from training data. When those links rot, they hallucinate. Give them structured alternatives instead.</p>
+          </div>
+        </div>
+        <div class="use-case">
+          <div class="icon">🔍</div>
+          <div>
+            <h3>SEO & crawl health</h3>
+            <p>Search engines discover your 404s. With JSON-LD suggestions in the page, crawlers find the right content instead of indexing a dead page.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>404 detection</h2>
+      <p style="color: var(--text-secondary); margin-bottom: 1rem; font-size: 0.9rem;">HTTP status codes aren't available in client-side JS. The script uses three fallback strategies (in order):</p>
+      <div class="code-block" style="margin: 0; max-width: none;">
+        <pre><span class="comment">// 1. CSS selector you provide</span>
+<span class="tag">&lt;script</span> ... <span class="attr">data-404-selector</span>=<span class="str">".not-found-page"</span><span class="tag">&gt;&lt;/script&gt;</span>
+
+<span class="comment">// 2. Meta tag in your 404 template</span>
+<span class="tag">&lt;meta</span> <span class="attr">name</span>=<span class="str">"agent-404:status"</span> <span class="attr">content</span>=<span class="str">"404"</span><span class="tag">&gt;</span>
+
+<span class="comment">// 3. Title heuristic (contains "404" or "not found")</span></pre>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>Quick start</h2>
+      <div class="code-block" style="margin: 0; max-width: none;">
+        <div class="label">1. Register your site</div>
+        <pre>curl -X POST https://agent404.dev/api/sites \\
+  -H <span class="str">"Content-Type: application/json"</span> \\
+  -d <span class="str">'{"domain": "your-site.com"}'</span>
+
+<span class="comment"># → { "id": "abc-123", "apiKey": "key_..." }</span></pre>
+      </div>
+      <div class="code-block" style="margin: 1rem 0 0; max-width: none;">
+        <div class="label">2. Add the script tag to your site</div>
+        <pre><span class="tag">&lt;script</span> <span class="attr">src</span>=<span class="str">"https://agent404.dev/agent-404.min.js"</span>
+  <span class="attr">data-site-id</span>=<span class="str">"abc-123"</span>
+  <span class="attr">data-api-key</span>=<span class="str">"key_..."</span>
+  <span class="attr">defer</span><span class="tag">&gt;&lt;/script&gt;</span>
+
+<span class="comment">&lt;!-- Live pages: beacons metadata automatically --&gt;</span>
+<span class="comment">&lt;!-- 404 pages: fetches &amp; injects suggestions --&gt;</span></pre>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>Stack</h2>
+      <p style="color: var(--text-secondary); font-size: 0.9rem;">Fully open source. Self-host or use the hosted version.</p>
+      <div class="stack-list">
+        <span class="stack-tag">Hono</span>
+        <span class="stack-tag">Vercel Edge Functions</span>
+        <span class="stack-tag">PostgreSQL</span>
+        <span class="stack-tag">Vanilla JS &lt;3KB</span>
+        <span class="stack-tag">schema.org JSON-LD</span>
+        <span class="stack-tag">MIT License</span>
+      </div>
+    </div>
+
+    <div class="cta">
+      <h2>Stop losing agents to dead links</h2>
+      <p>Add one script tag. Your 404 pages start working for you.</p>
+      <div class="btn-group">
+        <a href="https://github.com/bharath31/agent-404" class="btn btn-primary">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+          View on GitHub
+        </a>
+        <a href="/api/health" class="btn btn-secondary">API Status</a>
+      </div>
+    </div>
+
+    <footer>
+      Built by <a href="https://github.com/bharath31">bharath31</a> &middot; <a href="https://github.com/bharath31/agent-404">Source</a>
+    </footer>
+  </div>
+</body>
+</html>
+`;

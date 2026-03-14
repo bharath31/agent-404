@@ -7,6 +7,7 @@ import { suggest } from "./api/routes/suggest.js";
 import { apiKeyAuth } from "./api/middleware/auth.js";
 import { crawlSitemap } from "./engine/sitemap.js";
 import { pruneStalePages } from "./engine/indexer.js";
+import { landingPageHtml } from "./landing.js";
 
 type Env = { Variables: { storage: PostgresStorage; siteId: string } };
 
@@ -15,8 +16,11 @@ const app = new Hono<Env>();
 // Global middleware
 app.use("*", cors({ origin: "*" }));
 
-// Attach storage to context
-app.use("*", async (c, next) => {
+// Landing page
+app.get("/", (c) => c.html(landingPageHtml));
+
+// Attach storage to context for API routes
+app.use("/api/*", async (c, next) => {
 	c.set("storage", new PostgresStorage());
 	await next();
 });
