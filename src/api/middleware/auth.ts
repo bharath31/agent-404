@@ -1,11 +1,14 @@
 import type { Context, Next } from "hono";
-import type { D1Storage } from "../../storage/d1.js";
+import type { PostgresStorage } from "../../storage/postgres.js";
 
 /**
  * Validates x-api-key header and attaches site to context.
  */
 export function apiKeyAuth() {
-	return async (c: Context<{ Bindings: { DB: D1Database }; Variables: { siteId: string; storage: D1Storage } }>, next: Next) => {
+	return async (
+		c: Context<{ Variables: { siteId: string; storage: PostgresStorage } }>,
+		next: Next,
+	) => {
 		const apiKey = c.req.header("x-api-key");
 		if (!apiKey) {
 			return c.json({ error: "Missing x-api-key header" }, 401);

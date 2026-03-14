@@ -27,7 +27,3 @@ export interface SiteStats {
 	pageCount: number;
 	suggestionsServed: number;
 }
-
-export type Bindings = {
-	DB: D1Database;
-};

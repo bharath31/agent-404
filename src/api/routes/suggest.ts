@@ -1,8 +1,8 @@
 import { Hono } from "hono";
-import type { D1Storage } from "../../storage/d1.js";
+import type { PostgresStorage } from "../../storage/postgres.js";
 import { findSuggestions } from "../../engine/matcher.js";
 
-type Env = { Bindings: { DB: D1Database }; Variables: { storage: D1Storage; siteId: string } };
+type Env = { Variables: { storage: PostgresStorage; siteId: string } };
 
 const suggest = new Hono<Env>();
 
@@ -19,18 +19,15 @@ suggest.post("/", async (c) => {
 	const pages = await storage.getPages(siteId);
 	const suggestions = findSuggestions(body.url, pages);
 
-	// Log the suggestion served (non-blocking)
+	// Log asynchronously
 	if (suggestions.length > 0) {
-		const logPromise = storage.recordSuggestionServed(
-			siteId,
-			body.url,
-			suggestions.map((s) => s.url),
-		);
-		try {
-			c.executionCtx.waitUntil(logPromise);
-		} catch {
-			await logPromise;
-		}
+		storage
+			.recordSuggestionServed(
+				siteId,
+				body.url,
+				suggestions.map((s) => s.url),
+			)
+			.catch(() => {});
 	}
 
 	return c.json({
