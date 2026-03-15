@@ -447,8 +447,8 @@ export const demoPageHtml = `<!DOCTYPE html>
         <div class="sc-dead">auth0.com/docs/customize/login-pages/acul</div>
       </div>
       <div class="scenario" onclick="runScenario(1)">
-        <div class="sc-label">Typo</div>
-        <div class="sc-dead">docs.stripe.com/paymens/checkout</div>
+        <div class="sc-label">Singular/plural</div>
+        <div class="sc-dead">docs.stripe.com/payment/checkout</div>
       </div>
       <div class="scenario" onclick="runScenario(2)">
         <div class="sc-label">Docs restructure</div>
@@ -606,8 +606,8 @@ export const demoPageHtml = `<!DOCTYPE html>
         context: 'Agent hallucinated "acul" instead of "advanced-customizations"',
       },
       {
-        dead: 'https://docs.stripe.com/paymens/checkout',
-        context: 'Typo: "paymens" instead of "payments"',
+        dead: 'https://docs.stripe.com/payment/checkout',
+        context: 'Agent used singular "payment" instead of "payments"',
       },
       {
         dead: 'https://nextjs.org/docs/app/building-your-application/deploying/static-html-export',
