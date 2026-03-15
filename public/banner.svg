@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 300" fill="none">
+  <rect width="1200" height="300" rx="16" fill="#0a0a0b"/>
+  <rect x="0.5" y="0.5" width="1199" height="299" rx="15.5" stroke="#27272a"/>
+
+  <!-- Subtle grid pattern -->
+  <defs>
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#27272a" stroke-width="0.5" opacity="0.4"/>
+    </pattern>
+  </defs>
+  <rect width="1200" height="300" rx="16" fill="url(#grid)"/>
+
+  <!-- Accent glow -->
+  <ellipse cx="600" cy="150" rx="300" ry="120" fill="#3b82f6" opacity="0.04"/>
+
+  <!-- Logo mark -->
+  <rect x="80" y="100" width="88" height="88" rx="18" fill="#3b82f6"/>
+  <text x="124" y="155" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="36" font-weight="800" fill="white" text-anchor="middle" dominant-baseline="middle">404</text>
+
+  <!-- Title -->
+  <text x="196" y="132" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="44" font-weight="700" fill="#fafafa">agent<tspan fill="#52525b">-</tspan>404</text>
+
+  <!-- Tagline -->
+  <text x="196" y="172" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif" font-size="18" fill="#a1a1aa">Agent-friendly 404 pages. One script tag.</text>
+
+  <!-- Pills -->
+  <rect x="710" y="115" width="120" height="30" rx="15" fill="none" stroke="#27272a"/>
+  <text x="770" y="134" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12" fill="#22c55e" text-anchor="middle">open source</text>
+
+  <rect x="840" y="115" width="80" height="30" rx="15" fill="none" stroke="#27272a"/>
+  <text x="880" y="134" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12" fill="#a1a1aa" text-anchor="middle">MIT</text>
+
+  <rect x="930" y="115" width="110" height="30" rx="15" fill="none" stroke="#27272a"/>
+  <text x="985" y="134" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12" fill="#3b82f6" text-anchor="middle">pgvector</text>
+
+  <!-- Bottom detail line -->
+  <line x1="80" y1="230" x2="1120" y2="230" stroke="#27272a" stroke-width="1"/>
+  <text x="80" y="258" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="13" fill="#52525b">$ curl -X POST /api/suggest -d '{"url": "https://example.com/docs/v2/auth"}'</text>
+  <text x="1120" y="258" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="13" fill="#22c55e" text-anchor="end">→ /docs/v3/auth (0.85)</text>
+</svg>
