@@ -5,6 +5,7 @@ import { sites } from "./api/routes/sites.js";
 import { register } from "./api/routes/register.js";
 import { suggest } from "./api/routes/suggest.js";
 import { apiKeyAuth } from "./api/middleware/auth.js";
+import { rateLimiter } from "./api/middleware/rate-limit.js";
 import { crawlSitemap } from "./engine/sitemap.js";
 import { pruneStalePages } from "./engine/indexer.js";
 import { buildEmbeddingText, generateBatchEmbeddings } from "./engine/embeddings.js";
@@ -24,8 +25,36 @@ type Env = {
 
 const app = new Hono<Env>();
 
-// Global middleware
-app.use("*", cors({ origin: "*" }));
+// Global error handler — never leak internal details
+app.onError((err, c) => {
+	console.error("Unhandled error:", err.message);
+	return c.json({ error: "Internal server error" }, 500);
+});
+
+// CORS — allow any origin for API routes (client script runs on customer sites)
+// but restrict methods and headers
+app.use(
+	"*",
+	cors({
+		origin: (origin) => origin || "*",
+		allowMethods: ["GET", "POST", "OPTIONS"],
+		allowHeaders: ["Content-Type", "x-api-key", "Authorization"],
+		maxAge: 86400,
+	}),
+);
+
+// Security headers
+app.use("*", async (c, next) => {
+	await next();
+	c.header("X-Content-Type-Options", "nosniff");
+	c.header("X-Frame-Options", "DENY");
+	c.header("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+});
+
+// Rate limiting
+app.use("/api/sites", rateLimiter({ windowMs: 60_000, max: 10 }));
+app.use("/api/register", rateLimiter({ windowMs: 60_000, max: 60 }));
+app.use("/api/suggest", rateLimiter({ windowMs: 60_000, max: 60 }));
 
 // Landing page
 app.get("/", (c) => c.html(landingPageHtml));
@@ -89,7 +118,7 @@ app.get("/api/cron", async (c) => {
 				const embeddings = await generateBatchEmbeddings(texts);
 				for (let j = 0; j < batch.length; j++) {
 					const emb = embeddings[j];
-					if (emb) {
+					if (emb && emb.every((v) => typeof v === "number" && Number.isFinite(v))) {
 						const embStr = `[${emb.join(",")}]`;
 						await sql.query(
 							`UPDATE pages SET embedding = $1::vector WHERE id = $2`,

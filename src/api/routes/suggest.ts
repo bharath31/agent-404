@@ -13,8 +13,11 @@ suggest.post("/", async (c) => {
 	const storage = c.get("storage");
 
 	const body = await c.req.json<{ url: string }>();
-	if (!body.url) {
+	if (!body.url || typeof body.url !== "string") {
 		return c.json({ error: "url is required" }, 400);
+	}
+	if (body.url.length > 2048) {
+		return c.json({ error: "url too long" }, 400);
 	}
 
 	// Generate embedding for the dead URL
