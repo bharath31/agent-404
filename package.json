@@ -12,7 +12,8 @@
     "db:migrate": "tsx migrations/run.ts",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:e2e": "vitest run --config vitest.e2e.config.ts"
+    "test:e2e": "vitest run --config vitest.e2e.config.ts",
+    "test:browser": "npx playwright test"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.0.2",
