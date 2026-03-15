@@ -817,7 +817,7 @@ export const demoPageHtml = `<!DOCTYPE html>
           ? result.error
           : 'Could not discover pages on ' + hostname + '. The site may have no sitemap, llms.txt, or discoverable links.';
         document.getElementById('results-list').innerHTML =
-          '<div style="text-align:center;padding:2rem;color:#52525b;font-size:0.85rem;">' + errorMsg + '</div>';
+          '<div style="text-align:center;padding:2rem;color:#52525b;font-size:0.85rem;">' + escapeHtml(errorMsg) + '</div>';
         return;
       }
       const sourceLabel = result.source !== 'none' ? ' via ' + result.source : '';
@@ -857,12 +857,12 @@ export const demoPageHtml = `<!DOCTYPE html>
         card.style.animationDelay = (i * 0.08) + 's';
         card.innerHTML =
           '<div class="result-top">' +
-            '<span class="match-badge ' + r.matchType + '">' + r.matchType + '</span>' +
-            '<a class="result-url" href="' + r.url + '" target="_blank" rel="noopener">' + r.url + '</a>' +
+            '<span class="match-badge ' + escapeHtml(r.matchType) + '">' + escapeHtml(r.matchType) + '</span>' +
+            '<a class="result-url" href="' + escapeHtml(r.url) + '" target="_blank" rel="noopener">' + escapeHtml(r.url) + '</a>' +
             '<span class="result-score">' + r.score + '</span>' +
           '</div>' +
-          '<div class="result-title">' + r.title + '</div>' +
-          '<div class="result-desc">' + r.description + '</div>' +
+          '<div class="result-title">' + escapeHtml(r.title) + '</div>' +
+          '<div class="result-desc">' + escapeHtml(r.description) + '</div>' +
           '<div class="signals">' +
             '<span class="signal">path <span class="signal-bar"><span class="signal-fill path" style="width:' + Math.round(r._signals.path * 100) + '%"></span></span> ' + r._signals.path.toFixed(2) + '</span>' +
             '<span class="signal">lev <span class="signal-bar"><span class="signal-fill lev" style="width:' + Math.round(r._signals.lev * 100) + '%"></span></span> ' + r._signals.lev.toFixed(2) + '</span>' +
@@ -890,6 +890,10 @@ export const demoPageHtml = `<!DOCTYPE html>
         }
       };
       document.getElementById('jsonld-pre').innerHTML = syntaxHighlight(JSON.stringify(jsonld, null, 2));
+    }
+
+    function escapeHtml(s) {
+      return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     }
 
     function syntaxHighlight(json) {

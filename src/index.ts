@@ -265,28 +265,30 @@ async function discoverDemoPages(
 	}
 
 	// 3. Fallback: crawl HTML links
+	let spaDetected = false;
 	if (Date.now() < deadline) {
 		const crawlResult = await crawlDemoLinks(effectiveDomain, deadPath);
-		if (crawlResult.pages.length > 0) {
+		if (crawlResult.pages.length > 0 && !crawlResult.spaDetected) {
 			return { pages: crawlResult.pages, source: "crawl" };
 		}
-		if (crawlResult.spaDetected) {
-			return {
-				pages: [],
-				source: "none",
-				error:
-					"This site appears to be a single-page application (SPA) that renders content with JavaScript. We can only discover pages from server-rendered HTML, sitemaps, or llms.txt.",
-			};
-		}
+		spaDetected = crawlResult.spaDetected;
 		if (crawlResult.blocked) blockedReason = crawlResult.blocked;
 	}
 
-	// All methods failed — use llms.txt fallback if we had one
+	// All methods failed — use llms.txt fallback if we had one (even for SPAs)
 	if (llmsFallbackPages && llmsFallbackPages.length > 0) {
 		return { pages: llmsFallbackPages, source: "llms.txt" };
 	}
 
 	// Return with best error
+	if (spaDetected) {
+		return {
+			pages: [],
+			source: "none",
+			error:
+				"This site appears to be a single-page application (SPA) that renders content with JavaScript. We can only discover pages from server-rendered HTML, sitemaps, or llms.txt.",
+		};
+	}
 	if (blockedReason) {
 		return { pages: [], source: "none", error: blockedReason };
 	}
@@ -329,8 +331,8 @@ async function fetchLlmsTxt(
 		} catch {}
 	}
 
-	// Check for bot blocking
-	if (!resp.text && resp.status > 0) {
+	// Check for bot blocking (check even when body exists — WAF markers are in HTML)
+	if (resp.status > 0 && (resp.status >= 400 || !resp.text)) {
 		const blockMsg = detectBlockedResponse(resp.status, resp.text);
 		if (blockMsg) blocked = blockMsg;
 	}
@@ -668,18 +670,18 @@ async function fetchDemoSitemap(
 	depth: number,
 	filterDomain?: string,
 ): Promise<DemoPage[]> {
-	const xml = await fetchDemoSitemapXml(url);
-	if (!xml) {
-		// Try as plain-text sitemap (one URL per line, e.g. sitemap.txt)
-		if (url.endsWith(".txt") || url.endsWith("/sitemap.txt")) {
-			const text = await fetchDemoText(url);
-			if (text) {
-				const pages = parsePlainTextSitemap(text, filterDomain);
-				if (pages.length > 0) return pages;
-			}
+	// Plain-text sitemaps: skip XML parsing entirely
+	if (url.endsWith(".txt")) {
+		const text = await fetchDemoText(url);
+		if (text) {
+			const pages = parsePlainTextSitemap(text, filterDomain);
+			if (pages.length > 0) return pages;
 		}
 		return [];
 	}
+
+	const xml = await fetchDemoSitemapXml(url);
+	if (!xml) return [];
 
 	if (!xml.includes("<sitemapindex")) {
 		return extractDemoLocs(xml, "url")
@@ -714,19 +716,12 @@ type CrawlResult = {
 	blocked?: string;
 };
 
-/** SPA framework indicators in HTML source */
+/** SPA indicators: empty root divs with no server-rendered content */
 const SPA_MARKERS = [
-	"__NEXT_DATA__",
-	"__NUXT__",
-	"window.__",
-	"bundle.js",
-	"app.js",
 	'id="root"></div>',
 	'id="app"></div>',
 	'id="__next"></div>',
-	"react",
-	"vue",
-	"angular",
+	'id="__nuxt"></div>',
 ];
 
 /**
@@ -756,7 +751,7 @@ async function crawlDemoLinks(
 		const resp = await fetchDemoResponse(baseUrl + seedPath);
 
 		// Check for bot blocking on homepage
-		if (seedPath === "/" && !resp.text) {
+		if (seedPath === "/" && (resp.status >= 400 || !resp.text)) {
 			const blockMsg = detectBlockedResponse(resp.status, resp.text);
 			if (blockMsg) blocked = blockMsg;
 		}
@@ -773,11 +768,11 @@ async function crawlDemoLinks(
 
 		const links = extractInternalLinks(html, domain);
 
-		// SPA detection: few internal links + script tags with SPA markers
-		if (seedPath === "/" && links.length < 3) {
+		// SPA detection: very few internal links + empty root container divs
+		// Only triggers on truly empty shells, not SSR sites with hydration
+		if (seedPath === "/" && links.length < 2) {
 			const lowerHtml = html.toLowerCase();
-			const hasScripts = lowerHtml.includes("<script");
-			if (hasScripts && SPA_MARKERS.some((m) => lowerHtml.includes(m.toLowerCase()))) {
+			if (SPA_MARKERS.some((m) => lowerHtml.includes(m))) {
 				spaDetected = true;
 			}
 		}
