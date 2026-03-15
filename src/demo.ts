@@ -520,54 +520,80 @@ export const demoPageHtml = `<!DOCTYPE html>
 
   <script>
     // ==========================================
-    // Real pages from real sites (all URLs verified)
+    // Pages grouped by site — matches production behavior
+    // where each site only has its own pages indexed.
     // ==========================================
-    const PAGES = [
-      // React (react.dev — migrated from reactjs.org in 2023)
-      { url: 'https://react.dev/reference/react/hooks', title: 'Hooks Reference', description: 'React Hooks API reference', headings: '["useState","useEffect","useContext","useRef","useMemo","useCallback"]' },
-      { url: 'https://react.dev/reference/react/components', title: 'Components', description: 'Built-in React components', headings: '["Fragment","Profiler","StrictMode","Suspense"]' },
-      { url: 'https://react.dev/learn', title: 'Quick Start', description: 'Learn React fundamentals', headings: '["Creating Components","JSX","Adding Styles","Displaying Data","Hooks"]' },
-      { url: 'https://react.dev/reference/react-dom/client', title: 'Client APIs', description: 'React DOM client APIs', headings: '["createRoot","hydrateRoot"]' },
-      { url: 'https://react.dev/reference/react/apis', title: 'React APIs', description: 'React API reference', headings: '["createContext","forwardRef","lazy","memo","startTransition"]' },
-
-      // Next.js (nextjs.org — Pages Router → App Router migration)
-      { url: 'https://nextjs.org/docs/app/api-reference/functions', title: 'Functions', description: 'Next.js API reference for functions', headings: '["cookies","headers","redirect","NextRequest","NextResponse"]' },
-      { url: 'https://nextjs.org/docs/app/building-your-application/routing', title: 'Routing', description: 'File-system based routing in Next.js App Router', headings: '["Layouts","Pages","Loading","Error Handling","Route Groups"]' },
-      { url: 'https://nextjs.org/docs/app/getting-started/fetching-data', title: 'Fetching Data', description: 'Data fetching patterns in Next.js', headings: '["Server Components","Client Components","Streaming"]' },
-      { url: 'https://nextjs.org/docs/app/guides/authentication', title: 'Authentication', description: 'Add authentication to your Next.js app', headings: '["Sign In","Sign Up","Session Management"]' },
-      { url: 'https://nextjs.org/docs/app/getting-started/project-structure', title: 'Project Structure', description: 'Next.js project folder and file conventions', headings: '["app Directory","Top-level Files","Routing Files"]' },
-
-      // Vercel (vercel.com/docs — renamed paths over time)
-      { url: 'https://vercel.com/docs/functions', title: 'Vercel Functions', description: 'Deploy serverless and edge functions on Vercel', headings: '["Serverless Functions","Edge Functions","Streaming","Fluid Compute"]' },
-      { url: 'https://vercel.com/docs/frameworks/nextjs', title: 'Next.js on Vercel', description: 'Deploy Next.js applications on Vercel', headings: '["App Router","Pages Router","ISR","Middleware"]' },
-      { url: 'https://vercel.com/docs/getting-started-with-vercel', title: 'Getting Started', description: 'Get started with Vercel', headings: '["Create a Project","Deploy","Custom Domains"]' },
-      { url: 'https://vercel.com/docs/deployments/environments', title: 'Environments', description: 'Manage deployment environments', headings: '["Production","Preview","Development","Custom"]' },
-      { url: 'https://vercel.com/docs/routing-middleware', title: 'Routing Middleware', description: 'Run code before a request is processed', headings: '["Matching Paths","Rewriting","Redirecting"]' },
-
-      // Supabase (supabase.com — migrated from supabase.io, restructured paths)
-      { url: 'https://supabase.com/docs/guides/auth', title: 'Auth', description: 'Add authentication and authorization to your Supabase project', headings: '["Email Login","OAuth Providers","Row Level Security","SSO"]' },
-      { url: 'https://supabase.com/docs/guides/database/overview', title: 'Database', description: 'Use Postgres with Supabase', headings: '["Tables","Functions","Triggers","Extensions"]' },
-      { url: 'https://supabase.com/docs/guides/storage', title: 'Storage', description: 'Store and serve files with Supabase Storage', headings: '["Buckets","Upload","Download","Access Control"]' },
-      { url: 'https://supabase.com/docs/guides/realtime', title: 'Realtime', description: 'Listen to database changes in real time', headings: '["Broadcast","Presence","Postgres Changes"]' },
-      { url: 'https://supabase.com/docs/guides/functions', title: 'Edge Functions', description: 'Server-side TypeScript functions', headings: '["Quickstart","Deploy","Secrets","CORS"]' },
-
-      // Stripe (docs.stripe.com — Charges API → Payment Intents migration)
-      { url: 'https://docs.stripe.com/payments/payment-intents', title: 'Payment Intents', description: 'Use the Payment Intents API to accept payments', headings: '["Create","Confirm","Capture","Cancel"]' },
-      { url: 'https://docs.stripe.com/payments/checkout', title: 'Checkout', description: 'Prebuilt payment page hosted by Stripe', headings: '["Quickstart","Custom Domains","Subscriptions"]' },
-      { url: 'https://docs.stripe.com/payments/elements', title: 'Payment Elements', description: 'Embed a payment form on your site', headings: '["Setup","Appearance","Payment Methods"]' },
-      { url: 'https://docs.stripe.com/api/authentication', title: 'Authentication', description: 'Authenticate your API requests with Stripe API keys', headings: '["API Keys","Restricted Keys","Bearer Auth"]' },
-      { url: 'https://docs.stripe.com/billing/subscriptions/change', title: 'Change Subscriptions', description: 'Upgrade, downgrade, or change subscriptions', headings: '["Proration","Immediate Changes","Scheduled Changes"]' },
-      { url: 'https://docs.stripe.com/connect/marketplace', title: 'Marketplace Payments', description: 'Build a marketplace with Stripe Connect', headings: '["Onboarding","Payments","Payouts","Fees"]' },
-
-      // Auth0 (auth0.com/docs — restructured from /docs/connections to /docs/authenticate)
-      { url: 'https://auth0.com/docs/authenticate', title: 'Authenticate', description: 'Add login to your application with Auth0', headings: '["Database Connections","Social Login","Enterprise SSO","Passwordless"]' },
-      { url: 'https://auth0.com/docs/customize/actions', title: 'Actions', description: 'Customize Auth0 with serverless functions', headings: '["Triggers","Flows","Secrets","Testing"]' },
-      { url: 'https://auth0.com/docs/manage-users', title: 'Manage Users', description: 'User management and profiles in Auth0', headings: '["User Profiles","Roles","Permissions","Organizations"]' },
-      { url: 'https://auth0.com/docs/secure', title: 'Secure', description: 'Security features and best practices', headings: '["Attack Protection","Tokens","Multi-factor Authentication"]' },
-      { url: 'https://auth0.com/docs/get-started/authentication-and-authorization-flow', title: 'Auth Flows', description: 'Authentication and authorization flows', headings: '["Authorization Code","PKCE","Client Credentials","Device Auth"]' },
-      { url: 'https://auth0.com/docs/get-started/auth0-for-ai-agents', title: 'Auth0 for AI Agents', description: 'Authenticate and authorize AI agents with Auth0', headings: '["Agent Authentication","Token Scoping","MCP Integration"]' },
-      { url: 'https://auth0.com/docs/customize/login-pages/advanced-customizations', title: 'Advanced Customizations for Universal Login', description: 'Extend Universal Login with ACUL for multi-branding and custom logic', headings: '["Multi-branding","Custom Login","Analytics Integration","ACUL SDK"]' },
-    ];
+    const SITES = {
+      react: {
+        domains: ['react.dev', 'reactjs.org'],
+        pages: [
+          { url: 'https://react.dev/reference/react/hooks', title: 'Hooks Reference', description: 'React Hooks API reference', headings: '["useState","useEffect","useContext","useRef","useMemo","useCallback"]' },
+          { url: 'https://react.dev/reference/react/components', title: 'Components', description: 'Built-in React components', headings: '["Fragment","Profiler","StrictMode","Suspense"]' },
+          { url: 'https://react.dev/learn', title: 'Quick Start', description: 'Learn React fundamentals', headings: '["Creating Components","JSX","Adding Styles","Displaying Data","Hooks"]' },
+          { url: 'https://react.dev/reference/react-dom/client', title: 'Client APIs', description: 'React DOM client APIs', headings: '["createRoot","hydrateRoot"]' },
+          { url: 'https://react.dev/reference/react/apis', title: 'React APIs', description: 'React API reference', headings: '["createContext","forwardRef","lazy","memo","startTransition"]' },
+          { url: 'https://react.dev/reference/rules/rules-of-hooks', title: 'Rules of Hooks', description: 'Rules for using React Hooks correctly', headings: '["Only Call at Top Level","Only Call in React Functions"]' },
+        ],
+      },
+      nextjs: {
+        domains: ['nextjs.org'],
+        pages: [
+          { url: 'https://nextjs.org/docs/app/api-reference/functions', title: 'Functions', description: 'Next.js API reference for functions', headings: '["cookies","headers","redirect","NextRequest","NextResponse"]' },
+          { url: 'https://nextjs.org/docs/app/building-your-application/routing', title: 'Routing', description: 'File-system based routing in Next.js App Router', headings: '["Layouts","Pages","Loading","Error Handling","Route Groups"]' },
+          { url: 'https://nextjs.org/docs/app/getting-started/fetching-data', title: 'Fetching Data', description: 'Data fetching patterns in Next.js', headings: '["Server Components","Client Components","Streaming"]' },
+          { url: 'https://nextjs.org/docs/app/guides/authentication', title: 'Authentication', description: 'Add authentication to your Next.js app', headings: '["Sign In","Sign Up","Session Management"]' },
+          { url: 'https://nextjs.org/docs/app/getting-started/project-structure', title: 'Project Structure', description: 'Next.js project folder and file conventions', headings: '["app Directory","Top-level Files","Routing Files"]' },
+          { url: 'https://nextjs.org/docs/app/building-your-application/routing/route-handlers', title: 'Route Handlers', description: 'Create API endpoints using Route Handlers', headings: '["GET","POST","Dynamic Routes","Cookies","Headers"]' },
+        ],
+      },
+      vercel: {
+        domains: ['vercel.com'],
+        pages: [
+          { url: 'https://vercel.com/docs/functions', title: 'Vercel Functions', description: 'Deploy serverless and edge functions on Vercel', headings: '["Serverless Functions","Edge Functions","Streaming","Fluid Compute"]' },
+          { url: 'https://vercel.com/docs/frameworks/nextjs', title: 'Next.js on Vercel', description: 'Deploy Next.js applications on Vercel', headings: '["App Router","Pages Router","ISR","Middleware"]' },
+          { url: 'https://vercel.com/docs/getting-started-with-vercel', title: 'Getting Started', description: 'Get started with Vercel', headings: '["Create a Project","Deploy","Custom Domains"]' },
+          { url: 'https://vercel.com/docs/deployments/environments', title: 'Environments', description: 'Manage deployment environments', headings: '["Production","Preview","Development","Custom"]' },
+          { url: 'https://vercel.com/docs/routing-middleware', title: 'Routing Middleware', description: 'Run code before a request is processed', headings: '["Matching Paths","Rewriting","Redirecting"]' },
+          { url: 'https://vercel.com/docs/image-optimization', title: 'Image Optimization', description: 'Optimize images for the web', headings: '["Formats","Sizes","Caching","CDN"]' },
+        ],
+      },
+      supabase: {
+        domains: ['supabase.com', 'supabase.io'],
+        pages: [
+          { url: 'https://supabase.com/docs/guides/auth', title: 'Auth', description: 'Add authentication and authorization to your Supabase project', headings: '["Email Login","OAuth Providers","Row Level Security","SSO"]' },
+          { url: 'https://supabase.com/docs/guides/database/overview', title: 'Database', description: 'Use Postgres with Supabase', headings: '["Tables","Functions","Triggers","Extensions"]' },
+          { url: 'https://supabase.com/docs/guides/storage', title: 'Storage', description: 'Store and serve files with Supabase Storage', headings: '["Buckets","Upload","Download","Access Control"]' },
+          { url: 'https://supabase.com/docs/guides/realtime', title: 'Realtime', description: 'Listen to database changes in real time', headings: '["Broadcast","Presence","Postgres Changes"]' },
+          { url: 'https://supabase.com/docs/guides/functions', title: 'Edge Functions', description: 'Server-side TypeScript functions', headings: '["Quickstart","Deploy","Secrets","CORS"]' },
+          { url: 'https://supabase.com/docs/guides/getting-started', title: 'Getting Started', description: 'Get started with Supabase', headings: '["Create a Project","Connect","Insert Data"]' },
+        ],
+      },
+      stripe: {
+        domains: ['docs.stripe.com', 'stripe.com'],
+        pages: [
+          { url: 'https://docs.stripe.com/payments/payment-intents', title: 'Payment Intents', description: 'Use the Payment Intents API to accept payments', headings: '["Create","Confirm","Capture","Cancel"]' },
+          { url: 'https://docs.stripe.com/payments/checkout', title: 'Checkout', description: 'Prebuilt payment page hosted by Stripe', headings: '["Quickstart","Custom Domains","Subscriptions"]' },
+          { url: 'https://docs.stripe.com/payments/elements', title: 'Payment Elements', description: 'Embed a payment form on your site', headings: '["Setup","Appearance","Payment Methods"]' },
+          { url: 'https://docs.stripe.com/api/authentication', title: 'Authentication', description: 'Authenticate your API requests with Stripe API keys', headings: '["API Keys","Restricted Keys","Bearer Auth"]' },
+          { url: 'https://docs.stripe.com/billing/subscriptions/change', title: 'Change Subscriptions', description: 'Upgrade, downgrade, or change subscriptions', headings: '["Proration","Immediate Changes","Scheduled Changes"]' },
+          { url: 'https://docs.stripe.com/connect/marketplace', title: 'Marketplace Payments', description: 'Build a marketplace with Stripe Connect', headings: '["Onboarding","Payments","Payouts","Fees"]' },
+        ],
+      },
+      auth0: {
+        domains: ['auth0.com'],
+        pages: [
+          { url: 'https://auth0.com/docs/customize/login-pages/advanced-customizations', title: 'Advanced Customizations for Universal Login', description: 'Extend Universal Login with ACUL for multi-branding and custom logic', headings: '["Multi-branding","Custom Login","Analytics Integration","ACUL SDK"]' },
+          { url: 'https://auth0.com/docs/customize/login-pages', title: 'Login Pages', description: 'Customize the look and feel of your login experience', headings: '["Universal Login","Classic Login","Page Templates"]' },
+          { url: 'https://auth0.com/docs/customize/actions', title: 'Actions', description: 'Customize Auth0 with serverless functions triggered during the auth pipeline', headings: '["Triggers","Flows","Secrets","Testing"]' },
+          { url: 'https://auth0.com/docs/customize', title: 'Customize', description: 'Customize every aspect of the Auth0 experience', headings: '["Branding","Actions","Login Pages","Email Templates"]' },
+          { url: 'https://auth0.com/docs/authenticate', title: 'Authenticate', description: 'Add login to your application with Auth0', headings: '["Database Connections","Social Login","Enterprise SSO","Passwordless"]' },
+          { url: 'https://auth0.com/docs/manage-users', title: 'Manage Users', description: 'User management and profiles in Auth0', headings: '["User Profiles","Roles","Permissions","Organizations"]' },
+          { url: 'https://auth0.com/docs/secure', title: 'Secure', description: 'Security features and best practices', headings: '["Attack Protection","Tokens","Multi-factor Authentication"]' },
+          { url: 'https://auth0.com/docs/get-started/authentication-and-authorization-flow', title: 'Auth Flows', description: 'Authentication and authorization flows', headings: '["Authorization Code","PKCE","Client Credentials","Device Auth"]' },
+          { url: 'https://auth0.com/docs/get-started/auth0-for-ai-agents', title: 'Auth0 for AI Agents', description: 'Authenticate and authorize AI agents with Auth0', headings: '["Agent Authentication","Token Scoping","MCP Integration"]' },
+        ],
+      },
+    };
 
     // Scenarios — real migration stories with context
     const SCENARIOS = [
@@ -596,6 +622,21 @@ export const demoPageHtml = `<!DOCTYPE html>
         context: 'Agent hallucinated "acul" instead of "advanced-customizations"',
       },
     ];
+
+    // ==========================================
+    // Domain → site lookup
+    // ==========================================
+    function getSitePages(deadUrl) {
+      let hostname = '';
+      try { hostname = new URL(deadUrl).hostname; } catch { return []; }
+      for (const site of Object.values(SITES)) {
+        if (site.domains.some(d => hostname === d || hostname.endsWith('.' + d))) {
+          return site.pages;
+        }
+      }
+      // Unknown domain: search all pages (for custom user input)
+      return Object.values(SITES).flatMap(s => s.pages);
+    }
 
     // ==========================================
     // Matcher — same algorithm as production
@@ -654,11 +695,12 @@ export const demoPageHtml = `<!DOCTYPE html>
       return inter / new Set([...a, ...b]).size;
     }
     function findSuggestions(deadUrl) {
+      const pages = getSitePages(deadUrl);
       const deadPath = normalizePath(deadUrl);
       const deadSegs = pathSegments(deadPath);
       const deadKw = extractKeywords(deadPath);
       const scored = [];
-      for (const page of PAGES) {
+      for (const page of pages) {
         const pagePath = normalizePath(page.url);
         const pageSegs = pathSegments(pagePath);
         const pathScore = jaccardVersionTolerant(deadSegs, pageSegs);
