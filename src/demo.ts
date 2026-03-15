@@ -655,7 +655,7 @@ export const demoPageHtml = `<!DOCTYPE html>
         const resp = await fetch(url);
         const data = await resp.json();
         const pages = (data.pages || []).map(p => ({
-          url: p.url, title: p.title || '', description: '', headings: '[]'
+          url: p.url, title: p.title || '', description: p.description || '', headings: '[]'
         }));
         sitemapCache[cacheKey] = { pages, ts: Date.now() };
         return pages;
