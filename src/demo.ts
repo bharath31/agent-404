@@ -44,7 +44,6 @@ export const demoPageHtml = `<!DOCTYPE html>
 
     .container { max-width: 800px; margin: 0 auto; padding: 0 1.5rem; }
 
-    /* Nav */
     nav {
       display: flex;
       align-items: center;
@@ -52,20 +51,14 @@ export const demoPageHtml = `<!DOCTYPE html>
       padding: 1.25rem 0;
       border-bottom: 1px solid var(--border);
     }
-    .logo {
-      font-family: var(--mono);
-      font-size: 1rem;
-      font-weight: 700;
-      color: var(--text);
-    }
+    .logo { font-family: var(--mono); font-size: 1rem; font-weight: 700; color: var(--text); }
     .logo span { color: var(--text-secondary); }
     nav .links { display: flex; gap: 1.5rem; font-size: 0.875rem; }
     nav .links a { color: var(--text-secondary); }
     nav .links a:hover { color: var(--text); text-decoration: none; }
 
-    /* Hero */
     .hero {
-      padding: 2.5rem 0 1rem;
+      padding: 2.5rem 0 0.5rem;
       text-align: center;
     }
     .hero h1 {
@@ -79,14 +72,69 @@ export const demoPageHtml = `<!DOCTYPE html>
     .hero p {
       font-size: 0.95rem;
       color: var(--text-secondary);
-      max-width: 520px;
+      max-width: 540px;
       margin: 0 auto;
     }
+    .hero .sub {
+      font-size: 0.8rem;
+      color: #52525b;
+      margin-top: 0.25rem;
+    }
 
-    /* Input area */
-    .input-area {
-      margin: 2rem auto;
+    /* Scenario cards */
+    .scenarios {
+      display: flex;
+      gap: 0.5rem;
+      margin: 1.75rem auto;
       max-width: 640px;
+      overflow-x: auto;
+      padding-bottom: 0.25rem;
+    }
+    .scenario {
+      flex: 1;
+      min-width: 0;
+      padding: 0.7rem 0.85rem;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .scenario:hover { border-color: var(--text-secondary); }
+    .scenario.active { border-color: var(--accent); background: rgba(59,130,246,0.05); }
+    .scenario .sc-label {
+      font-family: var(--mono);
+      font-size: 0.6rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-secondary);
+      margin-bottom: 0.25rem;
+    }
+    .scenario .sc-dead {
+      font-family: var(--mono);
+      font-size: 0.7rem;
+      color: var(--red);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      text-decoration: line-through;
+      text-decoration-color: rgba(239,68,68,0.4);
+    }
+
+    /* Input */
+    .input-area {
+      margin: 0 auto 1.5rem;
+      max-width: 640px;
+    }
+    .or-divider {
+      text-align: center;
+      font-size: 0.7rem;
+      font-family: var(--mono);
+      color: #52525b;
+      margin: 0.75rem 0;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
     }
     .input-wrapper {
       display: flex;
@@ -95,25 +143,25 @@ export const demoPageHtml = `<!DOCTYPE html>
     }
     .url-input {
       flex: 1;
-      padding: 0.75rem 1rem;
+      padding: 0.65rem 1rem;
       background: var(--surface);
       border: 1px solid var(--border);
       border-radius: 10px;
       color: var(--text);
       font-family: var(--mono);
-      font-size: 0.85rem;
+      font-size: 0.8rem;
       outline: none;
       transition: border-color 0.15s;
     }
     .url-input:focus { border-color: var(--accent); }
     .url-input::placeholder { color: #52525b; }
     .suggest-btn {
-      padding: 0.75rem 1.5rem;
+      padding: 0.65rem 1.25rem;
       background: var(--accent);
       color: white;
       border: none;
       border-radius: 10px;
-      font-size: 0.85rem;
+      font-size: 0.8rem;
       font-weight: 600;
       cursor: pointer;
       white-space: nowrap;
@@ -121,201 +169,7 @@ export const demoPageHtml = `<!DOCTYPE html>
     }
     .suggest-btn:hover { background: var(--accent-dim); }
 
-    /* Example pills */
-    .examples {
-      margin-top: 0.75rem;
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.4rem;
-      justify-content: center;
-    }
-    .example-pill {
-      font-family: var(--mono);
-      font-size: 0.7rem;
-      padding: 0.3rem 0.6rem;
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      color: var(--text-secondary);
-      cursor: pointer;
-      transition: all 0.15s;
-    }
-    .example-pill:hover {
-      border-color: var(--accent);
-      color: var(--text);
-    }
-
-    /* Results */
-    .results-area {
-      margin: 2rem auto;
-      max-width: 640px;
-    }
-    .results-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 1rem;
-    }
-    .results-header h2 {
-      font-size: 0.8rem;
-      font-family: var(--mono);
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.06em;
-      color: var(--text-secondary);
-    }
-    .results-count {
-      font-family: var(--mono);
-      font-size: 0.7rem;
-      color: #52525b;
-    }
-
-    .result-card {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      padding: 1rem 1.25rem;
-      margin-bottom: 0.5rem;
-      opacity: 0;
-      transform: translateY(8px);
-      animation: fadeUp 0.3s ease forwards;
-    }
-    @keyframes fadeUp {
-      to { opacity: 1; transform: translateY(0); }
-    }
-    .result-top {
-      display: flex;
-      align-items: center;
-      gap: 0.75rem;
-      margin-bottom: 0.5rem;
-    }
-    .match-badge {
-      font-family: var(--mono);
-      font-size: 0.65rem;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.06em;
-      padding: 0.2rem 0.5rem;
-      border-radius: 4px;
-      flex-shrink: 0;
-    }
-    .match-badge.moved {
-      background: var(--orange-dim);
-      color: var(--orange);
-    }
-    .match-badge.similar {
-      background: var(--green-dim);
-      color: var(--green);
-    }
-    .match-badge.related {
-      background: var(--yellow-dim);
-      color: var(--yellow);
-    }
-    .result-url {
-      font-family: var(--mono);
-      font-size: 0.8rem;
-      color: var(--green);
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-    .result-score {
-      margin-left: auto;
-      font-family: var(--mono);
-      font-size: 0.75rem;
-      color: var(--text-secondary);
-      flex-shrink: 0;
-    }
-    .result-title {
-      font-size: 0.85rem;
-      font-weight: 500;
-      margin-bottom: 0.15rem;
-    }
-    .result-desc {
-      font-size: 0.8rem;
-      color: var(--text-secondary);
-    }
-
-    /* Signal breakdown */
-    .signals {
-      display: flex;
-      gap: 0.5rem;
-      margin-top: 0.6rem;
-      flex-wrap: wrap;
-    }
-    .signal {
-      font-family: var(--mono);
-      font-size: 0.65rem;
-      color: #52525b;
-      display: flex;
-      align-items: center;
-      gap: 0.3rem;
-    }
-    .signal-bar {
-      width: 40px;
-      height: 3px;
-      background: var(--border);
-      border-radius: 2px;
-      overflow: hidden;
-    }
-    .signal-fill {
-      height: 100%;
-      border-radius: 2px;
-      transition: width 0.4s ease;
-    }
-    .signal-fill.path { background: var(--accent); }
-    .signal-fill.lev { background: var(--orange); }
-    .signal-fill.text { background: var(--green); }
-
-    /* JSON-LD preview */
-    .jsonld-section {
-      margin-top: 1.5rem;
-      max-width: 640px;
-      margin-left: auto;
-      margin-right: auto;
-    }
-    .jsonld-toggle {
-      font-family: var(--mono);
-      font-size: 0.75rem;
-      color: var(--text-secondary);
-      background: none;
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      padding: 0.4rem 0.75rem;
-      cursor: pointer;
-      transition: all 0.15s;
-      display: flex;
-      align-items: center;
-      gap: 0.4rem;
-    }
-    .jsonld-toggle:hover { border-color: var(--text-secondary); color: var(--text); }
-    .jsonld-pre {
-      margin-top: 0.5rem;
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      padding: 1.25rem;
-      font-family: var(--mono);
-      font-size: 0.75rem;
-      line-height: 1.6;
-      color: var(--text-secondary);
-      overflow-x: auto;
-      display: none;
-    }
-    .jsonld-pre .key { color: var(--accent); }
-    .jsonld-pre .str { color: var(--green); }
-    .jsonld-pre .num { color: var(--orange); }
-
-    /* Empty state */
-    .empty-state {
-      text-align: center;
-      padding: 3rem 0;
-      color: #52525b;
-    }
-    .empty-state .icon { font-size: 2rem; margin-bottom: 0.75rem; }
-    .empty-state p { font-size: 0.85rem; }
-
-    /* Dead URL display */
+    /* Dead URL bar */
     .dead-url-bar {
       max-width: 640px;
       margin: 0 auto 0.5rem;
@@ -345,21 +199,224 @@ export const demoPageHtml = `<!DOCTYPE html>
       text-overflow: ellipsis;
       white-space: nowrap;
     }
+    .dead-url-bar .context {
+      margin-left: auto;
+      font-size: 0.65rem;
+      color: #52525b;
+      flex-shrink: 0;
+      white-space: nowrap;
+    }
 
-    /* Footer */
+    /* Results */
+    .results-area {
+      margin: 1rem auto 0;
+      max-width: 640px;
+    }
+    .results-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 0.75rem;
+    }
+    .results-header h2 {
+      font-size: 0.75rem;
+      font-family: var(--mono);
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-secondary);
+    }
+    .results-count {
+      font-family: var(--mono);
+      font-size: 0.7rem;
+      color: #52525b;
+    }
+
+    .result-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1rem 1.25rem;
+      margin-bottom: 0.5rem;
+      opacity: 0;
+      transform: translateY(8px);
+      animation: fadeUp 0.3s ease forwards;
+    }
+    @keyframes fadeUp {
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .result-top {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      margin-bottom: 0.4rem;
+    }
+    .match-badge {
+      font-family: var(--mono);
+      font-size: 0.6rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      padding: 0.2rem 0.5rem;
+      border-radius: 4px;
+      flex-shrink: 0;
+    }
+    .match-badge.moved { background: var(--orange-dim); color: var(--orange); }
+    .match-badge.similar { background: var(--green-dim); color: var(--green); }
+    .match-badge.related { background: var(--yellow-dim); color: var(--yellow); }
+    .result-url {
+      font-family: var(--mono);
+      font-size: 0.75rem;
+      color: var(--green);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .result-url:hover { text-decoration: underline; }
+    .result-score {
+      margin-left: auto;
+      font-family: var(--mono);
+      font-size: 0.7rem;
+      color: var(--text-secondary);
+      flex-shrink: 0;
+    }
+    .result-title {
+      font-size: 0.85rem;
+      font-weight: 500;
+      margin-bottom: 0.1rem;
+    }
+    .result-desc {
+      font-size: 0.8rem;
+      color: var(--text-secondary);
+    }
+
+    .signals {
+      display: flex;
+      gap: 0.5rem;
+      margin-top: 0.5rem;
+      flex-wrap: wrap;
+    }
+    .signal {
+      font-family: var(--mono);
+      font-size: 0.6rem;
+      color: #52525b;
+      display: flex;
+      align-items: center;
+      gap: 0.3rem;
+    }
+    .signal-bar {
+      width: 40px;
+      height: 3px;
+      background: var(--border);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+    .signal-fill {
+      height: 100%;
+      border-radius: 2px;
+      transition: width 0.4s ease;
+    }
+    .signal-fill.path { background: var(--accent); }
+    .signal-fill.lev { background: var(--orange); }
+    .signal-fill.text { background: var(--green); }
+
+    /* JSON-LD */
+    .jsonld-section {
+      margin-top: 1.25rem;
+      max-width: 640px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+    .jsonld-toggle {
+      font-family: var(--mono);
+      font-size: 0.7rem;
+      color: var(--text-secondary);
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 0.35rem 0.65rem;
+      cursor: pointer;
+      transition: all 0.15s;
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+    .jsonld-toggle:hover { border-color: var(--text-secondary); color: var(--text); }
+    .jsonld-pre {
+      margin-top: 0.5rem;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1.25rem;
+      font-family: var(--mono);
+      font-size: 0.7rem;
+      line-height: 1.6;
+      color: var(--text-secondary);
+      overflow-x: auto;
+      display: none;
+    }
+    .jsonld-pre .key { color: var(--accent); }
+    .jsonld-pre .str { color: var(--green); }
+    .jsonld-pre .num { color: var(--orange); }
+
+    /* Empty state */
+    .empty-state {
+      text-align: center;
+      padding: 3rem 0;
+      color: #52525b;
+    }
+    .empty-state p { font-size: 0.85rem; }
+
+    /* CTA */
+    .cta {
+      text-align: center;
+      margin: 3rem auto 0;
+      max-width: 640px;
+      padding: 2rem;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: var(--surface);
+    }
+    .cta h3 {
+      font-size: 1.1rem;
+      font-weight: 700;
+      margin-bottom: 0.35rem;
+    }
+    .cta p {
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+      margin-bottom: 1rem;
+    }
+    .cta .btn-group { display: flex; gap: 0.5rem; justify-content: center; flex-wrap: wrap; }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 0.5rem 1rem;
+      border-radius: 8px;
+      font-size: 0.8rem;
+      font-weight: 500;
+      transition: all 0.15s;
+    }
+    .btn-primary { background: var(--accent); color: white; }
+    .btn-primary:hover { background: var(--accent-dim); text-decoration: none; }
+    .btn-secondary { background: var(--bg); color: var(--text); border: 1px solid var(--border); }
+    .btn-secondary:hover { border-color: var(--text-secondary); text-decoration: none; }
+
     footer {
       padding: 2rem 0;
       border-top: 1px solid var(--border);
       text-align: center;
       font-size: 0.8rem;
       color: #52525b;
-      margin-top: 3rem;
+      margin-top: 2rem;
     }
     footer a { color: #52525b; }
     footer a:hover { color: var(--text-secondary); }
 
     @media (max-width: 600px) {
       .hero h1 { font-size: 1.5rem; }
+      .scenarios { flex-direction: column; }
       .input-wrapper { flex-direction: column; }
       .result-top { flex-wrap: wrap; }
     }
@@ -376,38 +433,56 @@ export const demoPageHtml = `<!DOCTYPE html>
     </nav>
 
     <div class="hero">
-      <h1>Try it <span class="highlight">live</span></h1>
-      <p>Type a dead URL and see how agent-404 finds the best matching page. All matching runs client-side — same algorithm as production.</p>
+      <h1>See it <span class="highlight">in action</span></h1>
+      <p>An AI agent follows a stale link and gets a 404. Here's what agent-404 does next.</p>
+      <p class="sub">Same matching algorithm as production. Runs entirely in your browser.</p>
     </div>
+
+    <div class="scenarios" id="scenarios">
+      <div class="scenario active" onclick="runScenario(0)">
+        <div class="sc-label">Version migration</div>
+        <div class="sc-dead">reactjs.org/docs/hooks-intro.html</div>
+      </div>
+      <div class="scenario" onclick="runScenario(1)">
+        <div class="sc-label">Docs restructure</div>
+        <div class="sc-dead">nextjs.org/docs/api-routes/introduction</div>
+      </div>
+      <div class="scenario" onclick="runScenario(2)">
+        <div class="sc-label">Path rename</div>
+        <div class="sc-dead">vercel.com/docs/serverless-functions</div>
+      </div>
+      <div class="scenario" onclick="runScenario(3)">
+        <div class="sc-label">Domain change</div>
+        <div class="sc-dead">supabase.io/docs/guides/auth</div>
+      </div>
+      <div class="scenario" onclick="runScenario(4)">
+        <div class="sc-label">Typo</div>
+        <div class="sc-dead">docs.stripe.com/paymens/checkout</div>
+      </div>
+    </div>
+
+    <div class="or-divider">or type your own</div>
 
     <div class="input-area">
       <div class="input-wrapper">
-        <input type="text" class="url-input" id="url-input" placeholder="https://stripe.com/docs/v2/authentication" autocomplete="off" spellcheck="false">
-        <button class="suggest-btn" id="suggest-btn" onclick="runMatch()">Find matches</button>
-      </div>
-      <div class="examples">
-        <span class="example-pill" onclick="tryExample(this)">stripe.com/docs/v2/authentication</span>
-        <span class="example-pill" onclick="tryExample(this)">vercel.com/docs/deploy/serverless</span>
-        <span class="example-pill" onclick="tryExample(this)">supabase.com/dashboard/billing/invoices</span>
-        <span class="example-pill" onclick="tryExample(this)">openai.com/blog/ai-agents-overview</span>
-        <span class="example-pill" onclick="tryExample(this)">nextjs.org/docs/api-routes</span>
-        <span class="example-pill" onclick="tryExample(this)">github.com/settings/applications</span>
+        <input type="text" class="url-input" id="url-input" placeholder="Paste any dead URL..." autocomplete="off" spellcheck="false">
+        <button class="suggest-btn" onclick="runMatch()">Find matches</button>
       </div>
     </div>
 
     <div class="dead-url-bar" id="dead-url-bar">
       <span class="label">404</span>
       <span class="url" id="dead-url-display"></span>
+      <span class="context" id="dead-url-context"></span>
     </div>
 
     <div class="results-area" id="results-area">
       <div class="empty-state" id="empty-state">
-        <div class="icon">&#8593;</div>
-        <p>Enter a dead URL or click an example above</p>
+        <p>Click a scenario above to see agent-404 in action</p>
       </div>
       <div id="results-container" style="display:none">
         <div class="results-header">
-          <h2>Suggestions</h2>
+          <h2>Suggestions returned to the agent</h2>
           <span class="results-count" id="results-count"></span>
         </div>
         <div id="results-list"></div>
@@ -417,9 +492,21 @@ export const demoPageHtml = `<!DOCTYPE html>
     <div class="jsonld-section" id="jsonld-section" style="display:none">
       <button class="jsonld-toggle" id="jsonld-toggle" onclick="toggleJsonLd()">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 18l6-6-6-6"/><path d="M8 6l-6 6 6 6"/></svg>
-        View JSON-LD output (what agents see)
+        View JSON-LD (what agents parse from the page)
       </button>
       <pre class="jsonld-pre" id="jsonld-pre"></pre>
+    </div>
+
+    <div class="cta">
+      <h3>Add this to your site in 30 seconds</h3>
+      <p>One script tag. Your 404 pages start returning structured suggestions to every AI agent that visits.</p>
+      <div class="btn-group">
+        <a href="/" class="btn btn-primary">Get your script tag</a>
+        <a href="https://github.com/bharath31/agent-404" class="btn btn-secondary">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+          View source
+        </a>
+      </div>
     </div>
 
     <footer>
@@ -429,42 +516,68 @@ export const demoPageHtml = `<!DOCTYPE html>
 
   <script>
     // ==========================================
-    // Demo page data — realistic pages from well-known sites
+    // Real pages from real sites (all URLs verified)
     // ==========================================
     const PAGES = [
-      // Stripe
-      { url: 'https://stripe.com/docs/v3/authentication', title: 'Authentication Guide', description: 'Learn how to authenticate API requests with Stripe', headings: '["API Keys","OAuth 2.0","Restricted Keys"]' },
-      { url: 'https://stripe.com/docs/v3/payments', title: 'Payments API', description: 'Accept payments online with Stripe', headings: '["Payment Intents","Charges","Payment Methods"]' },
-      { url: 'https://stripe.com/docs/v3/billing', title: 'Billing & Subscriptions', description: 'Manage recurring payments', headings: '["Subscriptions","Invoices","Metered Billing"]' },
-      { url: 'https://stripe.com/docs/v3/webhooks', title: 'Webhooks', description: 'Receive event notifications', headings: '["Event Types","Webhook Signatures","Retry Logic"]' },
-      { url: 'https://stripe.com/docs/v3/testing', title: 'Testing', description: 'Test your Stripe integration', headings: '["Test Cards","Test Clocks","Mock Webhooks"]' },
-      { url: 'https://stripe.com/docs/v3/connect', title: 'Connect Platform', description: 'Build a marketplace or platform', headings: '["Account Types","Onboarding","Payouts"]' },
-      // Vercel
-      { url: 'https://vercel.com/docs/deployment/edge', title: 'Edge Functions', description: 'Deploy to the edge with Vercel', headings: '["Runtime API","Middleware","Streaming"]' },
-      { url: 'https://vercel.com/docs/deployment/builds', title: 'Build Configuration', description: 'Configure your build settings', headings: '["Build Command","Output Directory","Environment Variables"]' },
-      { url: 'https://vercel.com/docs/storage/postgres', title: 'Vercel Postgres', description: 'Serverless PostgreSQL database', headings: '["Connection","Queries","Edge Compatibility"]' },
-      { url: 'https://vercel.com/docs/frameworks/nextjs', title: 'Next.js on Vercel', description: 'Deploy Next.js applications', headings: '["App Router","Pages Router","ISR"]' },
-      { url: 'https://vercel.com/docs/domains', title: 'Custom Domains', description: 'Add custom domains to your project', headings: '["DNS Configuration","SSL Certificates","Redirects"]' },
-      // Supabase
-      { url: 'https://supabase.com/settings/billing', title: 'Billing & Usage', description: 'Manage your billing and subscription', headings: '["Plans","Payment Methods","Usage"]' },
-      { url: 'https://supabase.com/docs/guides/auth', title: 'Authentication', description: 'Add auth to your Supabase project', headings: '["Email Login","OAuth Providers","Row Level Security"]' },
-      { url: 'https://supabase.com/docs/guides/database', title: 'Database', description: 'Use Postgres with Supabase', headings: '["Tables","Functions","Triggers"]' },
-      { url: 'https://supabase.com/docs/guides/storage', title: 'Storage', description: 'Store and serve files', headings: '["Buckets","Upload","Access Control"]' },
-      // OpenAI
-      { url: 'https://openai.com/changelog/ai-agents', title: 'AI Agents Update', description: 'Latest updates to AI agent capabilities', headings: '["Function Calling","Tool Use","Agent Framework"]' },
-      { url: 'https://openai.com/docs/api-reference', title: 'API Reference', description: 'Complete API documentation', headings: '["Chat Completions","Embeddings","Fine-tuning"]' },
-      { url: 'https://openai.com/docs/models', title: 'Models', description: 'Available models and capabilities', headings: '["GPT-4","GPT-3.5","DALL-E"]' },
-      // Next.js
-      { url: 'https://nextjs.org/docs/app/api-reference/functions/next-request', title: 'Route Handlers', description: 'API route handlers in App Router', headings: '["GET","POST","Dynamic Routes"]' },
-      { url: 'https://nextjs.org/docs/app/building-your-application/routing', title: 'Routing', description: 'File-system based routing in Next.js', headings: '["Layouts","Pages","Loading States"]' },
-      { url: 'https://nextjs.org/docs/app/building-your-application/data-fetching', title: 'Data Fetching', description: 'Fetch data in server components', headings: '["Server Components","Client Components","Caching"]' },
-      // GitHub
-      { url: 'https://github.com/settings/developer', title: 'Developer Settings', description: 'Manage OAuth apps and tokens', headings: '["OAuth Apps","Personal Access Tokens","GitHub Apps"]' },
-      { url: 'https://github.com/settings/security', title: 'Security Settings', description: 'Account security and authentication', headings: '["Two-Factor Auth","Sessions","SSH Keys"]' },
-      { url: 'https://github.com/settings/notifications', title: 'Notification Settings', description: 'Configure email and web notifications', headings: '["Email Preferences","Watching","Custom Routing"]' },
-      // Cloudflare
-      { url: 'https://cloudflare.com/contact/sales', title: 'Contact Sales', description: 'Get in touch for enterprise pricing', headings: '["Enterprise Plans","Custom Solutions","Support"]' },
-      { url: 'https://cloudflare.com/products/workers', title: 'Cloudflare Workers', description: 'Serverless execution environment', headings: '["KV Storage","Durable Objects","Cron Triggers"]' },
+      // React (react.dev — migrated from reactjs.org in 2023)
+      { url: 'https://react.dev/reference/react/hooks', title: 'Hooks Reference', description: 'React Hooks API reference', headings: '["useState","useEffect","useContext","useRef","useMemo","useCallback"]' },
+      { url: 'https://react.dev/reference/react/components', title: 'Components', description: 'Built-in React components', headings: '["Fragment","Profiler","StrictMode","Suspense"]' },
+      { url: 'https://react.dev/learn', title: 'Quick Start', description: 'Learn React fundamentals', headings: '["Creating Components","JSX","Adding Styles","Displaying Data","Hooks"]' },
+      { url: 'https://react.dev/reference/react-dom/client', title: 'Client APIs', description: 'React DOM client APIs', headings: '["createRoot","hydrateRoot"]' },
+      { url: 'https://react.dev/reference/react/apis', title: 'React APIs', description: 'React API reference', headings: '["createContext","forwardRef","lazy","memo","startTransition"]' },
+
+      // Next.js (nextjs.org — Pages Router → App Router migration)
+      { url: 'https://nextjs.org/docs/app/api-reference/functions', title: 'Functions', description: 'Next.js API reference for functions', headings: '["cookies","headers","redirect","NextRequest","NextResponse"]' },
+      { url: 'https://nextjs.org/docs/app/building-your-application/routing', title: 'Routing', description: 'File-system based routing in Next.js App Router', headings: '["Layouts","Pages","Loading","Error Handling","Route Groups"]' },
+      { url: 'https://nextjs.org/docs/app/getting-started/fetching-data', title: 'Fetching Data', description: 'Data fetching patterns in Next.js', headings: '["Server Components","Client Components","Streaming"]' },
+      { url: 'https://nextjs.org/docs/app/guides/authentication', title: 'Authentication', description: 'Add authentication to your Next.js app', headings: '["Sign In","Sign Up","Session Management"]' },
+      { url: 'https://nextjs.org/docs/app/getting-started/project-structure', title: 'Project Structure', description: 'Next.js project folder and file conventions', headings: '["app Directory","Top-level Files","Routing Files"]' },
+
+      // Vercel (vercel.com/docs — renamed paths over time)
+      { url: 'https://vercel.com/docs/functions', title: 'Vercel Functions', description: 'Deploy serverless and edge functions on Vercel', headings: '["Serverless Functions","Edge Functions","Streaming","Fluid Compute"]' },
+      { url: 'https://vercel.com/docs/frameworks/nextjs', title: 'Next.js on Vercel', description: 'Deploy Next.js applications on Vercel', headings: '["App Router","Pages Router","ISR","Middleware"]' },
+      { url: 'https://vercel.com/docs/getting-started-with-vercel', title: 'Getting Started', description: 'Get started with Vercel', headings: '["Create a Project","Deploy","Custom Domains"]' },
+      { url: 'https://vercel.com/docs/deployments/environments', title: 'Environments', description: 'Manage deployment environments', headings: '["Production","Preview","Development","Custom"]' },
+      { url: 'https://vercel.com/docs/routing-middleware', title: 'Routing Middleware', description: 'Run code before a request is processed', headings: '["Matching Paths","Rewriting","Redirecting"]' },
+
+      // Supabase (supabase.com — migrated from supabase.io, restructured paths)
+      { url: 'https://supabase.com/docs/guides/auth', title: 'Auth', description: 'Add authentication and authorization to your Supabase project', headings: '["Email Login","OAuth Providers","Row Level Security","SSO"]' },
+      { url: 'https://supabase.com/docs/guides/database/overview', title: 'Database', description: 'Use Postgres with Supabase', headings: '["Tables","Functions","Triggers","Extensions"]' },
+      { url: 'https://supabase.com/docs/guides/storage', title: 'Storage', description: 'Store and serve files with Supabase Storage', headings: '["Buckets","Upload","Download","Access Control"]' },
+      { url: 'https://supabase.com/docs/guides/realtime', title: 'Realtime', description: 'Listen to database changes in real time', headings: '["Broadcast","Presence","Postgres Changes"]' },
+      { url: 'https://supabase.com/docs/guides/functions', title: 'Edge Functions', description: 'Server-side TypeScript functions', headings: '["Quickstart","Deploy","Secrets","CORS"]' },
+
+      // Stripe (docs.stripe.com — Charges API → Payment Intents migration)
+      { url: 'https://docs.stripe.com/payments/payment-intents', title: 'Payment Intents', description: 'Use the Payment Intents API to accept payments', headings: '["Create","Confirm","Capture","Cancel"]' },
+      { url: 'https://docs.stripe.com/payments/checkout', title: 'Checkout', description: 'Prebuilt payment page hosted by Stripe', headings: '["Quickstart","Custom Domains","Subscriptions"]' },
+      { url: 'https://docs.stripe.com/payments/elements', title: 'Payment Elements', description: 'Embed a payment form on your site', headings: '["Setup","Appearance","Payment Methods"]' },
+      { url: 'https://docs.stripe.com/api/authentication', title: 'Authentication', description: 'Authenticate your API requests with Stripe API keys', headings: '["API Keys","Restricted Keys","Bearer Auth"]' },
+      { url: 'https://docs.stripe.com/billing/subscriptions/change', title: 'Change Subscriptions', description: 'Upgrade, downgrade, or change subscriptions', headings: '["Proration","Immediate Changes","Scheduled Changes"]' },
+      { url: 'https://docs.stripe.com/connect/marketplace', title: 'Marketplace Payments', description: 'Build a marketplace with Stripe Connect', headings: '["Onboarding","Payments","Payouts","Fees"]' },
+    ];
+
+    // Scenarios — real migration stories with context
+    const SCENARIOS = [
+      {
+        dead: 'https://reactjs.org/docs/hooks-intro.html',
+        context: 'reactjs.org moved to react.dev in 2023',
+      },
+      {
+        dead: 'https://nextjs.org/docs/api-routes/introduction',
+        context: 'Pages Router API routes replaced by App Router',
+      },
+      {
+        dead: 'https://vercel.com/docs/serverless-functions',
+        context: 'Renamed to /docs/functions',
+      },
+      {
+        dead: 'https://supabase.io/docs/guides/auth',
+        context: 'supabase.io migrated to supabase.com',
+      },
+      {
+        dead: 'https://docs.stripe.com/paymens/checkout',
+        context: 'Typo: "paymens" instead of "payments"',
+      },
     ];
 
     // ==========================================
@@ -478,24 +591,19 @@ export const demoPageHtml = `<!DOCTYPE html>
       try { return new URL(url).pathname.replace(/\\/+$/, '').toLowerCase(); }
       catch { return url.replace(/\\/+$/, '').toLowerCase(); }
     }
-
     function pathSegments(p) { return p.split('/').filter(Boolean); }
-
     function extractKeywords(p) {
       return new Set(p.split(/[\\/_\\-.\\/@]+/).filter(w => w.length > 2).map(w => w.toLowerCase()));
     }
-
     function safeParseArray(j) {
       try { const a = JSON.parse(j); return Array.isArray(a) ? a : []; } catch { return []; }
     }
-
     const VERSION_RE = /^(v|ver|version)?(\\d+)$/;
     function isVersionVariant(a, b) {
       const ma = VERSION_RE.exec(a), mb = VERSION_RE.exec(b);
       if (!ma || !mb) return false;
       return ma[1] === mb[1] && ma[2] !== mb[2];
     }
-
     function jaccardVersionTolerant(a, b) {
       if (!a.length && !b.length) return 1;
       if (!a.length || !b.length) return 0;
@@ -510,7 +618,6 @@ export const demoPageHtml = `<!DOCTYPE html>
       }
       return matches / new Set([...a, ...b]).size;
     }
-
     function levenshtein(a, b) {
       const m = a.length, n = b.length;
       const dp = Array.from({ length: m + 1 }, () => Array(n + 1).fill(0));
@@ -523,20 +630,17 @@ export const demoPageHtml = `<!DOCTYPE html>
         }
       return dp[m][n];
     }
-
     function keywordOverlap(a, b) {
       if (!a.size || !b.size) return 0;
       let inter = 0;
       for (const w of a) if (b.has(w)) inter++;
       return inter / new Set([...a, ...b]).size;
     }
-
     function findSuggestions(deadUrl) {
       const deadPath = normalizePath(deadUrl);
       const deadSegs = pathSegments(deadPath);
       const deadKw = extractKeywords(deadPath);
       const scored = [];
-
       for (const page of PAGES) {
         const pagePath = normalizePath(page.url);
         const pageSegs = pathSegments(pagePath);
@@ -547,9 +651,7 @@ export const demoPageHtml = `<!DOCTYPE html>
         const textPool = [page.title, page.description, ...headings].join(' ').toLowerCase();
         const textKw = new Set([...textPool.split(/\\W+/).filter(w => w.length > 2), ...pageKw]);
         const textScore = keywordOverlap(deadKw, textKw);
-
         const score = W_PATH * pathScore + W_LEV * levScore + W_TEXT * textScore;
-
         if (score >= SCORE_THRESHOLD) {
           let hasVer = false;
           for (const s of deadSegs) for (const bs of pageSegs) if (isVersionVariant(s, bs)) hasVer = true;
@@ -557,7 +659,6 @@ export const demoPageHtml = `<!DOCTYPE html>
           if (hasVer && score > 0.6) matchType = 'moved';
           else if (score > 0.6) matchType = 'similar';
           else matchType = 'related';
-
           scored.push({
             url: page.url, title: page.title, description: page.description,
             score: Math.round(score * 1000) / 1000, matchType,
@@ -565,7 +666,6 @@ export const demoPageHtml = `<!DOCTYPE html>
           });
         }
       }
-
       scored.sort((a, b) => b.score - a.score);
       return scored.slice(0, MAX_RESULTS);
     }
@@ -576,24 +676,34 @@ export const demoPageHtml = `<!DOCTYPE html>
     const urlInput = document.getElementById('url-input');
     urlInput.addEventListener('keydown', e => { if (e.key === 'Enter') runMatch(); });
 
-    function tryExample(el) {
-      urlInput.value = 'https://' + el.textContent;
-      runMatch();
+    function runScenario(idx) {
+      document.querySelectorAll('.scenario').forEach((el, i) => {
+        el.classList.toggle('active', i === idx);
+      });
+      const s = SCENARIOS[idx];
+      urlInput.value = s.dead;
+      showResults(s.dead, s.context);
     }
 
     function runMatch() {
       let url = urlInput.value.trim();
       if (!url) { urlInput.focus(); return; }
       if (!url.startsWith('http')) url = 'https://' + url;
+      // Deselect scenario cards
+      document.querySelectorAll('.scenario').forEach(el => el.classList.remove('active'));
+      showResults(url, '');
+    }
 
-      const results = findSuggestions(url);
+    function showResults(deadUrl, context) {
+      const results = findSuggestions(deadUrl);
 
-      // Show dead URL bar
+      // Dead URL bar
       const bar = document.getElementById('dead-url-bar');
       bar.style.display = 'flex';
-      document.getElementById('dead-url-display').textContent = url;
+      document.getElementById('dead-url-display').textContent = deadUrl;
+      document.getElementById('dead-url-context').textContent = context;
 
-      // Show results
+      // Results
       document.getElementById('empty-state').style.display = 'none';
       const container = document.getElementById('results-container');
       container.style.display = 'block';
@@ -603,7 +713,7 @@ export const demoPageHtml = `<!DOCTYPE html>
       list.innerHTML = '';
 
       if (results.length === 0) {
-        list.innerHTML = '<div style="text-align:center;padding:2rem;color:#52525b;font-size:0.85rem;">No matches found. In production, semantic embeddings would catch more matches.</div>';
+        list.innerHTML = '<div style="text-align:center;padding:2rem;color:#52525b;font-size:0.85rem;">No matches found. In production, semantic embeddings would catch more.</div>';
         document.getElementById('jsonld-section').style.display = 'none';
         return;
       }
@@ -615,15 +725,15 @@ export const demoPageHtml = `<!DOCTYPE html>
         card.innerHTML =
           '<div class="result-top">' +
             '<span class="match-badge ' + r.matchType + '">' + r.matchType + '</span>' +
-            '<span class="result-url">' + r.url + '</span>' +
+            '<a class="result-url" href="' + r.url + '" target="_blank" rel="noopener">' + r.url + '</a>' +
             '<span class="result-score">' + r.score + '</span>' +
           '</div>' +
           '<div class="result-title">' + r.title + '</div>' +
           '<div class="result-desc">' + r.description + '</div>' +
           '<div class="signals">' +
-            '<span class="signal">path <span class="signal-bar"><span class="signal-fill path" style="width:' + Math.round(r._signals.path * 100) + '%"></span></span> ' + (r._signals.path).toFixed(2) + '</span>' +
-            '<span class="signal">lev <span class="signal-bar"><span class="signal-fill lev" style="width:' + Math.round(r._signals.lev * 100) + '%"></span></span> ' + (r._signals.lev).toFixed(2) + '</span>' +
-            '<span class="signal">text <span class="signal-bar"><span class="signal-fill text" style="width:' + Math.round(r._signals.text * 100) + '%"></span></span> ' + (r._signals.text).toFixed(2) + '</span>' +
+            '<span class="signal">path <span class="signal-bar"><span class="signal-fill path" style="width:' + Math.round(r._signals.path * 100) + '%"></span></span> ' + r._signals.path.toFixed(2) + '</span>' +
+            '<span class="signal">lev <span class="signal-bar"><span class="signal-fill lev" style="width:' + Math.round(r._signals.lev * 100) + '%"></span></span> ' + r._signals.lev.toFixed(2) + '</span>' +
+            '<span class="signal">text <span class="signal-bar"><span class="signal-fill text" style="width:' + Math.round(r._signals.text * 100) + '%"></span></span> ' + r._signals.text.toFixed(2) + '</span>' +
           '</div>';
         list.appendChild(card);
       });
@@ -646,8 +756,7 @@ export const demoPageHtml = `<!DOCTYPE html>
           }))
         }
       };
-      const pre = document.getElementById('jsonld-pre');
-      pre.innerHTML = syntaxHighlight(JSON.stringify(jsonld, null, 2));
+      document.getElementById('jsonld-pre').innerHTML = syntaxHighlight(JSON.stringify(jsonld, null, 2));
     }
 
     function syntaxHighlight(json) {
@@ -662,6 +771,9 @@ export const demoPageHtml = `<!DOCTYPE html>
       jsonldOpen = !jsonldOpen;
       document.getElementById('jsonld-pre').style.display = jsonldOpen ? 'block' : 'none';
     }
+
+    // Auto-run first scenario on load
+    setTimeout(() => runScenario(0), 300);
   </script>
 </body>
 </html>
