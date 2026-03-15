@@ -90,33 +90,94 @@ app.get("/api/demo/sitemap", async (c) => {
 		return c.json({ error: "Invalid domain" }, 400);
 	}
 
-	const sitemapUrl = `https://${domain}/sitemap.xml`;
-
 	try {
-		const pages = await fetchDemoSitemap(sitemapUrl, deadPath, 0);
-		return c.json({ domain, pages });
+		const pages = await discoverDemoPages(domain, deadPath);
+		return c.json({ domain, pages, source: pages.length > 0 ? "sitemap" : "none" });
 	} catch {
-		return c.json({ domain, pages: [], error: "Could not fetch sitemap" });
+		return c.json({ domain, pages: [], error: "Could not discover pages" });
 	}
 });
 
+// ── Demo page discovery constants ──
 const DEMO_TIMEOUT_MS = 8_000;
 const DEMO_MAX_URLS = 500;
 const DEMO_MAX_DEPTH = 2;
 const DEMO_MAX_CHILDREN = 5;
+const DEMO_USER_AGENT = "agent-404-bot/1.0 (demo)";
 
-async function fetchDemoSitemapXml(url: string): Promise<string | null> {
+// Common sitemap paths to try (in order)
+const SITEMAP_PATHS = [
+	"/sitemap.xml",
+	"/sitemap_index.xml",
+	"/sitemap/sitemap.xml",
+	"/sitemap/index.xml",
+	"/wp-sitemap.xml",
+];
+
+/**
+ * Main discovery pipeline: sitemap → robots.txt → HTML crawl fallback.
+ */
+async function discoverDemoPages(
+	domain: string,
+	deadPath: string,
+): Promise<{ url: string; title: string }[]> {
+	// 1. Try sitemaps (from robots.txt + common paths)
+	const sitemapUrls = await findSitemapUrls(domain);
+	for (const sitemapUrl of sitemapUrls) {
+		const pages = await fetchDemoSitemap(sitemapUrl, deadPath, 0);
+		if (pages.length > 0) return pages;
+	}
+
+	// 2. Fallback: crawl HTML links from the homepage and nearby pages
+	return await crawlDemoLinks(domain, deadPath);
+}
+
+/**
+ * Find sitemap URLs by checking robots.txt, then falling back to common paths.
+ */
+async function findSitemapUrls(domain: string): Promise<string[]> {
+	const found: string[] = [];
+	const seen = new Set<string>();
+
+	// Check robots.txt for Sitemap directives
+	const robotsTxt = await fetchDemoText(`https://${domain}/robots.txt`);
+	if (robotsTxt) {
+		const sitemapRegex = /^Sitemap:\s*(\S+)/gim;
+		let match: RegExpExecArray | null;
+		while ((match = sitemapRegex.exec(robotsTxt)) !== null) {
+			const url = match[1].trim();
+			if (url.startsWith("https://") && !seen.has(url)) {
+				seen.add(url);
+				found.push(url);
+			}
+		}
+	}
+
+	// Add common paths not already discovered
+	for (const path of SITEMAP_PATHS) {
+		const url = `https://${domain}${path}`;
+		if (!seen.has(url)) {
+			seen.add(url);
+			found.push(url);
+		}
+	}
+
+	return found;
+}
+
+/**
+ * Fetch a URL and return text, or null on failure.
+ */
+async function fetchDemoText(url: string): Promise<string | null> {
 	const controller = new AbortController();
 	const timeout = setTimeout(() => controller.abort(), DEMO_TIMEOUT_MS);
 	try {
 		const resp = await fetch(url, {
-			headers: { "User-Agent": "agent-404-bot/1.0 (demo)" },
+			headers: { "User-Agent": DEMO_USER_AGENT },
 			signal: controller.signal,
+			redirect: "follow",
 		});
 		if (!resp.ok) return null;
-		const contentType = resp.headers.get("content-type") || "";
-		// Reject HTML responses (some sites return 200 with an HTML 404 page)
-		if (contentType.includes("text/html")) return null;
 		return await resp.text();
 	} catch {
 		return null;
@@ -126,27 +187,51 @@ async function fetchDemoSitemapXml(url: string): Promise<string | null> {
 }
 
 /**
- * Score a child sitemap URL by how relevant it is to the dead URL path.
- * Higher = more relevant.
+ * Fetch a URL expecting XML. Rejects HTML responses.
+ */
+async function fetchDemoSitemapXml(url: string): Promise<string | null> {
+	const controller = new AbortController();
+	const timeout = setTimeout(() => controller.abort(), DEMO_TIMEOUT_MS);
+	try {
+		const resp = await fetch(url, {
+			headers: { "User-Agent": DEMO_USER_AGENT },
+			signal: controller.signal,
+			redirect: "follow",
+		});
+		if (!resp.ok) return null;
+		const contentType = resp.headers.get("content-type") || "";
+		if (contentType.includes("text/html")) return null;
+		const text = await resp.text();
+		// Double-check: some servers return HTML with XML content-type
+		if (text.trimStart().startsWith("<!DOCTYPE") || text.trimStart().startsWith("<html")) return null;
+		return text;
+	} catch {
+		return null;
+	} finally {
+		clearTimeout(timeout);
+	}
+}
+
+/**
+ * Score a child sitemap URL by relevance to the dead URL path.
  */
 function scoreChildSitemap(childUrl: string, deadPath: string): number {
 	const childLower = childUrl.toLowerCase();
-	const deadLower = deadPath.toLowerCase();
-	const deadSegments = deadLower.split("/").filter(Boolean);
+	const deadSegments = deadPath.toLowerCase().split("/").filter(Boolean);
 	if (deadSegments.length === 0) return 0;
 
 	let score = 0;
-	// Bonus for each dead URL segment that appears in the child sitemap URL
 	for (const seg of deadSegments) {
 		if (seg.length > 2 && childLower.includes(seg)) score += 2;
 	}
-	// Bonus for path prefix match (e.g., dead=/docs/start, child URL contains /docs/)
 	const deadPrefix = "/" + deadSegments[0] + "/";
 	if (childLower.includes(deadPrefix)) score += 3;
-
 	return score;
 }
 
+/**
+ * Recursively fetch and parse sitemaps, prioritizing relevant children.
+ */
 async function fetchDemoSitemap(
 	url: string,
 	deadPath: string,
@@ -155,19 +240,18 @@ async function fetchDemoSitemap(
 	const xml = await fetchDemoSitemapXml(url);
 	if (!xml) return [];
 
-	// Not a sitemap index — extract URLs directly
+	// Regular sitemap — extract URLs directly
 	if (!xml.includes("<sitemapindex")) {
 		return extractDemoLocs(xml, "url")
 			.slice(0, DEMO_MAX_URLS)
 			.map((loc) => ({ url: loc, title: demoTitleFromUrl(loc) }));
 	}
 
-	// Sitemap index — prioritize children by relevance to the dead URL
+	// Sitemap index — prioritize children by relevance
 	if (depth >= DEMO_MAX_DEPTH) return [];
 	const childLocs = extractDemoLocs(xml, "sitemap");
 	if (childLocs.length === 0) return [];
 
-	// Score and sort children by relevance, falling back to original order
 	const scored = childLocs.map((loc, i) => ({
 		loc,
 		score: scoreChildSitemap(loc, deadPath),
@@ -176,13 +260,102 @@ async function fetchDemoSitemap(
 	scored.sort((a, b) => b.score - a.score || a.idx - b.idx);
 	const topChildren = scored.slice(0, DEMO_MAX_CHILDREN);
 
-	// Fetch top children in parallel
 	const results = await Promise.all(
 		topChildren.map((child) => fetchDemoSitemap(child.loc, deadPath, depth + 1)),
 	);
+	return results.flat().slice(0, DEMO_MAX_URLS);
+}
 
-	const allPages = results.flat();
-	return allPages.slice(0, DEMO_MAX_URLS);
+/**
+ * HTML crawl fallback: fetch homepage + a few relevant pages, extract internal links.
+ */
+async function crawlDemoLinks(
+	domain: string,
+	deadPath: string,
+): Promise<{ url: string; title: string }[]> {
+	const baseUrl = `https://${domain}`;
+	const seen = new Set<string>();
+	const pages: { url: string; title: string }[] = [];
+
+	// Seed pages to crawl: homepage + path prefix pages
+	const seedPaths = ["/"];
+	const deadSegments = deadPath.split("/").filter(Boolean);
+	// Add ancestor paths (e.g., /docs/guides/start → try /docs, /docs/guides)
+	for (let i = 1; i <= Math.min(deadSegments.length, 3); i++) {
+		seedPaths.push("/" + deadSegments.slice(0, i).join("/"));
+	}
+
+	for (const seedPath of seedPaths) {
+		if (pages.length >= DEMO_MAX_URLS) break;
+		const html = await fetchDemoText(baseUrl + seedPath);
+		if (!html) continue;
+
+		// Extract page title
+		const seedTitle = extractHtmlTitle(html);
+		const seedUrl = baseUrl + seedPath;
+		if (!seen.has(seedUrl)) {
+			seen.add(seedUrl);
+			pages.push({ url: seedUrl, title: seedTitle });
+		}
+
+		// Extract all internal links
+		const links = extractInternalLinks(html, domain);
+		for (const link of links) {
+			if (seen.has(link.url) || pages.length >= DEMO_MAX_URLS) continue;
+			seen.add(link.url);
+			pages.push(link);
+		}
+	}
+
+	return pages;
+}
+
+/**
+ * Extract <title> from HTML.
+ */
+function extractHtmlTitle(html: string): string {
+	const match = /<title[^>]*>([^<]+)<\/title>/i.exec(html);
+	return match ? match[1].trim() : "";
+}
+
+/**
+ * Extract internal links with their anchor text from HTML.
+ */
+function extractInternalLinks(
+	html: string,
+	domain: string,
+): { url: string; title: string }[] {
+	const links: { url: string; title: string }[] = [];
+	const seen = new Set<string>();
+	// Match <a> tags, capture href and inner text
+	const regex = /<a\s[^>]*href=["']([^"'#]+)["'][^>]*>([^<]*(?:<[^/a][^>]*>[^<]*)*)<\/a>/gi;
+	let match: RegExpExecArray | null;
+	while ((match = regex.exec(html)) !== null) {
+		let href = match[1].trim();
+		const text = match[2].replace(/<[^>]+>/g, "").trim();
+
+		// Resolve relative URLs
+		if (href.startsWith("/")) {
+			href = `https://${domain}${href}`;
+		}
+
+		// Only keep same-domain HTTPS links
+		try {
+			const parsed = new URL(href);
+			if (parsed.hostname !== domain && !parsed.hostname.endsWith("." + domain)) continue;
+			if (parsed.protocol !== "https:") continue;
+			// Skip anchors, query-only, assets, and common non-page paths
+			const path = parsed.pathname;
+			if (/\.(css|js|png|jpg|jpeg|gif|svg|ico|woff|woff2|ttf|pdf|zip)$/i.test(path)) continue;
+			const canonical = parsed.origin + path.replace(/\/+$/, "");
+			if (seen.has(canonical)) continue;
+			seen.add(canonical);
+			links.push({ url: canonical, title: text || demoTitleFromUrl(canonical) });
+		} catch {
+			continue;
+		}
+	}
+	return links;
 }
 
 function extractDemoLocs(xml: string, parentTag: string): string[] {

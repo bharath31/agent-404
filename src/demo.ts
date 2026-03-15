@@ -795,26 +795,26 @@ export const demoPageHtml = `<!DOCTYPE html>
       const deadDisplay = document.getElementById('dead-url-display');
       deadDisplay.href = deadUrl;
       deadDisplay.textContent = deadUrl;
-      document.getElementById('dead-url-context').textContent = 'Fetching sitemap for ' + hostname + '...';
+      document.getElementById('dead-url-context').textContent = 'Discovering pages on ' + hostname + '...';
       document.getElementById('empty-state').style.display = 'none';
       const container = document.getElementById('results-container');
       container.style.display = 'block';
       document.getElementById('results-count').textContent = 'loading...';
       document.getElementById('results-list').innerHTML =
-        '<div style="text-align:center;padding:2rem;color:#52525b;font-size:0.85rem;">Crawling ' + hostname + '/sitemap.xml for pages...</div>';
+        '<div style="text-align:center;padding:2rem;color:#52525b;font-size:0.85rem;">Checking sitemap, robots.txt, and page links on ' + hostname + '...</div>';
       document.getElementById('jsonld-section').style.display = 'none';
 
       let deadPath = '';
       try { deadPath = new URL(deadUrl).pathname; } catch {}
       const pages = await fetchSitemapPages(hostname, deadPath);
       if (pages.length === 0) {
-        document.getElementById('dead-url-context').textContent = 'No sitemap found';
+        document.getElementById('dead-url-context').textContent = 'No pages discovered';
         document.getElementById('results-count').textContent = '0 matches';
         document.getElementById('results-list').innerHTML =
-          '<div style="text-align:center;padding:2rem;color:#52525b;font-size:0.85rem;">Could not find a sitemap.xml for ' + hostname + '. The site needs a sitemap for the demo to discover its pages.</div>';
+          '<div style="text-align:center;padding:2rem;color:#52525b;font-size:0.85rem;">Could not discover pages on ' + hostname + '. The site may block bots or have no discoverable links.</div>';
         return;
       }
-      document.getElementById('dead-url-context').textContent = pages.length + ' pages indexed from sitemap';
+      document.getElementById('dead-url-context').textContent = pages.length + ' pages discovered';
       showResults(deadUrl, '', pages);
     }
 
