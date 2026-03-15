@@ -8,12 +8,15 @@ export interface StorageAdapter {
 	upsertPage(
 		siteId: string,
 		page: Pick<PageRecord, "url" | "title" | "description" | "headings">,
+		embedding?: number[] | null,
 	): Promise<void>;
 	upsertPages(
 		siteId: string,
 		pages: Pick<PageRecord, "url" | "title" | "description" | "headings">[],
+		embeddings?: (number[] | null)[],
 	): Promise<void>;
 	getPages(siteId: string): Promise<PageRecord[]>;
+	searchByEmbedding(siteId: string, embedding: number[], limit: number): Promise<PageRecord[]>;
 	deleteStalePagesOlderThan(siteId: string, cutoff: string): Promise<number>;
 
 	recordSuggestionServed(siteId: string, deadUrl: string, suggestedUrls: string[]): Promise<void>;

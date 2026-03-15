@@ -7,6 +7,7 @@ import { suggest } from "./api/routes/suggest.js";
 import { apiKeyAuth } from "./api/middleware/auth.js";
 import { crawlSitemap } from "./engine/sitemap.js";
 import { pruneStalePages } from "./engine/indexer.js";
+import { buildEmbeddingText, generateBatchEmbeddings } from "./engine/embeddings.js";
 import { landingPageHtml } from "./landing.js";
 
 type Env = { Variables: { storage: PostgresStorage; siteId: string } };
@@ -55,7 +56,39 @@ app.get("/api/cron", async (c) => {
 		const domain = row.domain as string;
 		const crawled = await crawlSitemap(domain, siteId, storage);
 		const pruned = await pruneStalePages(storage, siteId, 30);
-		results.push({ domain, crawled, pruned });
+
+		// Backfill embeddings for pages missing them
+		let backfilled = 0;
+		const { rows: nullPages } = await sql`
+			SELECT * FROM pages WHERE site_id = ${siteId} AND embedding IS NULL
+		`;
+		if (nullPages.length > 0) {
+			const BATCH_SIZE = 100;
+			for (let i = 0; i < nullPages.length; i += BATCH_SIZE) {
+				const batch = nullPages.slice(i, i + BATCH_SIZE);
+				const texts = batch.map((p) =>
+					buildEmbeddingText({
+						url: p.url as string,
+						title: p.title as string,
+						description: p.description as string,
+					}),
+				);
+				const embeddings = await generateBatchEmbeddings(texts);
+				for (let j = 0; j < batch.length; j++) {
+					const emb = embeddings[j];
+					if (emb) {
+						const embStr = `[${emb.join(",")}]`;
+						await sql.query(
+							`UPDATE pages SET embedding = $1::vector WHERE id = $2`,
+							[embStr, batch[j].id],
+						);
+						backfilled++;
+					}
+				}
+			}
+		}
+
+		results.push({ domain, crawled, pruned, backfilled });
 	}
 
 	return c.json({ ok: true, results });

@@ -270,23 +270,6 @@ export const landingPageHtml = `<!DOCTYPE html>
       line-height: 1.4;
     }
 
-    /* Stack */
-    .stack-list {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 0.5rem;
-      margin-top: 1rem;
-    }
-    .stack-tag {
-      font-family: var(--mono);
-      font-size: 0.8rem;
-      padding: 0.35rem 0.75rem;
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      color: var(--text-secondary);
-    }
-
     /* CTA */
     .cta {
       text-align: center;
@@ -430,8 +413,6 @@ export const landingPageHtml = `<!DOCTYPE html>
       <div class="logo">agent<span>-</span>404</div>
       <div class="links">
         <a href="https://github.com/bharath31/agent-404">GitHub</a>
-        <a href="#get-started">Get started</a>
-        <a href="/api/health">API Status</a>
       </div>
     </nav>
 
@@ -518,28 +499,18 @@ export const landingPageHtml = `<!DOCTYPE html>
       </div>
     </div>
 
-    <div class="section">
-      <h2>Stack</h2>
-      <p style="color: var(--text-secondary); font-size: 0.9rem;">Fully open source. Self-host or use the hosted version.</p>
-      <div class="stack-list">
-        <span class="stack-tag">Hono</span>
-        <span class="stack-tag">Vercel Edge Functions</span>
-        <span class="stack-tag">PostgreSQL</span>
-        <span class="stack-tag">Vanilla JS &lt;3KB</span>
-        <span class="stack-tag">schema.org JSON-LD</span>
-        <span class="stack-tag">MIT License</span>
-      </div>
-    </div>
-
     <div class="cta">
       <h2>Stop losing agents to dead links</h2>
-      <p>Add one script tag. Your 404 pages start working for you.</p>
+      <p>Add one script tag. Your 404 pages start working for you.<br>Fully open source — self-host with one click or use the hosted version.</p>
       <div class="btn-group">
-        <a href="https://github.com/bharath31/agent-404" class="btn btn-primary">
+        <a href="https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fbharath31%2Fagent-404&env=POSTGRES_URL,OPENAI_API_KEY,CRON_SECRET&envDescription=POSTGRES_URL%3A%20Neon%2FVercel%20Postgres%20connection%20string.%20OPENAI_API_KEY%3A%20For%20semantic%20embeddings%20(optional).%20CRON_SECRET%3A%20Bearer%20token%20for%20cron.&project-name=agent-404&repository-name=agent-404" class="btn btn-primary">
+          <svg width="16" height="16" viewBox="0 0 76 65" fill="currentColor"><path d="M37.5274 0L75.0548 65H0L37.5274 0Z"/></svg>
+          Deploy to Vercel
+        </a>
+        <a href="https://github.com/bharath31/agent-404" class="btn btn-secondary">
           <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
           View on GitHub
         </a>
-        <a href="/api/health" class="btn btn-secondary">API Status</a>
       </div>
     </div>
 

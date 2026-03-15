@@ -2,14 +2,27 @@ import type { PageRecord, Suggestion } from "../types.js";
 
 const SCORE_THRESHOLD = 0.2;
 const MAX_RESULTS = 5;
-const WEIGHT_PATH_SEG = 0.5;
-const WEIGHT_LEVENSHTEIN = 0.3;
-const WEIGHT_TEXT = 0.2;
+
+// 4-signal weights (when embedding available)
+const W4_PATH_SEG = 0.35;
+const W4_LEVENSHTEIN = 0.2;
+const W4_TEXT = 0.15;
+const W4_EMBEDDING = 0.3;
+
+// 3-signal weights (fallback when embedding unavailable)
+const W3_PATH_SEG = 0.5;
+const W3_LEVENSHTEIN = 0.3;
+const W3_TEXT = 0.2;
 
 /**
  * Rank pages against a dead URL and return top suggestions.
+ * Optionally accepts a dead URL embedding for semantic matching.
  */
-export function findSuggestions(deadUrl: string, pages: PageRecord[]): Suggestion[] {
+export function findSuggestions(
+	deadUrl: string,
+	pages: PageRecord[],
+	deadUrlEmbedding?: number[] | null,
+): Suggestion[] {
 	const deadPath = normalizePath(deadUrl);
 	const deadSegments = pathSegments(deadPath);
 	const deadKeywords = extractKeywords(deadPath);
@@ -36,10 +49,23 @@ export function findSuggestions(deadUrl: string, pages: PageRecord[]): Suggestio
 		]);
 		const textScore = keywordOverlap(deadKeywords, textKeywords);
 
-		const score =
-			WEIGHT_PATH_SEG * pathSegScore +
-			WEIGHT_LEVENSHTEIN * levScore +
-			WEIGHT_TEXT * textScore;
+		// Signal 4: Embedding cosine similarity (when both embeddings available)
+		const hasEmbedding = deadUrlEmbedding && page.embedding;
+		let score: number;
+
+		if (hasEmbedding) {
+			const embeddingScore = cosineSimilarity(deadUrlEmbedding, page.embedding!);
+			score =
+				W4_PATH_SEG * pathSegScore +
+				W4_LEVENSHTEIN * levScore +
+				W4_TEXT * textScore +
+				W4_EMBEDDING * embeddingScore;
+		} else {
+			score =
+				W3_PATH_SEG * pathSegScore +
+				W3_LEVENSHTEIN * levScore +
+				W3_TEXT * textScore;
+		}
 
 		if (score >= SCORE_THRESHOLD) {
 			const hasVersionDiff = detectVersionDiff(deadSegments, pageSegments);
@@ -63,6 +89,21 @@ export function findSuggestions(deadUrl: string, pages: PageRecord[]): Suggestio
 }
 
 // --- Helpers ---
+
+export function cosineSimilarity(a: number[], b: number[]): number {
+	if (a.length !== b.length || a.length === 0) return 0;
+	let dot = 0;
+	let normA = 0;
+	let normB = 0;
+	for (let i = 0; i < a.length; i++) {
+		dot += a[i] * b[i];
+		normA += a[i] * a[i];
+		normB += b[i] * b[i];
+	}
+	const denom = Math.sqrt(normA) * Math.sqrt(normB);
+	if (denom === 0) return 0;
+	return dot / denom;
+}
 
 function normalizePath(url: string): string {
 	try {
