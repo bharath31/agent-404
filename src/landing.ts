@@ -551,7 +551,7 @@ export const landingPageHtml = `<!DOCTYPE html>
     // Animated demo
     const examples = [
       { dead: '/docs/customize/login-pages/acul', live: '/docs/customize/login-pages/advanced-customizations', domain: 'auth0.com' },
-      { dead: '/paymens/checkout',          live: '/payments/checkout',          domain: 'docs.stripe.com' },
+      { dead: '/payment/checkout',           live: '/payments/checkout',          domain: 'docs.stripe.com' },
       { dead: '/docs/app/building-your-application/deploying/static-html-export', live: '/docs/app/guides/static-exports', domain: 'nextjs.org' },
       { dead: '/docs/edge-functions/overview', live: '/docs/functions',          domain: 'vercel.com' },
       { dead: '/docs/auth/overview',        live: '/docs/guides/auth',           domain: 'supabase.com' },
