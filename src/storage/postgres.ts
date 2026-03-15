@@ -45,13 +45,22 @@ export class PostgresStorage implements StorageAdapter {
 		return rows[0] ? this.mapSiteRow(rows[0]) : null;
 	}
 
+	private validateEmbedding(embedding: number[]): string | null {
+		if (!Array.isArray(embedding)) return null;
+		for (const v of embedding) {
+			if (typeof v !== "number" || !Number.isFinite(v)) return null;
+		}
+		return `[${embedding.join(",")}]`;
+	}
+
 	async upsertPage(
 		siteId: string,
 		page: Pick<PageRecord, "url" | "title" | "description" | "headings">,
 		embedding?: number[] | null,
 	): Promise<void> {
-		if (embedding) {
-			const embeddingStr = `[${embedding.join(",")}]`;
+		const embeddingStr = embedding ? this.validateEmbedding(embedding) : null;
+
+		if (embeddingStr) {
 			await this.sql.query(
 				`INSERT INTO pages (site_id, url, title, description, headings, embedding)
 				VALUES ($1, $2, $3, $4, $5, $6::vector)
@@ -99,7 +108,8 @@ export class PostgresStorage implements StorageAdapter {
 		embedding: number[],
 		limit: number,
 	): Promise<PageRecord[]> {
-		const embeddingStr = `[${embedding.join(",")}]`;
+		const embeddingStr = this.validateEmbedding(embedding);
+		if (!embeddingStr) return [];
 		const { rows } = await this.sql.query(
 			`SELECT * FROM pages
 			WHERE site_id = $1 AND embedding IS NOT NULL

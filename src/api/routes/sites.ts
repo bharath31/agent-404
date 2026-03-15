@@ -14,6 +14,13 @@ sites.post("/", async (c) => {
 	}
 
 	const domain = body.domain.replace(/^https?:\/\//, "").replace(/\/+$/, "");
+
+	// Validate domain format
+	const domainRegex = /^(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$/;
+	if (!domainRegex.test(domain) || domain.length > 253) {
+		return c.json({ error: "Invalid domain format" }, 400);
+	}
+
 	const storage = c.get("storage");
 
 	try {
@@ -35,7 +42,8 @@ sites.post("/", async (c) => {
 		if (err?.message?.includes("unique") || err?.message?.includes("duplicate")) {
 			return c.json({ error: "Domain already registered" }, 409);
 		}
-		throw err;
+		console.error("Site registration error:", err.message);
+		return c.json({ error: "Internal server error" }, 500);
 	}
 });
 

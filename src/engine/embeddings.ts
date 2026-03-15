@@ -38,7 +38,7 @@ export async function generateBatchEmbeddings(texts: string[]): Promise<(number[
 		});
 
 		if (!resp.ok) {
-			console.error(`Embedding API error: ${resp.status} ${resp.statusText}`);
+			console.error(`Embedding API error: ${resp.status}`);
 			return texts.map(() => null);
 		}
 
@@ -51,8 +51,8 @@ export async function generateBatchEmbeddings(texts: string[]): Promise<(number[
 			results[item.index] = item.embedding;
 		}
 		return results;
-	} catch (err) {
-		console.error("Embedding API request failed:", err);
+	} catch (err: any) {
+		console.error("Embedding API request failed:", err?.message || "unknown error");
 		return texts.map(() => null);
 	}
 }
