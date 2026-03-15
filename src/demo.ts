@@ -84,16 +84,14 @@ export const demoPageHtml = `<!DOCTYPE html>
     /* Scenario cards */
     .scenarios {
       display: flex;
+      flex-wrap: wrap;
       gap: 0.5rem;
       margin: 1.75rem auto;
-      max-width: 800px;
-      overflow-x: auto;
-      padding-bottom: 0.25rem;
-      -webkit-overflow-scrolling: touch;
+      max-width: 640px;
     }
     .scenario {
-      flex: 0 0 auto;
-      min-width: 120px;
+      flex: 1 1 auto;
+      min-width: 140px;
       padding: 0.7rem 0.85rem;
       background: var(--surface);
       border: 1px solid var(--border);
