@@ -485,34 +485,34 @@ export const landingPageHtml = `<!DOCTYPE html>
     </div>
 
     <div class="section">
-      <h2>Who it's for</h2>
+      <h2>Built for the agent era</h2>
       <div class="use-cases">
         <div class="use-case">
-          <div class="icon">📚</div>
+          <div class="icon">🤖</div>
           <div>
-            <h3>"We just shipped v3 and everything broke"</h3>
-            <p>You migrated your docs from v2 to v3. Now every AI agent, every Stack Overflow answer, every tutorial links to pages that don't exist anymore. <span style="white-space:nowrap">agent-404</span> notices the version shift and sends them to the right v3 page.</p>
+            <h3>Coding assistants hit stale docs</h3>
+            <p>Claude, Cursor, and Copilot follow URLs baked into training data. When your docs restructure, they get a 404 and hallucinate. <span style="white-space:nowrap">agent-404</span> returns structured JSON-LD so they find the current page instead.</p>
           </div>
         </div>
         <div class="use-case">
           <div class="icon">🔗</div>
           <div>
-            <h3>"We restructured our URLs last quarter"</h3>
-            <p>You moved <code>/blog/</code> to <code>/articles/</code> and set up redirects for the top 20 posts. But there were 200 more you forgot about. The fuzzy matcher catches those without you maintaining a redirect map.</p>
+            <h3>RAG pipelines index dead links</h3>
+            <p>Your retrieval system crawled 500 URLs last month. Fifty are now dead after an API version bump. Instead of returning empty context, agents get pointed to the matching v3 endpoint automatically.</p>
           </div>
         </div>
         <div class="use-case">
-          <div class="icon">🤖</div>
+          <div class="icon">🕷️</div>
           <div>
-            <h3>"Claude keeps linking to our old API docs"</h3>
-            <p>LLM agents, coding assistants, and RAG pipelines follow links baked into training data. When those links go stale, they hallucinate answers. Give them a structured path to the current content instead.</p>
+            <h3>Web agents abandon broken flows</h3>
+            <p>Autonomous agents navigating your site hit a 404 and stop. With schema.org suggestions in the page, they pick the best match and keep going — no special integration needed.</p>
           </div>
         </div>
         <div class="use-case">
-          <div class="icon">🔍</div>
+          <div class="icon">📡</div>
           <div>
-            <h3>"Our 404 rate is climbing in Search Console"</h3>
-            <p>Search crawlers find your dead pages and index them as errors. With JSON-LD suggestions embedded in the 404, crawlers discover the right content instead of flagging another broken link.</p>
+            <h3>MCP servers reference moved resources</h3>
+            <p>Tool-using agents call your API docs through MCP. When endpoints move, the agent gets a structured list of candidates ranked by similarity — not a generic "page not found".</p>
           </div>
         </div>
       </div>
