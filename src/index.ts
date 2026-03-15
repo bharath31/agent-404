@@ -9,6 +9,7 @@ import { crawlSitemap } from "./engine/sitemap.js";
 import { pruneStalePages } from "./engine/indexer.js";
 import { buildEmbeddingText, generateBatchEmbeddings } from "./engine/embeddings.js";
 import { landingPageHtml } from "./landing.js";
+import { demoPageHtml } from "./demo.js";
 
 type Env = { Variables: { storage: PostgresStorage; siteId: string } };
 
@@ -19,6 +20,7 @@ app.use("*", cors({ origin: "*" }));
 
 // Landing page
 app.get("/", (c) => c.html(landingPageHtml));
+app.get("/demo", (c) => c.html(demoPageHtml));
 
 // Attach storage to context for API routes
 app.use("/api/*", async (c, next) => {
