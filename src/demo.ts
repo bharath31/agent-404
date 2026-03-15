@@ -798,7 +798,7 @@ export const demoPageHtml = `<!DOCTYPE html>
       if (knownPages) {
         // Check if known pages produce good matches; if not, try live discovery
         const knownResults = findSuggestions(deadUrl, knownPages);
-        if (knownResults.length > 0 && knownResults[0].score > 0.35) {
+        if (knownResults.length > 0 && knownResults[0].score > 0.40) {
           showResults(deadUrl, context, knownPages);
           return;
         }
