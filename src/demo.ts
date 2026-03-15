@@ -517,7 +517,7 @@ export const demoPageHtml = `<!DOCTYPE html>
     </div>
 
     <footer>
-      <a href="/">agent-404</a> &middot; <a href="https://github.com/bharath31/agent-404">Source</a> &middot; Built by <a href="https://github.com/bharath31">bharath31</a>
+      <a href="/">agent-404</a> &middot; <a href="https://github.com/bharath31/agent-404">Source</a> &middot; Built with ❤️ by <a href="https://bharath.sh">Bharath Natarajan</a>
     </footer>
   </div>
 

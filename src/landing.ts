@@ -525,7 +525,7 @@ export const landingPageHtml = `<!DOCTYPE html>
     </div>
 
     <footer>
-      Built by <a href="https://github.com/bharath31">bharath31</a> &middot; <a href="https://github.com/bharath31/agent-404">Source</a>
+      Built with ❤️ by <a href="https://bharath.sh">Bharath Natarajan</a> &middot; <a href="https://github.com/bharath31/agent-404">Source</a>
     </footer>
   </div>
   <script>
