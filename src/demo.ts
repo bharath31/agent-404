@@ -460,8 +460,8 @@ export const demoPageHtml = `<!DOCTYPE html>
         <div class="sc-dead">docs.stripe.com/paymens/checkout</div>
       </div>
       <div class="scenario" onclick="runScenario(5)">
-        <div class="sc-label">Docs restructure</div>
-        <div class="sc-dead">auth0.com/docs/connections/social</div>
+        <div class="sc-label">Agent hallucination</div>
+        <div class="sc-dead">auth0.com/docs/customize/login-pages/acul</div>
       </div>
     </div>
 
@@ -566,6 +566,7 @@ export const demoPageHtml = `<!DOCTYPE html>
       { url: 'https://auth0.com/docs/secure', title: 'Secure', description: 'Security features and best practices', headings: '["Attack Protection","Tokens","Multi-factor Authentication"]' },
       { url: 'https://auth0.com/docs/get-started/authentication-and-authorization-flow', title: 'Auth Flows', description: 'Authentication and authorization flows', headings: '["Authorization Code","PKCE","Client Credentials","Device Auth"]' },
       { url: 'https://auth0.com/docs/get-started/auth0-for-ai-agents', title: 'Auth0 for AI Agents', description: 'Authenticate and authorize AI agents with Auth0', headings: '["Agent Authentication","Token Scoping","MCP Integration"]' },
+      { url: 'https://auth0.com/docs/customize/login-pages/advanced-customizations', title: 'Advanced Customizations for Universal Login', description: 'Extend Universal Login with ACUL for multi-branding and custom logic', headings: '["Multi-branding","Custom Login","Analytics Integration","ACUL SDK"]' },
     ];
 
     // Scenarios — real migration stories with context
@@ -591,8 +592,8 @@ export const demoPageHtml = `<!DOCTYPE html>
         context: 'Typo: "paymens" instead of "payments"',
       },
       {
-        dead: 'https://auth0.com/docs/connections/social',
-        context: '/docs/connections restructured to /docs/authenticate',
+        dead: 'https://auth0.com/docs/customize/login-pages/acul',
+        context: 'Agent hallucinated "acul" instead of "advanced-customizations"',
       },
     ];
 
