@@ -199,6 +199,9 @@ export const demoPageHtml = `<!DOCTYPE html>
       text-overflow: ellipsis;
       white-space: nowrap;
     }
+    .dead-url-bar a.url:hover {
+      color: var(--text);
+    }
     .dead-url-bar .context {
       margin-left: auto;
       font-size: 0.65rem;
@@ -440,28 +443,28 @@ export const demoPageHtml = `<!DOCTYPE html>
 
     <div class="scenarios" id="scenarios">
       <div class="scenario active" onclick="runScenario(0)">
-        <div class="sc-label">Version migration</div>
-        <div class="sc-dead">reactjs.org/docs/hooks-intro.html</div>
+        <div class="sc-label">Agent hallucination</div>
+        <div class="sc-dead">auth0.com/docs/customize/login-pages/acul</div>
       </div>
       <div class="scenario" onclick="runScenario(1)">
-        <div class="sc-label">Docs restructure</div>
-        <div class="sc-dead">nextjs.org/docs/api-routes/introduction</div>
-      </div>
-      <div class="scenario" onclick="runScenario(2)">
-        <div class="sc-label">Path rename</div>
-        <div class="sc-dead">vercel.com/docs/serverless-functions</div>
-      </div>
-      <div class="scenario" onclick="runScenario(3)">
-        <div class="sc-label">Domain change</div>
-        <div class="sc-dead">supabase.io/docs/guides/auth</div>
-      </div>
-      <div class="scenario" onclick="runScenario(4)">
         <div class="sc-label">Typo</div>
         <div class="sc-dead">docs.stripe.com/paymens/checkout</div>
       </div>
+      <div class="scenario" onclick="runScenario(2)">
+        <div class="sc-label">Docs restructure</div>
+        <div class="sc-dead">nextjs.org/docs/…/static-html-export</div>
+      </div>
+      <div class="scenario" onclick="runScenario(3)">
+        <div class="sc-label">Path rename</div>
+        <div class="sc-dead">vercel.com/docs/edge-functions/overview</div>
+      </div>
+      <div class="scenario" onclick="runScenario(4)">
+        <div class="sc-label">Path restructure</div>
+        <div class="sc-dead">supabase.com/docs/auth/overview</div>
+      </div>
       <div class="scenario" onclick="runScenario(5)">
-        <div class="sc-label">Agent hallucination</div>
-        <div class="sc-dead">auth0.com/docs/customize/login-pages/acul</div>
+        <div class="sc-label">Missing segment</div>
+        <div class="sc-dead">react.dev/reference/hooks</div>
       </div>
     </div>
 
@@ -476,7 +479,7 @@ export const demoPageHtml = `<!DOCTYPE html>
 
     <div class="dead-url-bar" id="dead-url-bar">
       <span class="label">404</span>
-      <span class="url" id="dead-url-display"></span>
+      <a class="url" id="dead-url-display" target="_blank" rel="noopener"></a>
       <span class="context" id="dead-url-context"></span>
     </div>
 
@@ -544,6 +547,7 @@ export const demoPageHtml = `<!DOCTYPE html>
           { url: 'https://nextjs.org/docs/app/guides/authentication', title: 'Authentication', description: 'Add authentication to your Next.js app', headings: '["Sign In","Sign Up","Session Management"]' },
           { url: 'https://nextjs.org/docs/app/getting-started/project-structure', title: 'Project Structure', description: 'Next.js project folder and file conventions', headings: '["app Directory","Top-level Files","Routing Files"]' },
           { url: 'https://nextjs.org/docs/app/building-your-application/routing/route-handlers', title: 'Route Handlers', description: 'Create API endpoints using Route Handlers', headings: '["GET","POST","Dynamic Routes","Cookies","Headers"]' },
+          { url: 'https://nextjs.org/docs/app/guides/static-exports', title: 'Static Exports', description: 'Create a static export of your Next.js application', headings: '["Configuration","Server Components","Client Components","Image Optimization","Deploying"]' },
         ],
       },
       vercel: {
@@ -598,28 +602,28 @@ export const demoPageHtml = `<!DOCTYPE html>
     // Scenarios — real migration stories with context
     const SCENARIOS = [
       {
-        dead: 'https://reactjs.org/docs/hooks-intro.html',
-        context: 'reactjs.org moved to react.dev in 2023',
-      },
-      {
-        dead: 'https://nextjs.org/docs/api-routes/introduction',
-        context: 'Pages Router API routes replaced by App Router',
-      },
-      {
-        dead: 'https://vercel.com/docs/serverless-functions',
-        context: 'Renamed to /docs/functions',
-      },
-      {
-        dead: 'https://supabase.io/docs/guides/auth',
-        context: 'supabase.io migrated to supabase.com',
+        dead: 'https://auth0.com/docs/customize/login-pages/acul',
+        context: 'Agent hallucinated "acul" instead of "advanced-customizations"',
       },
       {
         dead: 'https://docs.stripe.com/paymens/checkout',
         context: 'Typo: "paymens" instead of "payments"',
       },
       {
-        dead: 'https://auth0.com/docs/customize/login-pages/acul',
-        context: 'Agent hallucinated "acul" instead of "advanced-customizations"',
+        dead: 'https://nextjs.org/docs/app/building-your-application/deploying/static-html-export',
+        context: 'Page moved to /docs/app/guides/static-exports',
+      },
+      {
+        dead: 'https://vercel.com/docs/edge-functions/overview',
+        context: 'Edge Functions restructured under /docs/functions',
+      },
+      {
+        dead: 'https://supabase.com/docs/auth/overview',
+        context: 'Auth docs moved from /docs/auth/ to /docs/guides/auth',
+      },
+      {
+        dead: 'https://react.dev/reference/hooks',
+        context: 'Agent dropped /react/ segment from the path',
       },
     ];
 
@@ -759,7 +763,9 @@ export const demoPageHtml = `<!DOCTYPE html>
       // Dead URL bar
       const bar = document.getElementById('dead-url-bar');
       bar.style.display = 'flex';
-      document.getElementById('dead-url-display').textContent = deadUrl;
+      const deadDisplay = document.getElementById('dead-url-display');
+      deadDisplay.href = deadUrl;
+      deadDisplay.textContent = deadUrl;
       document.getElementById('dead-url-context').textContent = context;
 
       // Results
