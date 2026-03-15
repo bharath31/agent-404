@@ -424,7 +424,7 @@ export const landingPageHtml = `<!DOCTYPE html>
 
     <div class="hero">
       <div class="badge">open source &middot; MIT licensed</div>
-      <h1>Turn dead links into<br><span class="highlight">smart redirects for AI</span></h1>
+      <h1>Turn dead links into<br><span class="highlight">smart redirects for AI agents</span></h1>
       <p>AI agents hit a broken link and give up. Add one script tag and your 404 pages start suggesting the right page — in a format agents already understand.</p>
     </div>
 
