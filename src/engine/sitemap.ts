@@ -1,8 +1,11 @@
 import type { PageRecord } from "../types.js";
 import type { StorageAdapter } from "../storage/interface.js";
+import { buildEmbeddingText, generateBatchEmbeddings } from "./embeddings.js";
+
+const EMBEDDING_BATCH_SIZE = 100;
 
 /**
- * Crawl a domain's sitemap.xml and upsert all discovered URLs.
+ * Crawl a domain's sitemap.xml and upsert all discovered URLs with embeddings.
  */
 export async function crawlSitemap(domain: string, siteId: string, storage: StorageAdapter): Promise<number> {
 	const sitemapUrl = `https://${domain}/sitemap.xml`;
@@ -20,7 +23,16 @@ export async function crawlSitemap(domain: string, siteId: string, storage: Stor
 		);
 
 		if (pages.length > 0) {
-			await storage.upsertPages(siteId, pages);
+			// Generate embeddings in batches
+			const allEmbeddings: (number[] | null)[] = [];
+			for (let i = 0; i < pages.length; i += EMBEDDING_BATCH_SIZE) {
+				const batch = pages.slice(i, i + EMBEDDING_BATCH_SIZE);
+				const texts = batch.map((p) => buildEmbeddingText(p));
+				const embeddings = await generateBatchEmbeddings(texts);
+				allEmbeddings.push(...embeddings);
+			}
+
+			await storage.upsertPages(siteId, pages, allEmbeddings);
 			count = pages.length;
 		}
 	} catch (err) {

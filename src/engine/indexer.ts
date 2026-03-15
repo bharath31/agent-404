@@ -1,15 +1,17 @@
 import type { PageRecord } from "../types.js";
 import type { StorageAdapter } from "../storage/interface.js";
+import { generatePageEmbedding } from "./embeddings.js";
 
 /**
- * Upsert a single page record from a beacon.
+ * Upsert a single page record from a beacon, generating an embedding.
  */
 export async function registerPage(
 	storage: StorageAdapter,
 	siteId: string,
 	page: Pick<PageRecord, "url" | "title" | "description" | "headings">,
 ): Promise<void> {
-	await storage.upsertPage(siteId, page);
+	const embedding = await generatePageEmbedding(page);
+	await storage.upsertPage(siteId, page, embedding);
 }
 
 /**

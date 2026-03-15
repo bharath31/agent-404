@@ -32,8 +32,8 @@ function splitStatements(text: string): string[] {
 	return results;
 }
 
-async function run() {
-	const raw = readFileSync(resolve(__dirname, "0001_init.sql"), "utf-8");
+async function runFile(filename: string) {
+	const raw = readFileSync(resolve(__dirname, filename), "utf-8");
 	// Strip line comments
 	const migration = raw.replace(/--.*$/gm, "");
 	const statements = splitStatements(migration);
@@ -43,8 +43,16 @@ async function run() {
 		console.log(`Running: ${preview}...`);
 		await sql.query(stmt);
 	}
+}
 
-	console.log("Migration complete.");
+async function run() {
+	const migrations = ["0001_init.sql", "0002_pgvector.sql"];
+	for (const file of migrations) {
+		console.log(`\nRunning migration: ${file}`);
+		await runFile(file);
+	}
+
+	console.log("\nAll migrations complete.");
 	process.exit(0);
 }
 

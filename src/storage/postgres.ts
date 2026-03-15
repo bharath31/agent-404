@@ -29,25 +29,55 @@ export class PostgresStorage implements StorageAdapter {
 	async upsertPage(
 		siteId: string,
 		page: Pick<PageRecord, "url" | "title" | "description" | "headings">,
+		embedding?: number[] | null,
 	): Promise<void> {
-		await sql`
-			INSERT INTO pages (site_id, url, title, description, headings)
-			VALUES (${siteId}, ${page.url}, ${page.title}, ${page.description}, ${page.headings})
-			ON CONFLICT (site_id, url) DO UPDATE SET
-				title = EXCLUDED.title,
-				description = EXCLUDED.description,
-				headings = EXCLUDED.headings,
-				last_seen = NOW()
-		`;
+		if (embedding) {
+			const embeddingStr = `[${embedding.join(",")}]`;
+			await sql.query(
+				`INSERT INTO pages (site_id, url, title, description, headings, embedding)
+				VALUES ($1, $2, $3, $4, $5, $6::vector)
+				ON CONFLICT (site_id, url) DO UPDATE SET
+					title = EXCLUDED.title,
+					description = EXCLUDED.description,
+					headings = EXCLUDED.headings,
+					embedding = COALESCE(EXCLUDED.embedding, pages.embedding),
+					last_seen = NOW()`,
+				[siteId, page.url, page.title, page.description, page.headings, embeddingStr],
+			);
+		} else {
+			await sql`
+				INSERT INTO pages (site_id, url, title, description, headings)
+				VALUES (${siteId}, ${page.url}, ${page.title}, ${page.description}, ${page.headings})
+				ON CONFLICT (site_id, url) DO UPDATE SET
+					title = EXCLUDED.title,
+					description = EXCLUDED.description,
+					headings = EXCLUDED.headings,
+					last_seen = NOW()
+			`;
+		}
 	}
 
 	async upsertPages(
 		siteId: string,
 		pages: Pick<PageRecord, "url" | "title" | "description" | "headings">[],
+		embeddings?: (number[] | null)[],
 	): Promise<void> {
-		for (const page of pages) {
-			await this.upsertPage(siteId, page);
+		for (let i = 0; i < pages.length; i++) {
+			const embedding = embeddings?.[i] ?? null;
+			await this.upsertPage(siteId, pages[i], embedding);
 		}
+	}
+
+	async searchByEmbedding(siteId: string, embedding: number[], limit: number): Promise<PageRecord[]> {
+		const embeddingStr = `[${embedding.join(",")}]`;
+		const { rows } = await sql.query(
+			`SELECT * FROM pages
+			WHERE site_id = $1 AND embedding IS NOT NULL
+			ORDER BY embedding <=> $2::vector
+			LIMIT $3`,
+			[siteId, embeddingStr, limit],
+		);
+		return rows.map(this.mapPageRow);
 	}
 
 	async getPages(siteId: string): Promise<PageRecord[]> {
