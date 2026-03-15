@@ -550,14 +550,12 @@ export const landingPageHtml = `<!DOCTYPE html>
 
     // Animated demo
     const examples = [
-      { dead: '/docs/v2/authentication',    live: '/docs/v3/authentication',    domain: 'stripe.dev' },
-      { dead: '/blog/ai-agents-overview',   live: '/changelog/ai-agents',       domain: 'openai.com' },
-      { dead: '/docs/deploy/serverless',    live: '/docs/deployment/edge',      domain: 'vercel.com' },
-      { dead: '/dashboard/billing/invoices', live: '/settings/billing',         domain: 'supabase.com' },
-      { dead: '/pricing/enterprise',        live: '/contact/sales',             domain: 'cloudflare.com' },
-      { dead: '/api/v1/users/list',         live: '/api/v2/users',             domain: 'stripe.dev' },
-      { dead: '/tutorials/deploymnet',      live: '/tutorials/deployment',      domain: 'vercel.com' },
       { dead: '/docs/customize/login-pages/acul', live: '/docs/customize/login-pages/advanced-customizations', domain: 'auth0.com' },
+      { dead: '/paymens/checkout',          live: '/payments/checkout',          domain: 'docs.stripe.com' },
+      { dead: '/docs/app/building-your-application/deploying/static-html-export', live: '/docs/app/guides/static-exports', domain: 'nextjs.org' },
+      { dead: '/docs/edge-functions/overview', live: '/docs/functions',          domain: 'vercel.com' },
+      { dead: '/docs/auth/overview',        live: '/docs/guides/auth',           domain: 'supabase.com' },
+      { dead: '/reference/hooks',           live: '/reference/react/hooks',      domain: 'react.dev' },
     ];
     let demoIdx = 0;
     const demoDead = document.getElementById('demo-dead');
