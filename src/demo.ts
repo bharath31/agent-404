@@ -691,6 +691,10 @@ export const demoPageHtml = `<!DOCTYPE html>
       if (!ma || !mb) return false;
       return ma[1] === mb[1] && ma[2] !== mb[2];
     }
+    function isPrefixMatch(a, b) {
+      if (a.length < 3 || b.length < 3) return false;
+      return a.startsWith(b) || b.startsWith(a);
+    }
     function jaccardVersionTolerant(a, b) {
       if (!a.length && !b.length) return 1;
       if (!a.length || !b.length) return 0;
@@ -701,6 +705,10 @@ export const demoPageHtml = `<!DOCTYPE html>
         else {
           const vm = b.find(bs => !used.has(bs) && isVersionVariant(seg, bs));
           if (vm) { matches += 0.5; used.add(vm); }
+          else {
+            const pm = b.find(bs => !used.has(bs) && isPrefixMatch(seg, bs));
+            if (pm) { matches += 0.7; used.add(pm); }
+          }
         }
       }
       return matches / new Set([...a, ...b]).size;
@@ -720,7 +728,12 @@ export const demoPageHtml = `<!DOCTYPE html>
     function keywordOverlap(a, b) {
       if (!a.size || !b.size) return 0;
       let inter = 0;
-      for (const w of a) if (b.has(w)) inter++;
+      for (const w of a) {
+        if (b.has(w)) { inter++; }
+        else {
+          for (const bw of b) { if (isPrefixMatch(w, bw)) { inter += 0.7; break; } }
+        }
+      }
       return inter / new Set([...a, ...b]).size;
     }
     function findSuggestions(deadUrl, pages) {
@@ -783,8 +796,13 @@ export const demoPageHtml = `<!DOCTYPE html>
     async function runWithPages(deadUrl, context) {
       const knownPages = getKnownSitePages(deadUrl);
       if (knownPages) {
-        showResults(deadUrl, context, knownPages);
-        return;
+        // Check if known pages produce good matches; if not, try live discovery
+        const knownResults = findSuggestions(deadUrl, knownPages);
+        if (knownResults.length > 0 && knownResults[0].score > 0.35) {
+          showResults(deadUrl, context, knownPages);
+          return;
+        }
+        // Known pages didn't match well — fall through to live discovery
       }
 
       // Unknown domain — fetch sitemap

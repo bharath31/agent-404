@@ -136,7 +136,13 @@ function safeParseArray(json: string): string[] {
 	}
 }
 
-/** Jaccard similarity with version-tolerance: v2 vs v3 = 0.5 match */
+/** Check if one string is a prefix of the other (min 3 chars) */
+function isPrefixMatch(a: string, b: string): boolean {
+	if (a.length < 3 || b.length < 3) return false;
+	return a.startsWith(b) || b.startsWith(a);
+}
+
+/** Jaccard similarity with version-tolerance and prefix matching */
 function jaccardVersionTolerant(a: string[], b: string[]): number {
 	if (a.length === 0 && b.length === 0) return 1;
 	if (a.length === 0 || b.length === 0) return 0;
@@ -157,6 +163,15 @@ function jaccardVersionTolerant(a: string[], b: string[]): number {
 			if (versionMatch) {
 				matches += 0.5;
 				used.add(versionMatch);
+			} else {
+				// Prefix match: "work" ↔ "workers" = 0.7
+				const prefixMatch = b.find(
+					(bSeg) => !used.has(bSeg) && isPrefixMatch(seg, bSeg),
+				);
+				if (prefixMatch) {
+					matches += 0.7;
+					used.add(prefixMatch);
+				}
 			}
 		}
 	}
@@ -212,7 +227,17 @@ function keywordOverlap(a: Set<string>, b: Set<string>): number {
 	if (a.size === 0 || b.size === 0) return 0;
 	let intersection = 0;
 	for (const word of a) {
-		if (b.has(word)) intersection++;
+		if (b.has(word)) {
+			intersection++;
+		} else {
+			// Prefix match: "message" matches "messaging" as 0.7
+			for (const bWord of b) {
+				if (isPrefixMatch(word, bWord)) {
+					intersection += 0.7;
+					break;
+				}
+			}
+		}
 	}
 	const union = new Set([...a, ...b]).size;
 	return intersection / union;

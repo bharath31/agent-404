@@ -66,6 +66,41 @@ describe("findSuggestions", () => {
 		expect(results).toEqual([]);
 	});
 
+	it("should match prefix segments (work → workers)", () => {
+		const cfPages = [
+			makePage("https://example.com/workers/api", "Workers API"),
+			makePage("https://example.com/workers/config", "Workers Config"),
+			makePage("https://example.com/pages/deploy", "Pages Deploy"),
+		];
+		const results = findSuggestions("https://example.com/work", cfPages);
+		expect(results.length).toBeGreaterThan(0);
+		expect(results[0].url).toContain("/workers/");
+	});
+
+	it("should match prefix keywords (message → messaging)", () => {
+		const twilioPages = [
+			makePage("https://example.com/docs/messaging", "Messaging API"),
+			makePage("https://example.com/docs/voice", "Voice API"),
+			makePage("https://example.com/docs/video", "Video API"),
+		];
+		const results = findSuggestions("https://example.com/docs/message", twilioPages);
+		expect(results.length).toBeGreaterThan(0);
+		expect(results[0].url).toContain("/messaging");
+	});
+
+	it("should match compound segments (deploy → deploy-hooks)", () => {
+		const vercelPages = [
+			makePage("https://example.com/docs/deploy-hooks", "Deploy Hooks"),
+			makePage("https://example.com/docs/deployments", "Deployments"),
+			makePage("https://example.com/docs/functions", "Functions"),
+		];
+		const results = findSuggestions("https://example.com/docs/deploy", vercelPages);
+		expect(results.length).toBeGreaterThan(0);
+		// Both deploy-hooks and deployments should match
+		const urls = results.map((r) => r.url);
+		expect(urls.some((u) => u.includes("deploy"))).toBe(true);
+	});
+
 	it("should rank similar paths higher", () => {
 		const results = findSuggestions("https://example.com/docs/v3/billing", pages);
 		expect(results[0].url).toBe("https://example.com/docs/v3/billing");
