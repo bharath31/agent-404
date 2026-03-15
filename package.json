@@ -5,21 +5,26 @@
   "type": "module",
   "scripts": {
     "dev": "vercel dev",
+    "dev:cf": "wrangler dev",
     "deploy": "vercel --prod",
+    "deploy:cf": "wrangler deploy",
     "build:script": "tsx script/build.ts",
     "db:migrate": "tsx migrations/run.ts",
     "test": "vitest run",
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@vercel/postgres": "^0.10.0",
+    "@neondatabase/serverless": "^1.0.2",
+    "@vercel/analytics": "^2.0.1",
     "hono": "^4.6.0"
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "^4.20260313.1",
     "@vercel/node": "^5.6.15",
     "esbuild": "^0.24.0",
     "tsx": "^4.19.0",
     "typescript": "^5.7.0",
-    "vitest": "^3.2.4"
+    "vitest": "^3.2.4",
+    "wrangler": "^4.73.0"
   }
 }

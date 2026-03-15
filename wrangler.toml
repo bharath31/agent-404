@@ -1,0 +1,13 @@
+name = "agent-404"
+main = "src/worker.ts"
+compatibility_date = "2024-12-01"
+
+[triggers]
+crons = ["0 3 * * *"]
+
+[assets]
+directory = "./public"
+
+# Set secrets via: wrangler secret put DATABASE_URL
+# Required: DATABASE_URL, CRON_SECRET
+# Optional: EMBEDDING_API_KEY, EMBEDDING_API_URL, EMBEDDING_MODEL
