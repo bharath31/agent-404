@@ -643,26 +643,27 @@ export const demoPageHtml = `<!DOCTYPE html>
       return null;
     }
 
-    function getCachedSitemapPages(domain) {
-      const entry = sitemapCache[domain];
-      if (entry && (Date.now() - entry.ts) < 5 * 60 * 1000) return entry.pages;
-      return null;
-    }
 
-    async function fetchSitemapPages(domain) {
-      const cached = getCachedSitemapPages(domain);
-      if (cached !== null) return cached;
+    async function fetchSitemapPages(domain, deadPath) {
+      // Cache key includes path so different paths can prioritize different sitemaps
+      const cacheKey = domain + ':' + (deadPath || '');
+      const entry = sitemapCache[cacheKey];
+      if (entry && (Date.now() - entry.ts) < 5 * 60 * 1000) return entry;
       try {
-        const resp = await fetch('/api/demo/sitemap?domain=' + encodeURIComponent(domain));
+        let url = '/api/demo/sitemap?domain=' + encodeURIComponent(domain);
+        if (deadPath) url += '&path=' + encodeURIComponent(deadPath);
+        const resp = await fetch(url);
         const data = await resp.json();
         const pages = (data.pages || []).map(p => ({
-          url: p.url, title: p.title || '', description: '', headings: '[]'
+          url: p.url, title: p.title || '', description: p.description || '', headings: '[]'
         }));
-        sitemapCache[domain] = { pages, ts: Date.now() };
-        return pages;
+        const result = { pages, source: data.source || 'none', error: data.error || null, ts: Date.now() };
+        sitemapCache[cacheKey] = result;
+        return result;
       } catch {
-        sitemapCache[domain] = { pages: [], ts: Date.now() };
-        return [];
+        const result = { pages: [], source: 'none', error: null, ts: Date.now() };
+        sitemapCache[cacheKey] = result;
+        return result;
       }
     }
 
@@ -690,6 +691,10 @@ export const demoPageHtml = `<!DOCTYPE html>
       if (!ma || !mb) return false;
       return ma[1] === mb[1] && ma[2] !== mb[2];
     }
+    function isPrefixMatch(a, b) {
+      if (a.length < 3 || b.length < 3) return false;
+      return a.startsWith(b) || b.startsWith(a);
+    }
     function jaccardVersionTolerant(a, b) {
       if (!a.length && !b.length) return 1;
       if (!a.length || !b.length) return 0;
@@ -700,6 +705,10 @@ export const demoPageHtml = `<!DOCTYPE html>
         else {
           const vm = b.find(bs => !used.has(bs) && isVersionVariant(seg, bs));
           if (vm) { matches += 0.5; used.add(vm); }
+          else {
+            const pm = b.find(bs => !used.has(bs) && isPrefixMatch(seg, bs));
+            if (pm) { matches += 0.7; used.add(pm); }
+          }
         }
       }
       return matches / new Set([...a, ...b]).size;
@@ -719,7 +728,12 @@ export const demoPageHtml = `<!DOCTYPE html>
     function keywordOverlap(a, b) {
       if (!a.size || !b.size) return 0;
       let inter = 0;
-      for (const w of a) if (b.has(w)) inter++;
+      for (const w of a) {
+        if (b.has(w)) { inter++; }
+        else {
+          for (const bw of b) { if (isPrefixMatch(w, bw)) { inter += 0.7; break; } }
+        }
+      }
       return inter / new Set([...a, ...b]).size;
     }
     function findSuggestions(deadUrl, pages) {
@@ -782,8 +796,13 @@ export const demoPageHtml = `<!DOCTYPE html>
     async function runWithPages(deadUrl, context) {
       const knownPages = getKnownSitePages(deadUrl);
       if (knownPages) {
-        showResults(deadUrl, context, knownPages);
-        return;
+        // Check if known pages produce good matches; if not, try live discovery
+        const knownResults = findSuggestions(deadUrl, knownPages);
+        if (knownResults.length > 0 && knownResults[0].score > 0.40) {
+          showResults(deadUrl, context, knownPages);
+          return;
+        }
+        // Known pages didn't match well — fall through to live discovery
       }
 
       // Unknown domain — fetch sitemap
@@ -796,25 +815,32 @@ export const demoPageHtml = `<!DOCTYPE html>
       const deadDisplay = document.getElementById('dead-url-display');
       deadDisplay.href = deadUrl;
       deadDisplay.textContent = deadUrl;
-      document.getElementById('dead-url-context').textContent = 'Fetching sitemap for ' + hostname + '...';
+      document.getElementById('dead-url-context').textContent = 'Discovering pages on ' + hostname + '...';
       document.getElementById('empty-state').style.display = 'none';
       const container = document.getElementById('results-container');
       container.style.display = 'block';
       document.getElementById('results-count').textContent = 'loading...';
       document.getElementById('results-list').innerHTML =
-        '<div style="text-align:center;padding:2rem;color:#52525b;font-size:0.85rem;">Crawling ' + hostname + '/sitemap.xml for pages...</div>';
+        '<div style="text-align:center;padding:2rem;color:#52525b;font-size:0.85rem;">Checking llms.txt, sitemap, robots.txt, and page links on ' + hostname + '...</div>';
       document.getElementById('jsonld-section').style.display = 'none';
 
-      const pages = await fetchSitemapPages(hostname);
-      if (pages.length === 0) {
-        document.getElementById('dead-url-context').textContent = 'No sitemap found';
+      let deadPath = '';
+      try { deadPath = new URL(deadUrl).pathname; } catch {}
+      const result = await fetchSitemapPages(hostname, deadPath);
+      if (result.pages.length === 0) {
+        const sourceLabel = result.source !== 'none' ? ' via ' + result.source : '';
+        document.getElementById('dead-url-context').textContent = 'No pages discovered' + sourceLabel;
         document.getElementById('results-count').textContent = '0 matches';
+        const errorMsg = result.error
+          ? result.error
+          : 'Could not discover pages on ' + hostname + '. The site may have no sitemap, llms.txt, or discoverable links.';
         document.getElementById('results-list').innerHTML =
-          '<div style="text-align:center;padding:2rem;color:#52525b;font-size:0.85rem;">Could not find a sitemap.xml for ' + hostname + '. The site needs a sitemap for the demo to discover its pages.</div>';
+          '<div style="text-align:center;padding:2rem;color:#52525b;font-size:0.85rem;">' + escapeHtml(errorMsg) + '</div>';
         return;
       }
-      document.getElementById('dead-url-context').textContent = pages.length + ' pages indexed from sitemap';
-      showResults(deadUrl, '', pages);
+      const sourceLabel = result.source !== 'none' ? ' via ' + result.source : '';
+      document.getElementById('dead-url-context').textContent = result.pages.length + ' pages discovered' + sourceLabel;
+      showResults(deadUrl, '', result.pages);
     }
 
     function showResults(deadUrl, context, pages) {
@@ -849,12 +875,12 @@ export const demoPageHtml = `<!DOCTYPE html>
         card.style.animationDelay = (i * 0.08) + 's';
         card.innerHTML =
           '<div class="result-top">' +
-            '<span class="match-badge ' + r.matchType + '">' + r.matchType + '</span>' +
-            '<a class="result-url" href="' + r.url + '" target="_blank" rel="noopener">' + r.url + '</a>' +
+            '<span class="match-badge ' + escapeHtml(r.matchType) + '">' + escapeHtml(r.matchType) + '</span>' +
+            '<a class="result-url" href="' + escapeHtml(r.url) + '" target="_blank" rel="noopener">' + escapeHtml(r.url) + '</a>' +
             '<span class="result-score">' + r.score + '</span>' +
           '</div>' +
-          '<div class="result-title">' + r.title + '</div>' +
-          '<div class="result-desc">' + r.description + '</div>' +
+          '<div class="result-title">' + escapeHtml(r.title) + '</div>' +
+          '<div class="result-desc">' + escapeHtml(r.description) + '</div>' +
           '<div class="signals">' +
             '<span class="signal">path <span class="signal-bar"><span class="signal-fill path" style="width:' + Math.round(r._signals.path * 100) + '%"></span></span> ' + r._signals.path.toFixed(2) + '</span>' +
             '<span class="signal">lev <span class="signal-bar"><span class="signal-fill lev" style="width:' + Math.round(r._signals.lev * 100) + '%"></span></span> ' + r._signals.lev.toFixed(2) + '</span>' +
@@ -882,6 +908,10 @@ export const demoPageHtml = `<!DOCTYPE html>
         }
       };
       document.getElementById('jsonld-pre').innerHTML = syntaxHighlight(JSON.stringify(jsonld, null, 2));
+    }
+
+    function escapeHtml(s) {
+      return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     }
 
     function syntaxHighlight(json) {
