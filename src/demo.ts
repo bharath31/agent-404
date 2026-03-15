@@ -424,6 +424,7 @@ export const demoPageHtml = `<!DOCTYPE html>
       .result-top { flex-wrap: wrap; }
     }
   </style>
+  <script defer src="/_vercel/insights/script.js"></script>
 </head>
 <body>
   <div class="container">

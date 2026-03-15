@@ -11,7 +11,16 @@ import { buildEmbeddingText, generateBatchEmbeddings } from "./engine/embeddings
 import { landingPageHtml } from "./landing.js";
 import { demoPageHtml } from "./demo.js";
 
-type Env = { Variables: { storage: PostgresStorage; siteId: string } };
+export type Bindings = {
+	DATABASE_URL: string;
+	EMBEDDING_API_KEY?: string;
+	CRON_SECRET?: string;
+};
+
+type Env = {
+	Bindings: Bindings;
+	Variables: { storage: PostgresStorage; siteId: string };
+};
 
 const app = new Hono<Env>();
 
@@ -24,7 +33,8 @@ app.get("/demo", (c) => c.html(demoPageHtml));
 
 // Attach storage to context for API routes
 app.use("/api/*", async (c, next) => {
-	c.set("storage", new PostgresStorage());
+	const dbUrl = c.env?.DATABASE_URL || process.env.DATABASE_URL || process.env.POSTGRES_URL;
+	c.set("storage", new PostgresStorage(dbUrl));
 	await next();
 });
 
@@ -44,12 +54,13 @@ app.route("/api/suggest", suggest);
 // Cron: re-crawl sitemaps + prune stale pages
 app.get("/api/cron", async (c) => {
 	const authHeader = c.req.header("authorization");
-	if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+	const cronSecret = c.env?.CRON_SECRET || process.env.CRON_SECRET;
+	if (authHeader !== `Bearer ${cronSecret}`) {
 		return c.json({ error: "Unauthorized" }, 401);
 	}
 
 	const storage = c.get("storage");
-	const { sql } = await import("@vercel/postgres");
+	const sql = storage.getSql();
 	const { rows } = await sql`SELECT id, domain FROM sites`;
 
 	const results = [];

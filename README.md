@@ -6,7 +6,7 @@
 
 [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Tests](https://img.shields.io/github/actions/workflow/status/bharath31/agent-404/ci.yml?label=tests)](https://github.com/bharath31/agent-404/actions)
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fbharath31%2Fagent-404&env=POSTGRES_URL,EMBEDDING_API_KEY,CRON_SECRET&envDescription=POSTGRES_URL%3A%20Neon%2FVercel%20Postgres%20connection%20string.%20EMBEDDING_API_KEY%3A%20For%20semantic%20embeddings%20(optional).%20CRON_SECRET%3A%20Bearer%20token%20for%20cron.&project-name=agent-404&repository-name=agent-404)
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fbharath31%2Fagent-404&env=DATABASE_URL,EMBEDDING_API_KEY,CRON_SECRET&envDescription=DATABASE_URL%3A%20Neon%20Postgres%20connection%20string.%20EMBEDDING_API_KEY%3A%20For%20semantic%20embeddings%20(optional).%20CRON_SECRET%3A%20Bearer%20token%20for%20cron.&project-name=agent-404&repository-name=agent-404)
 
 Make your 404 pages agent-friendly. When AI agents and crawlers hit a dead link, they give up or hallucinate. **agent-404** returns structured suggestions of the next best pages — so agents recover gracefully.
 
@@ -100,12 +100,30 @@ Response:
 
 ### One-click deploy
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fbharath31%2Fagent-404&env=POSTGRES_URL,EMBEDDING_API_KEY,CRON_SECRET&envDescription=POSTGRES_URL%3A%20Neon%2FVercel%20Postgres%20connection%20string.%20EMBEDDING_API_KEY%3A%20For%20semantic%20embeddings%20(optional%20but%20recommended).%20CRON_SECRET%3A%20Bearer%20token%20for%20the%20daily%20cron%20job.&project-name=agent-404&repository-name=agent-404)
+**Vercel** (recommended)
 
-Click the button above and provide the required environment variables:
-- **`POSTGRES_URL`** — Connection string for a Neon or Vercel Postgres database
-- **`EMBEDDING_API_KEY`** — For semantic embeddings (optional but recommended, ~$0.02/1M tokens)
-- **`CRON_SECRET`** — Bearer token to authenticate the daily cron job
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fbharath31%2Fagent-404&env=DATABASE_URL,EMBEDDING_API_KEY,CRON_SECRET&envDescription=DATABASE_URL%3A%20Neon%20Postgres%20connection%20string.%20EMBEDDING_API_KEY%3A%20For%20semantic%20embeddings%20(optional).%20CRON_SECRET%3A%20Bearer%20token%20for%20cron.&project-name=agent-404&repository-name=agent-404)
+
+**Cloudflare Workers**
+
+[![Deploy to Cloudflare Workers](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/bharath31/agent-404)
+
+After deploying, set your secrets:
+```bash
+wrangler secret put DATABASE_URL
+wrangler secret put CRON_SECRET
+wrangler secret put EMBEDDING_API_KEY  # optional
+```
+
+### Environment variables
+
+| Variable | Required | Description |
+|---|---|---|
+| `DATABASE_URL` | Yes | Neon Postgres connection string |
+| `CRON_SECRET` | Yes | Bearer token for the daily cron job |
+| `EMBEDDING_API_KEY` | No | For semantic embeddings (~$0.02/1M tokens) |
+| `EMBEDDING_API_URL` | No | Custom embedding API endpoint |
+| `EMBEDDING_MODEL` | No | Custom embedding model name |
 
 After deploying, run the migration:
 ```bash
@@ -120,13 +138,11 @@ git clone https://github.com/bharath31/agent-404.git
 cd agent-404
 npm install
 
-# 2. Create a Postgres database
-#    Option A: Vercel Dashboard → Storage → Create Postgres
-#    Option B: Create a Neon database at neon.tech
+# 2. Create a Neon database at neon.tech
 
 # 3. Set environment variables
 #    Create .env.local with:
-#      POSTGRES_URL=postgres://...
+#      DATABASE_URL=postgres://...
 #      EMBEDDING_API_KEY=sk-...      (optional)
 #      CRON_SECRET=your-secret
 
@@ -134,19 +150,21 @@ npm install
 npm run db:migrate
 
 # 5. Local dev
-npm run dev
+npm run dev           # Vercel
+npm run dev:cf        # Cloudflare Workers
 
 # 6. Build client script
 npm run build:script
 
 # 7. Deploy
-vercel --prod
+npm run deploy        # Vercel
+npm run deploy:cf     # Cloudflare Workers
 ```
 
 ## Stack
 
-- **Runtime**: Vercel Edge Functions (Hono)
-- **Database**: Vercel Postgres (Neon) + pgvector
+- **Runtime**: Vercel Edge Functions / Cloudflare Workers (Hono)
+- **Database**: Neon Postgres + pgvector
 - **Embeddings**: OpenAI `text-embedding-3-small` (256d)
 - **Client**: Vanilla JS, <3KB
 - **Indexing**: Sitemap.xml crawl + client-side beacons

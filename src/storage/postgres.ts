@@ -1,13 +1,31 @@
-import { sql } from "@vercel/postgres";
+import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
 import type { PageRecord, SiteRecord, SiteStats } from "../types.js";
 import type { StorageAdapter } from "./interface.js";
 
+type Sql = NeonQueryFunction<false, true>;
+
 export class PostgresStorage implements StorageAdapter {
+	private sql: Sql;
+
+	constructor(databaseUrl?: string) {
+		const url =
+			databaseUrl ||
+			process.env.DATABASE_URL ||
+			process.env.POSTGRES_URL ||
+			"";
+		this.sql = neon(url, { fullResults: true });
+	}
+
+	/** Expose sql for cron handler's direct queries */
+	getSql(): Sql {
+		return this.sql;
+	}
+
 	async createSite(domain: string): Promise<SiteRecord> {
 		const id = crypto.randomUUID();
 		const apiKey = `key_${crypto.randomUUID().replace(/-/g, "")}`;
 
-		const { rows } = await sql`
+		const { rows } = await this.sql`
 			INSERT INTO sites (id, domain, api_key)
 			VALUES (${id}, ${domain}, ${apiKey})
 			RETURNING id, domain, api_key, created_at
@@ -17,12 +35,13 @@ export class PostgresStorage implements StorageAdapter {
 	}
 
 	async getSite(id: string): Promise<SiteRecord | null> {
-		const { rows } = await sql`SELECT * FROM sites WHERE id = ${id}`;
+		const { rows } = await this.sql`SELECT * FROM sites WHERE id = ${id}`;
 		return rows[0] ? this.mapSiteRow(rows[0]) : null;
 	}
 
 	async getSiteByApiKey(apiKey: string): Promise<SiteRecord | null> {
-		const { rows } = await sql`SELECT * FROM sites WHERE api_key = ${apiKey}`;
+		const { rows } =
+			await this.sql`SELECT * FROM sites WHERE api_key = ${apiKey}`;
 		return rows[0] ? this.mapSiteRow(rows[0]) : null;
 	}
 
@@ -33,7 +52,7 @@ export class PostgresStorage implements StorageAdapter {
 	): Promise<void> {
 		if (embedding) {
 			const embeddingStr = `[${embedding.join(",")}]`;
-			await sql.query(
+			await this.sql.query(
 				`INSERT INTO pages (site_id, url, title, description, headings, embedding)
 				VALUES ($1, $2, $3, $4, $5, $6::vector)
 				ON CONFLICT (site_id, url) DO UPDATE SET
@@ -42,10 +61,17 @@ export class PostgresStorage implements StorageAdapter {
 					headings = EXCLUDED.headings,
 					embedding = COALESCE(EXCLUDED.embedding, pages.embedding),
 					last_seen = NOW()`,
-				[siteId, page.url, page.title, page.description, page.headings, embeddingStr],
+				[
+					siteId,
+					page.url,
+					page.title,
+					page.description,
+					page.headings,
+					embeddingStr,
+				],
 			);
 		} else {
-			await sql`
+			await this.sql`
 				INSERT INTO pages (site_id, url, title, description, headings)
 				VALUES (${siteId}, ${page.url}, ${page.title}, ${page.description}, ${page.headings})
 				ON CONFLICT (site_id, url) DO UPDATE SET
@@ -68,9 +94,13 @@ export class PostgresStorage implements StorageAdapter {
 		}
 	}
 
-	async searchByEmbedding(siteId: string, embedding: number[], limit: number): Promise<PageRecord[]> {
+	async searchByEmbedding(
+		siteId: string,
+		embedding: number[],
+		limit: number,
+	): Promise<PageRecord[]> {
 		const embeddingStr = `[${embedding.join(",")}]`;
-		const { rows } = await sql.query(
+		const { rows } = await this.sql.query(
 			`SELECT * FROM pages
 			WHERE site_id = $1 AND embedding IS NOT NULL
 			ORDER BY embedding <=> $2::vector
@@ -81,12 +111,16 @@ export class PostgresStorage implements StorageAdapter {
 	}
 
 	async getPages(siteId: string): Promise<PageRecord[]> {
-		const { rows } = await sql`SELECT * FROM pages WHERE site_id = ${siteId}`;
+		const { rows } =
+			await this.sql`SELECT * FROM pages WHERE site_id = ${siteId}`;
 		return rows.map(this.mapPageRow);
 	}
 
-	async deleteStalePagesOlderThan(siteId: string, cutoff: string): Promise<number> {
-		const { rowCount } = await sql`
+	async deleteStalePagesOlderThan(
+		siteId: string,
+		cutoff: string,
+	): Promise<number> {
+		const { rowCount } = await this.sql`
 			DELETE FROM pages WHERE site_id = ${siteId} AND last_seen < ${cutoff}::timestamp
 		`;
 		return rowCount ?? 0;
@@ -97,15 +131,17 @@ export class PostgresStorage implements StorageAdapter {
 		deadUrl: string,
 		suggestedUrls: string[],
 	): Promise<void> {
-		await sql`
+		await this.sql`
 			INSERT INTO suggestion_logs (site_id, dead_url, suggested_urls)
 			VALUES (${siteId}, ${deadUrl}, ${JSON.stringify(suggestedUrls)})
 		`;
 	}
 
 	async getStats(siteId: string): Promise<SiteStats> {
-		const pages = await sql`SELECT COUNT(*) as count FROM pages WHERE site_id = ${siteId}`;
-		const suggestions = await sql`SELECT COUNT(*) as count FROM suggestion_logs WHERE site_id = ${siteId}`;
+		const pages =
+			await this.sql`SELECT COUNT(*) as count FROM pages WHERE site_id = ${siteId}`;
+		const suggestions =
+			await this.sql`SELECT COUNT(*) as count FROM suggestion_logs WHERE site_id = ${siteId}`;
 
 		return {
 			pageCount: Number(pages.rows[0]?.count ?? 0),
