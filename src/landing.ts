@@ -417,6 +417,7 @@ export const landingPageHtml = `<!DOCTYPE html>
     <nav>
       <div class="logo">agent<span>-</span>404</div>
       <div class="links">
+        <a href="/demo">Live Demo</a>
         <a href="https://github.com/bharath31/agent-404">GitHub</a>
       </div>
     </nav>
