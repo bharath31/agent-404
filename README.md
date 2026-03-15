@@ -7,6 +7,7 @@
 [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Tests](https://img.shields.io/github/actions/workflow/status/bharath31/agent-404/ci.yml?label=tests)](https://github.com/bharath31/agent-404/actions)
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fbharath31%2Fagent-404&env=DATABASE_URL,EMBEDDING_API_KEY,CRON_SECRET&envDescription=DATABASE_URL%3A%20Neon%20Postgres%20connection%20string.%20EMBEDDING_API_KEY%3A%20For%20semantic%20embeddings%20(optional).%20CRON_SECRET%3A%20Bearer%20token%20for%20cron.&project-name=agent-404&repository-name=agent-404)
+[![Deploy to Cloudflare Workers](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/bharath31/agent-404)
 
 Make your 404 pages agent-friendly. When AI agents and crawlers hit a dead link, they give up or hallucinate. **agent-404** returns structured suggestions of the next best pages — so agents recover gracefully.
 
