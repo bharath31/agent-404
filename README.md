@@ -5,10 +5,12 @@ Make your 404 pages agent-friendly. When AI agents and crawlers hit a dead link,
 One script tag. That's it.
 
 ```html
-<script src="https://agent404.dev/agent-404.min.js"
+<script
+  src="https://agent404.dev/agent-404.min.js"
   data-site-id="your-site-id"
   data-api-key="your-api-key"
-  defer></script>
+  defer
+></script>
 ```
 
 ## How it works
