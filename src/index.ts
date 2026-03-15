@@ -99,11 +99,14 @@ app.get("/api/demo/sitemap", async (c) => {
 });
 
 // ── Demo page discovery constants ──
-const DEMO_TIMEOUT_MS = 8_000;
+const DEMO_FETCH_TIMEOUT_MS = 8_000;
+const DEMO_PIPELINE_TIMEOUT_MS = 20_000;
 const DEMO_MAX_URLS = 500;
+const DEMO_MAX_BODY_BYTES = 2 * 1024 * 1024; // 2 MB cap per response
 const DEMO_MAX_DEPTH = 3;
 const DEMO_MAX_CHILDREN = 8;
-const DEMO_USER_AGENT = "agent-404-bot/1.0 (demo)";
+const DEMO_USER_AGENT =
+	"Mozilla/5.0 (compatible; agent-404-bot/1.0; +https://agent-404.vercel.app)";
 
 // Common sitemap paths to try (in order)
 const SITEMAP_PATHS = [
@@ -114,48 +117,81 @@ const SITEMAP_PATHS = [
 	"/wp-sitemap.xml",
 ];
 
+type DemoPage = { url: string; title: string; description?: string };
+
 /**
- * Main discovery pipeline: llms.txt → sitemap → HTML crawl fallback.
+ * Main discovery pipeline with overall timeout.
+ * Order: llms.txt → sitemap → HTML crawl fallback.
+ * All steps race against a pipeline-level deadline so the user never waits forever.
  */
 async function discoverDemoPages(
 	domain: string,
 	deadPath: string,
-): Promise<{ url: string; title: string; description?: string }[]> {
-	// 1. Try llms.txt — curated page list with real titles and descriptions
-	const llmsPages = await fetchLlmsTxt(domain, deadPath);
-	if (llmsPages.length > 0) return llmsPages;
+): Promise<DemoPage[]> {
+	const deadline = Date.now() + DEMO_PIPELINE_TIMEOUT_MS;
 
-	// 2. Try sitemaps (from robots.txt + common paths + path-prefix sitemaps)
-	const sitemapUrls = await findSitemapUrls(domain, deadPath);
-	for (const sitemapUrl of sitemapUrls) {
-		const pages = await fetchDemoSitemap(sitemapUrl, deadPath, 0);
-		if (pages.length > 0) return pages;
+	// 1. Try llms.txt — curated page list with real titles and descriptions
+	if (Date.now() < deadline) {
+		const llmsPages = await fetchLlmsTxt(domain, deadPath);
+		if (llmsPages.length > 0) return llmsPages;
 	}
 
-	// 3. Fallback: crawl HTML links from the homepage and nearby pages
-	return await crawlDemoLinks(domain, deadPath);
+	// 2. Try sitemaps (robots.txt + path-prefix + common paths)
+	if (Date.now() < deadline) {
+		const sitemapUrls = await findSitemapUrls(domain, deadPath);
+		for (const sitemapUrl of sitemapUrls) {
+			if (Date.now() >= deadline) break;
+			const pages = await fetchDemoSitemap(sitemapUrl, deadPath, 0);
+			if (pages.length > 0) return pages;
+		}
+	}
+
+	// 3. Fallback: crawl HTML links
+	if (Date.now() < deadline) {
+		return await crawlDemoLinks(domain, deadPath);
+	}
+
+	return [];
 }
+
+// ── llms.txt discovery ──
 
 /**
  * Fetch and parse llms.txt — a structured file listing a site's key pages.
- * Handles nested llms.txt (like Cloudflare) by following child llms.txt links
- * that are relevant to the dead URL path.
+ * Handles nested llms.txt (like Cloudflare) by following child llms.txt links.
+ * Falls back to llms-full.txt if llms.txt yields nothing.
  */
 async function fetchLlmsTxt(
 	domain: string,
 	deadPath: string,
-): Promise<{ url: string; title: string; description: string }[]> {
+): Promise<DemoPage[]> {
+	// Try llms.txt first
 	const text = await fetchDemoText(`https://${domain}/llms.txt`);
-	if (!text || text.length < 20) return [];
+	if (text && text.length >= 20) {
+		const { pages, childLlmsTxtUrls } = parseLlmsTxt(text, domain);
+		if (pages.length > 0) return pages;
+		if (childLlmsTxtUrls.length > 0) {
+			const childPages = await followChildLlmsTxt(childLlmsTxtUrls, domain, deadPath);
+			if (childPages.length > 0) return childPages;
+		}
+	}
 
-	const { pages, childLlmsTxtUrls } = parseLlmsTxt(text, domain);
+	// Try path-prefix llms.txt (e.g., /docs/llms.txt for dead URL /docs/foo)
+	const deadSegments = deadPath.split("/").filter(Boolean);
+	for (let i = 1; i <= Math.min(deadSegments.length, 2); i++) {
+		const prefix = "/" + deadSegments.slice(0, i).join("/");
+		const prefixText = await fetchDemoText(`https://${domain}${prefix}/llms.txt`);
+		if (prefixText && prefixText.length >= 20) {
+			const { pages } = parseLlmsTxt(prefixText, domain);
+			if (pages.length > 0) return pages;
+		}
+	}
 
-	// If we got real pages, return them
-	if (pages.length > 0) return pages;
-
-	// If no pages but found child llms.txt links (e.g., Cloudflare), follow relevant ones
-	if (childLlmsTxtUrls.length > 0) {
-		return await followChildLlmsTxt(childLlmsTxtUrls, domain, deadPath);
+	// Fallback: llms-full.txt (some sites only have this)
+	const fullText = await fetchDemoText(`https://${domain}/llms-full.txt`);
+	if (fullText && fullText.length >= 20) {
+		const { pages } = parseLlmsTxt(fullText, domain);
+		if (pages.length > 0) return pages;
 	}
 
 	return [];
@@ -168,10 +204,10 @@ function parseLlmsTxt(
 	text: string,
 	domain: string,
 ): {
-	pages: { url: string; title: string; description: string }[];
+	pages: DemoPage[];
 	childLlmsTxtUrls: { url: string; title: string }[];
 } {
-	const pages: { url: string; title: string; description: string }[] = [];
+	const pages: DemoPage[] = [];
 	const childLlmsTxtUrls: { url: string; title: string }[] = [];
 	const seen = new Set<string>();
 
@@ -191,8 +227,8 @@ function parseLlmsTxt(
 			continue;
 		}
 
-		// Separate child llms.txt links from actual pages
-		if (url.endsWith("/llms.txt")) {
+		// Separate child llms.txt / llms-full.txt links from actual pages
+		if (url.endsWith("/llms.txt") || url.endsWith("/llms-full.txt")) {
 			if (!seen.has(url)) {
 				seen.add(url);
 				childLlmsTxtUrls.push({ url, title });
@@ -218,8 +254,7 @@ async function followChildLlmsTxt(
 	children: { url: string; title: string }[],
 	domain: string,
 	deadPath: string,
-): Promise<{ url: string; title: string; description: string }[]> {
-	// Score children by relevance to the dead URL path
+): Promise<DemoPage[]> {
 	const deadSegments = deadPath.toLowerCase().split("/").filter(Boolean);
 	const scored = children.map((child) => {
 		let score = 0;
@@ -244,6 +279,8 @@ async function followChildLlmsTxt(
 
 	return results.flat().slice(0, DEMO_MAX_URLS);
 }
+
+// ── Sitemap discovery ──
 
 /**
  * Find sitemap URLs by checking robots.txt, path-prefix sitemaps, and common paths.
@@ -270,7 +307,6 @@ async function findSitemapUrls(domain: string, deadPath: string): Promise<string
 	}
 
 	// Try path-prefix sitemaps based on the dead URL
-	// e.g., dead path /docs/messaging → try /docs/sitemap.xml
 	const deadSegments = deadPath.split("/").filter(Boolean);
 	for (let i = 1; i <= Math.min(deadSegments.length, 2); i++) {
 		const prefix = "/" + deadSegments.slice(0, i).join("/");
@@ -286,20 +322,32 @@ async function findSitemapUrls(domain: string, deadPath: string): Promise<string
 	return found;
 }
 
+// ── HTTP fetch helpers ──
+
 /**
  * Fetch a URL and return text, or null on failure.
+ * Caps response body at DEMO_MAX_BODY_BYTES to prevent OOM on huge files.
  */
 async function fetchDemoText(url: string): Promise<string | null> {
 	const controller = new AbortController();
-	const timeout = setTimeout(() => controller.abort(), DEMO_TIMEOUT_MS);
+	const timeout = setTimeout(() => controller.abort(), DEMO_FETCH_TIMEOUT_MS);
 	try {
 		const resp = await fetch(url, {
-			headers: { "User-Agent": DEMO_USER_AGENT },
+			headers: {
+				"User-Agent": DEMO_USER_AGENT,
+				Accept: "text/plain, application/xml, text/xml, text/html, */*",
+			},
 			signal: controller.signal,
 			redirect: "follow",
 		});
 		if (!resp.ok) return null;
-		return await resp.text();
+
+		// Check content-length before reading body
+		const contentLength = parseInt(resp.headers.get("content-length") || "0", 10);
+		if (contentLength > DEMO_MAX_BODY_BYTES) return null;
+
+		// Stream-read with size cap for responses without content-length
+		return await readBodyCapped(resp, DEMO_MAX_BODY_BYTES);
 	} catch {
 		return null;
 	} finally {
@@ -308,22 +356,61 @@ async function fetchDemoText(url: string): Promise<string | null> {
 }
 
 /**
- * Fetch a URL expecting XML. Rejects HTML and empty responses.
+ * Read response body up to maxBytes. Returns null if body exceeds limit.
+ */
+async function readBodyCapped(resp: Response, maxBytes: number): Promise<string | null> {
+	// If body is a ReadableStream, read in chunks with a cap
+	if (resp.body && typeof resp.body.getReader === "function") {
+		const reader = resp.body.getReader();
+		const chunks: Uint8Array[] = [];
+		let totalSize = 0;
+		try {
+			while (true) {
+				const { done, value } = await reader.read();
+				if (done) break;
+				totalSize += value.byteLength;
+				if (totalSize > maxBytes) {
+					reader.cancel();
+					return null;
+				}
+				chunks.push(value);
+			}
+		} catch {
+			return null;
+		}
+		const decoder = new TextDecoder();
+		return chunks.map((c) => decoder.decode(c, { stream: true })).join("") +
+			decoder.decode();
+	}
+	// Fallback for environments without streaming
+	const text = await resp.text();
+	return text.length > maxBytes ? null : text;
+}
+
+/**
+ * Fetch a URL expecting XML. Rejects HTML, empty, and oversized responses.
  */
 async function fetchDemoSitemapXml(url: string): Promise<string | null> {
 	const controller = new AbortController();
-	const timeout = setTimeout(() => controller.abort(), DEMO_TIMEOUT_MS);
+	const timeout = setTimeout(() => controller.abort(), DEMO_FETCH_TIMEOUT_MS);
 	try {
 		const resp = await fetch(url, {
-			headers: { "User-Agent": DEMO_USER_AGENT },
+			headers: {
+				"User-Agent": DEMO_USER_AGENT,
+				Accept: "application/xml, text/xml, */*;q=0.1",
+			},
 			signal: controller.signal,
 			redirect: "follow",
 		});
 		if (!resp.ok) return null;
 		const contentType = resp.headers.get("content-type") || "";
 		if (contentType.includes("text/html")) return null;
-		const text = await resp.text();
-		// Reject empty responses (some sites return 200 with no body)
+
+		// Check content-length before reading
+		const contentLength = parseInt(resp.headers.get("content-length") || "0", 10);
+		if (contentLength > DEMO_MAX_BODY_BYTES) return null;
+
+		const text = await readBodyCapped(resp, DEMO_MAX_BODY_BYTES);
 		if (!text || text.trim().length === 0) return null;
 		// Reject HTML disguised with XML content-type
 		const trimmed = text.trimStart();
@@ -336,29 +423,25 @@ async function fetchDemoSitemapXml(url: string): Promise<string | null> {
 	}
 }
 
+// ── Sitemap parsing ──
+
 /** Check if a sitemap child URL has a generic name (sitemap-0.xml, etc.) */
 const GENERIC_SITEMAP_RE = /\/sitemap[-_]?\d*\.xml$/i;
 
 /**
  * Score a child sitemap URL by relevance to the dead URL path.
- * Generic names (sitemap-0.xml) get a baseline score so they aren't ignored.
  */
 function scoreChildSitemap(childUrl: string, deadPath: string): number {
 	const childLower = childUrl.toLowerCase();
 	const deadSegments = deadPath.toLowerCase().split("/").filter(Boolean);
 
 	let score = 0;
-
-	// Generic sitemap names get a baseline — they often contain the "main" pages
 	if (GENERIC_SITEMAP_RE.test(childLower)) score += 1;
-
 	if (deadSegments.length === 0) return score;
 
-	// Bonus for each dead URL segment that appears in the child sitemap URL
 	for (const seg of deadSegments) {
 		if (seg.length > 2 && childLower.includes(seg)) score += 2;
 	}
-	// Bonus for path prefix match (e.g., dead=/docs/start → child contains /docs/)
 	const deadPrefix = "/" + deadSegments[0] + "/";
 	if (childLower.includes(deadPrefix)) score += 3;
 
@@ -372,25 +455,21 @@ async function fetchDemoSitemap(
 	url: string,
 	deadPath: string,
 	depth: number,
-): Promise<{ url: string; title: string }[]> {
+): Promise<DemoPage[]> {
 	const xml = await fetchDemoSitemapXml(url);
 	if (!xml) return [];
 
-	// Regular sitemap — extract URLs directly
 	if (!xml.includes("<sitemapindex")) {
 		return extractDemoLocs(xml, "url")
 			.slice(0, DEMO_MAX_URLS)
 			.map((loc) => ({ url: loc, title: demoTitleFromUrl(loc) }));
 	}
 
-	// Sitemap index — prioritize children by relevance
 	if (depth >= DEMO_MAX_DEPTH) return [];
 	const childLocs = extractDemoLocs(xml, "sitemap");
 	if (childLocs.length === 0) return [];
 
-	// For small indexes, fetch all children; for large ones, pick the best
 	const limit = childLocs.length <= 10 ? childLocs.length : DEMO_MAX_CHILDREN;
-
 	const scored = childLocs.map((loc, i) => ({
 		loc,
 		score: scoreChildSitemap(loc, deadPath),
@@ -405,21 +484,23 @@ async function fetchDemoSitemap(
 	return results.flat().slice(0, DEMO_MAX_URLS);
 }
 
+// ── HTML crawl fallback ──
+
 /**
- * HTML crawl fallback: fetch homepage + a few relevant pages, extract internal links.
+ * Crawl homepage + ancestor path pages, extract internal links.
+ * Also follows one level of discovered links for broader coverage.
  */
 async function crawlDemoLinks(
 	domain: string,
 	deadPath: string,
-): Promise<{ url: string; title: string }[]> {
+): Promise<DemoPage[]> {
 	const baseUrl = `https://${domain}`;
 	const seen = new Set<string>();
-	const pages: { url: string; title: string }[] = [];
+	const pages: DemoPage[] = [];
 
-	// Seed pages to crawl: homepage + path prefix pages
+	// Seed pages: homepage + ancestor paths
 	const seedPaths = ["/"];
 	const deadSegments = deadPath.split("/").filter(Boolean);
-	// Add ancestor paths (e.g., /docs/guides/start → try /docs, /docs/guides)
 	for (let i = 1; i <= Math.min(deadSegments.length, 3); i++) {
 		seedPaths.push("/" + deadSegments.slice(0, i).join("/"));
 	}
@@ -429,7 +510,6 @@ async function crawlDemoLinks(
 		const html = await fetchDemoText(baseUrl + seedPath);
 		if (!html) continue;
 
-		// Extract page title
 		const seedTitle = extractHtmlTitle(html);
 		const seedUrl = baseUrl + seedPath;
 		if (!seen.has(seedUrl)) {
@@ -437,7 +517,27 @@ async function crawlDemoLinks(
 			pages.push({ url: seedUrl, title: seedTitle });
 		}
 
-		// Extract all internal links
+		const links = extractInternalLinks(html, domain);
+		for (const link of links) {
+			if (seen.has(link.url) || pages.length >= DEMO_MAX_URLS) continue;
+			seen.add(link.url);
+			pages.push(link);
+		}
+	}
+
+	// Second pass: follow top linked pages for more coverage (max 3 extra fetches)
+	const extraSeeds = pages
+		.filter((p) => {
+			// Prefer links that share path segments with the dead URL
+			const pPath = new URL(p.url).pathname.toLowerCase();
+			return deadSegments.some((s) => s.length > 2 && pPath.includes(s));
+		})
+		.slice(0, 3);
+
+	for (const seed of extraSeeds) {
+		if (pages.length >= DEMO_MAX_URLS) break;
+		const html = await fetchDemoText(seed.url);
+		if (!html) continue;
 		const links = extractInternalLinks(html, domain);
 		for (const link of links) {
 			if (seen.has(link.url) || pages.length >= DEMO_MAX_URLS) continue;
@@ -463,29 +563,28 @@ function extractHtmlTitle(html: string): string {
 function extractInternalLinks(
 	html: string,
 	domain: string,
-): { url: string; title: string }[] {
-	const links: { url: string; title: string }[] = [];
+): DemoPage[] {
+	const links: DemoPage[] = [];
 	const seen = new Set<string>();
-	// Match <a> tags, capture href and inner text
 	const regex = /<a\s[^>]*href=["']([^"'#]+)["'][^>]*>([^<]*(?:<[^/a][^>]*>[^<]*)*)<\/a>/gi;
 	let match: RegExpExecArray | null;
 	while ((match = regex.exec(html)) !== null) {
 		let href = match[1].trim();
 		const text = match[2].replace(/<[^>]+>/g, "").trim();
 
-		// Resolve relative URLs
 		if (href.startsWith("/")) {
 			href = `https://${domain}${href}`;
 		}
 
-		// Only keep same-domain HTTPS links
 		try {
 			const parsed = new URL(href);
 			if (parsed.hostname !== domain && !parsed.hostname.endsWith("." + domain)) continue;
 			if (parsed.protocol !== "https:") continue;
-			// Skip anchors, query-only, assets, and common non-page paths
 			const path = parsed.pathname;
-			if (/\.(css|js|png|jpg|jpeg|gif|svg|ico|woff|woff2|ttf|pdf|zip)$/i.test(path)) continue;
+			if (/\.(css|js|png|jpg|jpeg|gif|svg|ico|woff|woff2|ttf|eot|pdf|zip|tar|gz)$/i.test(path))
+				continue;
+			// Skip common non-page paths
+			if (/^\/(api|cdn-cgi|_next|_nuxt|__)\//i.test(path)) continue;
 			const canonical = parsed.origin + path.replace(/\/+$/, "");
 			if (seen.has(canonical)) continue;
 			seen.add(canonical);
@@ -496,6 +595,8 @@ function extractInternalLinks(
 	}
 	return links;
 }
+
+// ── Shared utilities ──
 
 function extractDemoLocs(xml: string, parentTag: string): string[] {
 	const urls: string[] = [];

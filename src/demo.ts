@@ -801,7 +801,7 @@ export const demoPageHtml = `<!DOCTYPE html>
       container.style.display = 'block';
       document.getElementById('results-count').textContent = 'loading...';
       document.getElementById('results-list').innerHTML =
-        '<div style="text-align:center;padding:2rem;color:#52525b;font-size:0.85rem;">Checking sitemap, robots.txt, and page links on ' + hostname + '...</div>';
+        '<div style="text-align:center;padding:2rem;color:#52525b;font-size:0.85rem;">Checking llms.txt, sitemap, robots.txt, and page links on ' + hostname + '...</div>';
       document.getElementById('jsonld-section').style.display = 'none';
 
       let deadPath = '';
