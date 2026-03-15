@@ -1,5 +1,9 @@
 # agent-404
 
+[![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Tests](https://img.shields.io/github/actions/workflow/status/bharath31/agent-404/ci.yml?label=tests)](https://github.com/bharath31/agent-404/actions)
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fbharath31%2Fagent-404&env=POSTGRES_URL,EMBEDDING_API_KEY,CRON_SECRET&envDescription=POSTGRES_URL%3A%20Neon%2FVercel%20Postgres%20connection%20string.%20EMBEDDING_API_KEY%3A%20For%20semantic%20embeddings%20(optional).%20CRON_SECRET%3A%20Bearer%20token%20for%20cron.&project-name=agent-404&repository-name=agent-404)
+
 Make your 404 pages agent-friendly. When AI agents and crawlers hit a dead link, they give up or hallucinate. **agent-404** returns structured suggestions of the next best pages — so agents recover gracefully.
 
 One script tag. That's it.
@@ -27,15 +31,25 @@ The script detects 404 pages using (in order):
 - `<meta name="agent-404:status" content="404">` — meta tag
 - Page title containing "404" or "not found"
 
-### Fuzzy Matching
+### Ranking — 4 signals
 
-Suggestions are ranked using four signals:
-- **Path segment similarity** — Jaccard similarity on URL segments, version-tolerant (`v2` → `v3` = partial match)
-- **Levenshtein distance** — catches typos and minor path differences
-- **Keyword overlap** — matches words from the dead URL against page titles and headings
-- **Semantic embeddings** — cosine similarity on OpenAI `text-embedding-3-small` vectors, catches URLs with zero lexical overlap but same meaning (e.g. `/docs/authentication` → `/guides/security/oauth`)
+Suggestions are ranked by a weighted combination of four signals:
 
-When embeddings are unavailable (no API key or API down), the system gracefully falls back to the first three signals.
+| Signal | Weight | What it catches |
+|---|---|---|
+| **Path segment similarity** | 0.35 | Jaccard on URL segments, version-tolerant (`v2` → `v3` = partial match) |
+| **Semantic embeddings** | 0.30 | Cosine similarity on 256d vectors — catches zero-lexical-overlap rewrites (e.g. `/docs/authentication` → `/guides/security/oauth`) |
+| **Levenshtein distance** | 0.20 | Typos and minor path differences |
+| **Keyword overlap** | 0.15 | Words from dead URL matched against page titles and headings |
+
+Embeddings are generated via any OpenAI-compatible API (default: OpenRouter with `openai/text-embedding-3-small`). Set `EMBEDDING_API_KEY` to enable; if missing or the API is down, the system falls back to 3-signal matching with the original weights (0.50 / 0.30 / 0.20).
+
+#### How embeddings work
+
+- **On write** — when a page is registered (beacon or sitemap crawl), its URL path + title + description are embedded and stored as a `vector(256)` column in Postgres (pgvector)
+- **On suggest** — the dead URL is embedded and used as a vector pre-filter (`ORDER BY embedding <=> query LIMIT 20`) to pull the top 20 candidates, which are then re-ranked with all 4 signals
+- **Backfill** — the daily cron job generates embeddings for any pages that are missing them (in batches of 100)
+- **Config** — `EMBEDDING_API_URL` and `EMBEDDING_MODEL` env vars let you point at any provider (OpenAI, Azure, local)
 
 ## API
 
