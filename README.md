@@ -82,11 +82,11 @@ Response:
 
 ### One-click deploy
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fbharath31%2Fagent-404&env=POSTGRES_URL,OPENAI_API_KEY,CRON_SECRET&envDescription=POSTGRES_URL%3A%20Neon%2FVercel%20Postgres%20connection%20string.%20OPENAI_API_KEY%3A%20For%20semantic%20embeddings%20(optional%20but%20recommended).%20CRON_SECRET%3A%20Bearer%20token%20for%20the%20daily%20cron%20job.&project-name=agent-404&repository-name=agent-404)
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fbharath31%2Fagent-404&env=POSTGRES_URL,EMBEDDING_API_KEY,CRON_SECRET&envDescription=POSTGRES_URL%3A%20Neon%2FVercel%20Postgres%20connection%20string.%20EMBEDDING_API_KEY%3A%20For%20semantic%20embeddings%20(optional%20but%20recommended).%20CRON_SECRET%3A%20Bearer%20token%20for%20the%20daily%20cron%20job.&project-name=agent-404&repository-name=agent-404)
 
 Click the button above and provide the required environment variables:
 - **`POSTGRES_URL`** — Connection string for a Neon or Vercel Postgres database
-- **`OPENAI_API_KEY`** — For semantic embeddings (optional but recommended, ~$0.02/1M tokens)
+- **`EMBEDDING_API_KEY`** — For semantic embeddings (optional but recommended, ~$0.02/1M tokens)
 - **`CRON_SECRET`** — Bearer token to authenticate the daily cron job
 
 After deploying, run the migration:
@@ -109,7 +109,7 @@ npm install
 # 3. Set environment variables
 #    Create .env.local with:
 #      POSTGRES_URL=postgres://...
-#      OPENAI_API_KEY=sk-...      (optional)
+#      EMBEDDING_API_KEY=sk-...      (optional)
 #      CRON_SECRET=your-secret
 
 # 4. Run migrations
