@@ -60,6 +60,107 @@ app.use("/api/suggest", rateLimiter({ windowMs: 60_000, max: 60 }));
 app.get("/", (c) => c.html(landingPageHtml));
 app.get("/demo", (c) => c.html(demoPageHtml));
 
+// Demo sitemap proxy — fetches & parses a domain's sitemap.xml for the live demo
+// No auth needed, but rate-limited. Returns lightweight page list (URL + title).
+app.use("/api/demo/sitemap", rateLimiter({ windowMs: 60_000, max: 15 }));
+app.get("/api/demo/sitemap", async (c) => {
+	const domain = c.req.query("domain");
+	if (!domain || typeof domain !== "string" || domain.length > 253) {
+		return c.json({ error: "domain query parameter is required" }, 400);
+	}
+
+	// Validate domain format (no protocol, no path)
+	if (/[\/\s:@]/.test(domain)) {
+		return c.json({ error: "Invalid domain" }, 400);
+	}
+
+	// Block private/internal hosts
+	const blocked = [
+		"localhost", "127.", "0.0.0.0", "10.",
+		"172.16.", "172.17.", "172.18.", "172.19.",
+		"172.20.", "172.21.", "172.22.", "172.23.",
+		"172.24.", "172.25.", "172.26.", "172.27.",
+		"172.28.", "172.29.", "172.30.", "172.31.",
+		"192.168.", "169.254.", "[::1]", "[fc", "[fd",
+	];
+	const lower = domain.toLowerCase();
+	if (blocked.some((b) => lower === b || lower.startsWith(b))) {
+		return c.json({ error: "Invalid domain" }, 400);
+	}
+
+	const sitemapUrl = `https://${domain}/sitemap.xml`;
+	const TIMEOUT_MS = 8_000;
+	const MAX_URLS = 500;
+
+	try {
+		const pages = await fetchDemoSitemap(sitemapUrl, TIMEOUT_MS, MAX_URLS);
+		return c.json({ domain, pages });
+	} catch {
+		return c.json({ domain, pages: [], error: "Could not fetch sitemap" });
+	}
+});
+
+async function fetchDemoSitemap(
+	url: string,
+	timeoutMs: number,
+	maxUrls: number,
+): Promise<{ url: string; title: string }[]> {
+	const controller = new AbortController();
+	const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+	try {
+		const resp = await fetch(url, {
+			headers: { "User-Agent": "agent-404-bot/1.0 (demo)" },
+			signal: controller.signal,
+		});
+		if (!resp.ok) return [];
+
+		const xml = await resp.text();
+
+		// Handle sitemap index — fetch first 3 child sitemaps
+		if (xml.includes("<sitemapindex")) {
+			const childLocs = extractDemoLocs(xml, "sitemap").slice(0, 3);
+			const allPages: { url: string; title: string }[] = [];
+			for (const childUrl of childLocs) {
+				if (allPages.length >= maxUrls) break;
+				const childPages = await fetchDemoSitemap(childUrl, timeoutMs, maxUrls - allPages.length);
+				allPages.push(...childPages);
+			}
+			return allPages.slice(0, maxUrls);
+		}
+
+		return extractDemoLocs(xml, "url")
+			.slice(0, maxUrls)
+			.map((loc) => ({ url: loc, title: titleFromUrl(loc) }));
+	} finally {
+		clearTimeout(timeout);
+	}
+}
+
+function extractDemoLocs(xml: string, parentTag: string): string[] {
+	const urls: string[] = [];
+	const regex = new RegExp(
+		`<${parentTag}>[\\s\\S]*?<loc>([^<]+)<\\/loc>[\\s\\S]*?<\\/${parentTag}>`,
+		"gi",
+	);
+	let match: RegExpExecArray | null;
+	while ((match = regex.exec(xml)) !== null) {
+		const loc = match[1].trim();
+		if (loc.startsWith("https://")) urls.push(loc);
+	}
+	return urls;
+}
+
+function titleFromUrl(url: string): string {
+	try {
+		const path = new URL(url).pathname;
+		const last = path.split("/").filter(Boolean).pop() || "";
+		return last.replace(/[-_]/g, " ").replace(/\.\w+$/, "");
+	} catch {
+		return "";
+	}
+}
+
 // Attach storage to context for API routes
 app.use("/api/*", async (c, next) => {
 	const dbUrl = c.env?.DATABASE_URL || process.env.DATABASE_URL || process.env.POSTGRES_URL;

@@ -438,7 +438,7 @@ export const demoPageHtml = `<!DOCTYPE html>
     <div class="hero">
       <h1>See it <span class="highlight">in action</span></h1>
       <p>An AI agent follows a stale link and gets a 404. Here's what agent-404 does next.</p>
-      <p class="sub">Same matching algorithm as production. Runs entirely in your browser.</p>
+      <p class="sub">Same matching algorithm as production. Try any website — we'll fetch its sitemap live.</p>
     </div>
 
     <div class="scenarios" id="scenarios">
@@ -472,7 +472,7 @@ export const demoPageHtml = `<!DOCTYPE html>
 
     <div class="input-area">
       <div class="input-wrapper">
-        <input type="text" class="url-input" id="url-input" placeholder="Paste any dead URL..." autocomplete="off" spellcheck="false">
+        <input type="text" class="url-input" id="url-input" placeholder="Paste any URL — try your own site..." autocomplete="off" spellcheck="false">
         <button class="suggest-btn" onclick="runMatch()">Find matches</button>
       </div>
     </div>
@@ -628,18 +628,42 @@ export const demoPageHtml = `<!DOCTYPE html>
     ];
 
     // ==========================================
-    // Domain → site lookup
+    // Domain → site lookup (with live sitemap fetch for unknown domains)
     // ==========================================
-    function getSitePages(deadUrl) {
+    const sitemapCache = {}; // domain → { pages, ts }
+
+    function getKnownSitePages(deadUrl) {
       let hostname = '';
-      try { hostname = new URL(deadUrl).hostname; } catch { return []; }
+      try { hostname = new URL(deadUrl).hostname; } catch { return null; }
       for (const site of Object.values(SITES)) {
         if (site.domains.some(d => hostname === d || hostname.endsWith('.' + d))) {
           return site.pages;
         }
       }
-      // Unknown domain: search all pages (for custom user input)
-      return Object.values(SITES).flatMap(s => s.pages);
+      return null;
+    }
+
+    function getCachedSitemapPages(domain) {
+      const entry = sitemapCache[domain];
+      if (entry && (Date.now() - entry.ts) < 5 * 60 * 1000) return entry.pages;
+      return null;
+    }
+
+    async function fetchSitemapPages(domain) {
+      const cached = getCachedSitemapPages(domain);
+      if (cached !== null) return cached;
+      try {
+        const resp = await fetch('/api/demo/sitemap?domain=' + encodeURIComponent(domain));
+        const data = await resp.json();
+        const pages = (data.pages || []).map(p => ({
+          url: p.url, title: p.title || '', description: '', headings: '[]'
+        }));
+        sitemapCache[domain] = { pages, ts: Date.now() };
+        return pages;
+      } catch {
+        sitemapCache[domain] = { pages: [], ts: Date.now() };
+        return [];
+      }
     }
 
     // ==========================================
@@ -698,8 +722,7 @@ export const demoPageHtml = `<!DOCTYPE html>
       for (const w of a) if (b.has(w)) inter++;
       return inter / new Set([...a, ...b]).size;
     }
-    function findSuggestions(deadUrl) {
-      const pages = getSitePages(deadUrl);
+    function findSuggestions(deadUrl, pages) {
       const deadPath = normalizePath(deadUrl);
       const deadSegs = pathSegments(deadPath);
       const deadKw = extractKeywords(deadPath);
@@ -745,20 +768,57 @@ export const demoPageHtml = `<!DOCTYPE html>
       });
       const s = SCENARIOS[idx];
       urlInput.value = s.dead;
-      showResults(s.dead, s.context);
+      runWithPages(s.dead, s.context);
     }
 
     function runMatch() {
       let url = urlInput.value.trim();
       if (!url) { urlInput.focus(); return; }
       if (!url.startsWith('http')) url = 'https://' + url;
-      // Deselect scenario cards
       document.querySelectorAll('.scenario').forEach(el => el.classList.remove('active'));
-      showResults(url, '');
+      runWithPages(url, '');
     }
 
-    function showResults(deadUrl, context) {
-      const results = findSuggestions(deadUrl);
+    async function runWithPages(deadUrl, context) {
+      const knownPages = getKnownSitePages(deadUrl);
+      if (knownPages) {
+        showResults(deadUrl, context, knownPages);
+        return;
+      }
+
+      // Unknown domain — fetch sitemap
+      let hostname = '';
+      try { hostname = new URL(deadUrl).hostname; } catch { return; }
+
+      // Show loading state
+      const bar = document.getElementById('dead-url-bar');
+      bar.style.display = 'flex';
+      const deadDisplay = document.getElementById('dead-url-display');
+      deadDisplay.href = deadUrl;
+      deadDisplay.textContent = deadUrl;
+      document.getElementById('dead-url-context').textContent = 'Fetching sitemap for ' + hostname + '...';
+      document.getElementById('empty-state').style.display = 'none';
+      const container = document.getElementById('results-container');
+      container.style.display = 'block';
+      document.getElementById('results-count').textContent = 'loading...';
+      document.getElementById('results-list').innerHTML =
+        '<div style="text-align:center;padding:2rem;color:#52525b;font-size:0.85rem;">Crawling ' + hostname + '/sitemap.xml for pages...</div>';
+      document.getElementById('jsonld-section').style.display = 'none';
+
+      const pages = await fetchSitemapPages(hostname);
+      if (pages.length === 0) {
+        document.getElementById('dead-url-context').textContent = 'No sitemap found';
+        document.getElementById('results-count').textContent = '0 matches';
+        document.getElementById('results-list').innerHTML =
+          '<div style="text-align:center;padding:2rem;color:#52525b;font-size:0.85rem;">Could not find a sitemap.xml for ' + hostname + '. The site needs a sitemap for the demo to discover its pages.</div>';
+        return;
+      }
+      document.getElementById('dead-url-context').textContent = pages.length + ' pages indexed from sitemap';
+      showResults(deadUrl, '', pages);
+    }
+
+    function showResults(deadUrl, context, pages) {
+      const results = findSuggestions(deadUrl, pages);
 
       // Dead URL bar
       const bar = document.getElementById('dead-url-bar');
