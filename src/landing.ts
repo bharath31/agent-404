@@ -557,6 +557,7 @@ export const landingPageHtml = `<!DOCTYPE html>
       { dead: '/pricing/enterprise',        live: '/contact/sales',             domain: 'cloudflare.com' },
       { dead: '/api/v1/users/list',         live: '/api/v2/users',             domain: 'stripe.dev' },
       { dead: '/tutorials/deploymnet',      live: '/tutorials/deployment',      domain: 'vercel.com' },
+      { dead: '/docs/connections/social',   live: '/docs/authenticate',          domain: 'auth0.com' },
     ];
     let demoIdx = 0;
     const demoDead = document.getElementById('demo-dead');

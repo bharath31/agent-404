@@ -459,6 +459,10 @@ export const demoPageHtml = `<!DOCTYPE html>
         <div class="sc-label">Typo</div>
         <div class="sc-dead">docs.stripe.com/paymens/checkout</div>
       </div>
+      <div class="scenario" onclick="runScenario(5)">
+        <div class="sc-label">Docs restructure</div>
+        <div class="sc-dead">auth0.com/docs/connections/social</div>
+      </div>
     </div>
 
     <div class="or-divider">or type your own</div>
@@ -554,6 +558,14 @@ export const demoPageHtml = `<!DOCTYPE html>
       { url: 'https://docs.stripe.com/api/authentication', title: 'Authentication', description: 'Authenticate your API requests with Stripe API keys', headings: '["API Keys","Restricted Keys","Bearer Auth"]' },
       { url: 'https://docs.stripe.com/billing/subscriptions/change', title: 'Change Subscriptions', description: 'Upgrade, downgrade, or change subscriptions', headings: '["Proration","Immediate Changes","Scheduled Changes"]' },
       { url: 'https://docs.stripe.com/connect/marketplace', title: 'Marketplace Payments', description: 'Build a marketplace with Stripe Connect', headings: '["Onboarding","Payments","Payouts","Fees"]' },
+
+      // Auth0 (auth0.com/docs — restructured from /docs/connections to /docs/authenticate)
+      { url: 'https://auth0.com/docs/authenticate', title: 'Authenticate', description: 'Add login to your application with Auth0', headings: '["Database Connections","Social Login","Enterprise SSO","Passwordless"]' },
+      { url: 'https://auth0.com/docs/customize/actions', title: 'Actions', description: 'Customize Auth0 with serverless functions', headings: '["Triggers","Flows","Secrets","Testing"]' },
+      { url: 'https://auth0.com/docs/manage-users', title: 'Manage Users', description: 'User management and profiles in Auth0', headings: '["User Profiles","Roles","Permissions","Organizations"]' },
+      { url: 'https://auth0.com/docs/secure', title: 'Secure', description: 'Security features and best practices', headings: '["Attack Protection","Tokens","Multi-factor Authentication"]' },
+      { url: 'https://auth0.com/docs/get-started/authentication-and-authorization-flow', title: 'Auth Flows', description: 'Authentication and authorization flows', headings: '["Authorization Code","PKCE","Client Credentials","Device Auth"]' },
+      { url: 'https://auth0.com/docs/get-started/auth0-for-ai-agents', title: 'Auth0 for AI Agents', description: 'Authenticate and authorize AI agents with Auth0', headings: '["Agent Authentication","Token Scoping","MCP Integration"]' },
     ];
 
     // Scenarios — real migration stories with context
@@ -577,6 +589,10 @@ export const demoPageHtml = `<!DOCTYPE html>
       {
         dead: 'https://docs.stripe.com/paymens/checkout',
         context: 'Typo: "paymens" instead of "payments"',
+      },
+      {
+        dead: 'https://auth0.com/docs/connections/social',
+        context: '/docs/connections restructured to /docs/authenticate',
       },
     ];
 
