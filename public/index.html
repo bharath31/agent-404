@@ -60,7 +60,7 @@
 
     /* Hero */
     .hero {
-      padding: 5rem 0 3rem;
+      padding: 2.5rem 0 1.5rem;
       text-align: center;
     }
     .hero .badge {
@@ -71,22 +71,22 @@
       font-size: 0.75rem;
       font-family: var(--mono);
       color: var(--green);
-      margin-bottom: 1.5rem;
+      margin-bottom: 1rem;
       letter-spacing: 0.02em;
     }
     .hero h1 {
-      font-size: 3rem;
+      font-size: 2.5rem;
       font-weight: 800;
       line-height: 1.1;
       letter-spacing: -0.03em;
-      margin-bottom: 1rem;
+      margin-bottom: 0.75rem;
     }
     .hero h1 .highlight { color: var(--accent); }
     .hero p {
-      font-size: 1.2rem;
+      font-size: 1.05rem;
       color: var(--text-secondary);
       max-width: 560px;
-      margin: 0 auto 2rem;
+      margin: 0 auto 1.25rem;
       line-height: 1.5;
     }
 
@@ -98,7 +98,7 @@
       border-radius: 12px;
       padding: 1.5rem;
       text-align: left;
-      margin: 0 auto 3rem;
+      margin: 0 auto 1.5rem;
       max-width: 640px;
       overflow-x: auto;
     }
@@ -337,6 +337,91 @@
     }
     footer a { color: #52525b; }
     footer a:hover { color: var(--text-secondary); }
+
+    /* Animated demo */
+    .demo {
+      max-width: 540px;
+      margin: 0 auto 1.5rem;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+    .demo-header {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.6rem 1rem;
+      background: var(--bg);
+      border-bottom: 1px solid var(--border);
+    }
+    .demo-dot {
+      width: 8px; height: 8px; border-radius: 50%;
+    }
+    .demo-dot:nth-child(1) { background: #ef4444; }
+    .demo-dot:nth-child(2) { background: #f97316; }
+    .demo-dot:nth-child(3) { background: #22c55e; }
+    .demo-header span {
+      margin-left: 0.5rem;
+      font-family: var(--mono);
+      font-size: 0.7rem;
+      color: #52525b;
+    }
+    .demo-body {
+      padding: 1.25rem 1.25rem;
+      min-height: 88px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+    .demo-row {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-family: var(--mono);
+      font-size: 0.8rem;
+      line-height: 1.8;
+      transition: opacity 0.3s;
+    }
+    .demo-label {
+      flex-shrink: 0;
+      font-size: 0.65rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      padding: 0.15rem 0.4rem;
+      border-radius: 4px;
+      width: 3rem;
+      text-align: center;
+    }
+    .demo-label.miss {
+      background: rgba(239,68,68,0.15);
+      color: var(--red);
+    }
+    .demo-label.hit {
+      background: rgba(34,197,94,0.15);
+      color: var(--green);
+    }
+    .demo-url {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .demo-url.dead {
+      color: var(--text-secondary);
+      text-decoration: line-through;
+      text-decoration-color: #52525b;
+    }
+    .demo-url.live {
+      color: var(--green);
+    }
+    .demo-arrow {
+      color: #52525b;
+      flex-shrink: 0;
+      margin: 0.15rem 0 0;
+    }
+    .demo-fade-enter { opacity: 0; transform: translateY(4px); }
+    .demo-fade-active { opacity: 1; transform: translateY(0); transition: all 0.4s ease; }
   </style>
 </head>
 <body>
@@ -345,7 +430,7 @@
       <div class="logo">agent<span>-</span>404</div>
       <div class="links">
         <a href="https://github.com/bharath31/agent-404">GitHub</a>
-        <a href="#how-it-works">How it works</a>
+        <a href="#get-started">Get started</a>
         <a href="/api/health">API Status</a>
       </div>
     </nav>
@@ -356,8 +441,28 @@
       <p>AI agents hit a broken link and give up. Add one script tag and your 404 pages start suggesting the right page — in a format agents already understand.</p>
     </div>
 
+    <div class="demo">
+      <div class="demo-header">
+        <div class="demo-dot"></div>
+        <div class="demo-dot"></div>
+        <div class="demo-dot"></div>
+        <span>agent-404</span>
+      </div>
+      <div class="demo-body" id="demo-body">
+        <div class="demo-row">
+          <span class="demo-label miss">404</span>
+          <span class="demo-url dead" id="demo-dead"></span>
+        </div>
+        <div class="demo-row" id="demo-match-row" style="opacity:0">
+          <span class="demo-label hit">found</span>
+          <span class="demo-url live" id="demo-live"></span>
+        </div>
+      </div>
+    </div>
+
     <div class="code-block" id="get-started-block">
       <div class="label">Get your script tag</div>
+      <div id="get-started"></div>
       <div id="register-form">
         <div style="display:flex;gap:0.5rem;align-items:stretch">
           <input type="text" id="domain-input" placeholder="your-site.com"
@@ -376,60 +481,6 @@
         <p style="margin-top:0.75rem;font-size:0.75rem;color:var(--text-secondary)">
           <span id="registered-domain" style="color:var(--green)"></span> &mdash; paste this into every page on your site
         </p>
-      </div>
-    </div>
-
-    <div class="section" id="how-it-works">
-      <h2>How it works</h2>
-      <div class="flow">
-        <div class="flow-card">
-          <div class="step-num">1</div>
-          <div>
-            <div class="step">Index</div>
-            <h3>Your site teaches itself</h3>
-            <p>As real users browse your site, the script quietly learns every page — its URL, title, and headings. Your site index builds itself over time, no sitemap required.</p>
-          </div>
-        </div>
-        <div class="flow-card">
-          <div class="step-num">2</div>
-          <div>
-            <div class="step">Detect</div>
-            <h3>A dead link gets hit</h3>
-            <p>An agent follows an outdated link and lands on your 404. The script recognizes it's a dead end and asks: "what did they probably mean?"</p>
-          </div>
-        </div>
-        <div class="flow-card">
-          <div class="step-num">3</div>
-          <div>
-            <div class="step">Match</div>
-            <h3>The right page is found</h3>
-            <p>The URL is fuzzy-matched against your index. Version changes (<code>v2→v3</code>), typos, restructured paths — it figures out where the content moved.</p>
-          </div>
-        </div>
-        <div class="flow-card">
-          <div class="step-num">4</div>
-          <div>
-            <div class="step">Recover</div>
-            <h3>Agents understand it instantly</h3>
-            <p>Suggestions appear as a human-readable list and as <code>schema.org</code> JSON-LD — a format AI agents already know how to parse. No integration needed on their side.</p>
-          </div>
-        </div>
-      </div>
-
-      <div class="response-preview">
-        <div class="label">POST /api/suggest &rarr; response</div>
-        <pre>{
-  <span class="key">"deadUrl"</span>: <span class="str">"https://docs.acme.com/v2/auth"</span>,
-  <span class="key">"suggestions"</span>: [
-    {
-      <span class="key">"url"</span>: <span class="str">"https://docs.acme.com/v3/auth"</span>,
-      <span class="key">"title"</span>: <span class="str">"Authentication Guide"</span>,
-      <span class="key">"score"</span>: <span class="num">0.85</span>,
-      <span class="key">"matchType"</span>: <span class="str">"moved"</span>
-    }
-  ],
-  <span class="key">"jsonLd"</span>: { <span class="key">"@context"</span>: <span class="str">"https://schema.org"</span>, ... }
-}</pre>
       </div>
     </div>
 
@@ -519,6 +570,52 @@
       block.appendChild(btn);
     }
     document.querySelectorAll('.code-block').forEach(addCopyBtn);
+
+    // Animated demo
+    const examples = [
+      { dead: '/docs/v2/authentication',   live: '/docs/v3/authentication',   domain: 'acme.com' },
+      { dead: '/blog/claude-code-dx',       live: '/writing/claude-code-dx',   domain: 'bharath.sh' },
+      { dead: '/api/v1/users/list',         live: '/api/v2/users',             domain: 'stripe.dev' },
+      { dead: '/writing/mcp-antipattern',   live: '/writing/mcp',              domain: 'bharath.sh' },
+      { dead: '/guides/setup-guide',        live: '/docs/getting-started',     domain: 'supabase.com' },
+      { dead: '/writting',                  live: '/writing',                  domain: 'bharath.sh' },
+      { dead: '/docs/deploy/serverless',    live: '/docs/deployment/edge',     domain: 'vercel.com' },
+    ];
+    let demoIdx = 0;
+    const demoDead = document.getElementById('demo-dead');
+    const demoLive = document.getElementById('demo-live');
+    const demoMatchRow = document.getElementById('demo-match-row');
+    const demoHeader = document.querySelector('.demo-header span');
+
+    function runDemo() {
+      const ex = examples[demoIdx % examples.length];
+      demoIdx++;
+
+      // Phase 1: show the dead URL
+      demoMatchRow.style.opacity = '0';
+      demoMatchRow.style.transform = 'translateY(4px)';
+      demoDead.textContent = ex.domain + ex.dead;
+      demoDead.style.opacity = '0';
+      demoDead.style.transform = 'translateY(4px)';
+      requestAnimationFrame(() => {
+        demoDead.style.transition = 'all 0.4s ease';
+        demoDead.style.opacity = '1';
+        demoDead.style.transform = 'translateY(0)';
+      });
+
+      // Phase 2: after a beat, show the match
+      setTimeout(() => {
+        demoLive.textContent = ex.domain + ex.live;
+        demoMatchRow.style.transition = 'all 0.4s ease';
+        demoMatchRow.style.opacity = '1';
+        demoMatchRow.style.transform = 'translateY(0)';
+      }, 800);
+
+      // Phase 3: hold, then cycle
+      setTimeout(runDemo, 3000);
+    }
+    // Start after a short delay
+    setTimeout(runDemo, 600);
 
     // Domain registration
     const domainInput = document.getElementById('domain-input');
