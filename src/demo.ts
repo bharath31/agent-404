@@ -643,25 +643,24 @@ export const demoPageHtml = `<!DOCTYPE html>
       return null;
     }
 
-    function getCachedSitemapPages(domain) {
-      const entry = sitemapCache[domain];
-      if (entry && (Date.now() - entry.ts) < 5 * 60 * 1000) return entry.pages;
-      return null;
-    }
 
-    async function fetchSitemapPages(domain) {
-      const cached = getCachedSitemapPages(domain);
-      if (cached !== null) return cached;
+    async function fetchSitemapPages(domain, deadPath) {
+      // Cache key includes path so different paths can prioritize different sitemaps
+      const cacheKey = domain + ':' + (deadPath || '');
+      const entry = sitemapCache[cacheKey];
+      if (entry && (Date.now() - entry.ts) < 5 * 60 * 1000) return entry.pages;
       try {
-        const resp = await fetch('/api/demo/sitemap?domain=' + encodeURIComponent(domain));
+        let url = '/api/demo/sitemap?domain=' + encodeURIComponent(domain);
+        if (deadPath) url += '&path=' + encodeURIComponent(deadPath);
+        const resp = await fetch(url);
         const data = await resp.json();
         const pages = (data.pages || []).map(p => ({
           url: p.url, title: p.title || '', description: '', headings: '[]'
         }));
-        sitemapCache[domain] = { pages, ts: Date.now() };
+        sitemapCache[cacheKey] = { pages, ts: Date.now() };
         return pages;
       } catch {
-        sitemapCache[domain] = { pages: [], ts: Date.now() };
+        sitemapCache[cacheKey] = { pages: [], ts: Date.now() };
         return [];
       }
     }
@@ -805,7 +804,9 @@ export const demoPageHtml = `<!DOCTYPE html>
         '<div style="text-align:center;padding:2rem;color:#52525b;font-size:0.85rem;">Crawling ' + hostname + '/sitemap.xml for pages...</div>';
       document.getElementById('jsonld-section').style.display = 'none';
 
-      const pages = await fetchSitemapPages(hostname);
+      let deadPath = '';
+      try { deadPath = new URL(deadUrl).pathname; } catch {}
+      const pages = await fetchSitemapPages(hostname, deadPath);
       if (pages.length === 0) {
         document.getElementById('dead-url-context').textContent = 'No sitemap found';
         document.getElementById('results-count').textContent = '0 matches';

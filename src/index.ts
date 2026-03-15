@@ -60,11 +60,13 @@ app.use("/api/suggest", rateLimiter({ windowMs: 60_000, max: 60 }));
 app.get("/", (c) => c.html(landingPageHtml));
 app.get("/demo", (c) => c.html(demoPageHtml));
 
-// Demo sitemap proxy — fetches & parses a domain's sitemap.xml for the live demo
+// Demo sitemap proxy — fetches & parses a domain's sitemap.xml for the live demo.
+// Accepts the dead URL to prioritize the most relevant child sitemaps.
 // No auth needed, but rate-limited. Returns lightweight page list (URL + title).
 app.use("/api/demo/sitemap", rateLimiter({ windowMs: 60_000, max: 15 }));
 app.get("/api/demo/sitemap", async (c) => {
 	const domain = c.req.query("domain");
+	const deadPath = c.req.query("path") || "";
 	if (!domain || typeof domain !== "string" || domain.length > 253) {
 		return c.json({ error: "domain query parameter is required" }, 400);
 	}
@@ -89,52 +91,98 @@ app.get("/api/demo/sitemap", async (c) => {
 	}
 
 	const sitemapUrl = `https://${domain}/sitemap.xml`;
-	const TIMEOUT_MS = 8_000;
-	const MAX_URLS = 500;
 
 	try {
-		const pages = await fetchDemoSitemap(sitemapUrl, TIMEOUT_MS, MAX_URLS);
+		const pages = await fetchDemoSitemap(sitemapUrl, deadPath, 0);
 		return c.json({ domain, pages });
 	} catch {
 		return c.json({ domain, pages: [], error: "Could not fetch sitemap" });
 	}
 });
 
-async function fetchDemoSitemap(
-	url: string,
-	timeoutMs: number,
-	maxUrls: number,
-): Promise<{ url: string; title: string }[]> {
-	const controller = new AbortController();
-	const timeout = setTimeout(() => controller.abort(), timeoutMs);
+const DEMO_TIMEOUT_MS = 8_000;
+const DEMO_MAX_URLS = 500;
+const DEMO_MAX_DEPTH = 2;
+const DEMO_MAX_CHILDREN = 5;
 
+async function fetchDemoSitemapXml(url: string): Promise<string | null> {
+	const controller = new AbortController();
+	const timeout = setTimeout(() => controller.abort(), DEMO_TIMEOUT_MS);
 	try {
 		const resp = await fetch(url, {
 			headers: { "User-Agent": "agent-404-bot/1.0 (demo)" },
 			signal: controller.signal,
 		});
-		if (!resp.ok) return [];
-
-		const xml = await resp.text();
-
-		// Handle sitemap index — fetch first 3 child sitemaps
-		if (xml.includes("<sitemapindex")) {
-			const childLocs = extractDemoLocs(xml, "sitemap").slice(0, 3);
-			const allPages: { url: string; title: string }[] = [];
-			for (const childUrl of childLocs) {
-				if (allPages.length >= maxUrls) break;
-				const childPages = await fetchDemoSitemap(childUrl, timeoutMs, maxUrls - allPages.length);
-				allPages.push(...childPages);
-			}
-			return allPages.slice(0, maxUrls);
-		}
-
-		return extractDemoLocs(xml, "url")
-			.slice(0, maxUrls)
-			.map((loc) => ({ url: loc, title: titleFromUrl(loc) }));
+		if (!resp.ok) return null;
+		const contentType = resp.headers.get("content-type") || "";
+		// Reject HTML responses (some sites return 200 with an HTML 404 page)
+		if (contentType.includes("text/html")) return null;
+		return await resp.text();
+	} catch {
+		return null;
 	} finally {
 		clearTimeout(timeout);
 	}
+}
+
+/**
+ * Score a child sitemap URL by how relevant it is to the dead URL path.
+ * Higher = more relevant.
+ */
+function scoreChildSitemap(childUrl: string, deadPath: string): number {
+	const childLower = childUrl.toLowerCase();
+	const deadLower = deadPath.toLowerCase();
+	const deadSegments = deadLower.split("/").filter(Boolean);
+	if (deadSegments.length === 0) return 0;
+
+	let score = 0;
+	// Bonus for each dead URL segment that appears in the child sitemap URL
+	for (const seg of deadSegments) {
+		if (seg.length > 2 && childLower.includes(seg)) score += 2;
+	}
+	// Bonus for path prefix match (e.g., dead=/docs/start, child URL contains /docs/)
+	const deadPrefix = "/" + deadSegments[0] + "/";
+	if (childLower.includes(deadPrefix)) score += 3;
+
+	return score;
+}
+
+async function fetchDemoSitemap(
+	url: string,
+	deadPath: string,
+	depth: number,
+): Promise<{ url: string; title: string }[]> {
+	const xml = await fetchDemoSitemapXml(url);
+	if (!xml) return [];
+
+	// Not a sitemap index — extract URLs directly
+	if (!xml.includes("<sitemapindex")) {
+		return extractDemoLocs(xml, "url")
+			.slice(0, DEMO_MAX_URLS)
+			.map((loc) => ({ url: loc, title: demoTitleFromUrl(loc) }));
+	}
+
+	// Sitemap index — prioritize children by relevance to the dead URL
+	if (depth >= DEMO_MAX_DEPTH) return [];
+	const childLocs = extractDemoLocs(xml, "sitemap");
+	if (childLocs.length === 0) return [];
+
+	// Score and sort children by relevance, falling back to original order
+	const scored = childLocs.map((loc, i) => ({
+		loc,
+		score: scoreChildSitemap(loc, deadPath),
+		idx: i,
+	}));
+	scored.sort((a, b) => b.score - a.score || a.idx - b.idx);
+	const topChildren = scored.slice(0, DEMO_MAX_CHILDREN);
+
+	// Fetch top children in parallel
+	const results = await Promise.all(
+		topChildren.map((child) => fetchDemoSitemap(child.loc, deadPath, depth + 1)),
+	);
+
+	const allPages = results.flat();
+	return allPages.slice(0, DEMO_MAX_URLS);
 }
 
 function extractDemoLocs(xml: string, parentTag: string): string[] {
@@ -151,7 +199,7 @@ function extractDemoLocs(xml: string, parentTag: string): string[] {
 	return urls;
 }
 
-function titleFromUrl(url: string): string {
+function demoTitleFromUrl(url: string): string {
 	try {
 		const path = new URL(url).pathname;
 		const last = path.split("/").filter(Boolean).pop() || "";
