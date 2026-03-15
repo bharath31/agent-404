@@ -211,14 +211,19 @@ async function fetchDemoResponse(url: string): Promise<FetchMeta> {
  * Check if discovered pages are relevant to the dead URL's section.
  * Returns false if the dead URL has a clear path prefix (e.g., /docs/)
  * but none of the discovered pages share that prefix.
+ * Uses prefix matching so "/work/" matches "/workers/".
  */
 function hasRelevantPages(pages: DemoPage[], deadPath: string): boolean {
 	const deadSegments = deadPath.split("/").filter(Boolean);
 	if (deadSegments.length === 0) return pages.length > 0;
-	const deadPrefix = "/" + deadSegments[0] + "/";
+	const firstSeg = deadSegments[0].toLowerCase();
+	if (firstSeg.length < 3) return pages.length > 0;
 	return pages.some((p) => {
 		try {
-			return new URL(p.url).pathname.startsWith(deadPrefix);
+			const pageSegs = new URL(p.url).pathname.split("/").filter(Boolean);
+			return pageSegs.some(
+				(seg) => seg.toLowerCase().startsWith(firstSeg) || firstSeg.startsWith(seg.toLowerCase()),
+			);
 		} catch {
 			return false;
 		}
@@ -444,9 +449,41 @@ async function followChildLlmsTxt(
 	const deadSegments = deadPath.toLowerCase().split("/").filter(Boolean);
 	const scored = children.map((child) => {
 		let score = 0;
-		const childLower = child.url.toLowerCase() + " " + child.title.toLowerCase();
+		// Extract path segments from the child URL for matching
+		let childPathSegs: string[] = [];
+		try {
+			childPathSegs = new URL(child.url).pathname.toLowerCase().split("/").filter(Boolean);
+			// Remove trailing "llms.txt" from path segments
+			if (childPathSegs.length > 0 && childPathSegs[childPathSegs.length - 1] === "llms.txt") {
+				childPathSegs.pop();
+			}
+		} catch {}
+		const childTitle = child.title.toLowerCase();
+
 		for (const seg of deadSegments) {
-			if (seg.length > 2 && childLower.includes(seg)) score += 2;
+			if (seg.length < 3) continue;
+			// Prefix match on URL path segments (work → workers)
+			// Prefer closer matches: "workers" over "workers-ai" for "work"
+			let bestPathScore = 0;
+			for (const cSeg of childPathSegs) {
+				if (cSeg === seg) {
+					bestPathScore = 5; // exact match
+					break;
+				}
+				if (cSeg.startsWith(seg) || seg.startsWith(cSeg)) {
+					// Closer length = higher score (3-4 range)
+					const lenRatio = Math.min(seg.length, cSeg.length) / Math.max(seg.length, cSeg.length);
+					bestPathScore = Math.max(bestPathScore, 3 + lenRatio);
+				}
+			}
+			score += bestPathScore;
+			// Prefix match on title words
+			for (const word of childTitle.split(/\W+/)) {
+				if (word.length >= 3 && (word.startsWith(seg) || seg.startsWith(word))) {
+					score += 2;
+					break;
+				}
+			}
 		}
 		return { ...child, score };
 	});
@@ -626,11 +663,22 @@ function scoreChildSitemap(childUrl: string, deadPath: string): number {
 	if (GENERIC_SITEMAP_RE.test(childLower)) score += 1;
 	if (deadSegments.length === 0) return score;
 
+	// Extract path segments from the child sitemap URL for prefix matching
+	let childPathSegs: string[] = [];
+	try {
+		childPathSegs = new URL(childUrl).pathname.toLowerCase().split("/").filter(Boolean);
+	} catch {}
+
 	for (const seg of deadSegments) {
-		if (seg.length > 2 && childLower.includes(seg)) score += 2;
+		if (seg.length < 3) continue;
+		// Prefix match on path segments (avoids "work" matching "network")
+		for (const cSeg of childPathSegs) {
+			if (cSeg.startsWith(seg) || seg.startsWith(cSeg)) {
+				score += 3;
+				break;
+			}
+		}
 	}
-	const deadPrefix = "/" + deadSegments[0] + "/";
-	if (childLower.includes(deadPrefix)) score += 3;
 
 	return score;
 }
@@ -684,8 +732,12 @@ async function fetchDemoSitemap(
 	if (!xml) return [];
 
 	if (!xml.includes("<sitemapindex")) {
-		return extractDemoLocs(xml, "url")
-			.slice(0, DEMO_MAX_URLS)
+		const allLocs = extractDemoLocs(xml, "url");
+		if (allLocs.length <= DEMO_MAX_URLS) {
+			return allLocs.map((loc) => ({ url: loc, title: demoTitleFromUrl(loc) }));
+		}
+		// More URLs than our cap — prioritize URLs relevant to the dead path
+		return prioritizeLocs(allLocs, deadPath)
 			.map((loc) => ({ url: loc, title: demoTitleFromUrl(loc) }));
 	}
 
@@ -856,6 +908,26 @@ function extractInternalLinks(
 }
 
 // ── Shared utilities ──
+
+/**
+ * When a sitemap has more URLs than DEMO_MAX_URLS, prioritize URLs
+ * that share path segments with the dead URL's path.
+ */
+function prioritizeLocs(locs: string[], deadPath: string): string[] {
+	const deadSegments = deadPath.toLowerCase().split("/").filter((s) => s.length > 2);
+	if (deadSegments.length === 0) return locs.slice(0, DEMO_MAX_URLS);
+
+	const scored = locs.map((loc) => {
+		const locLower = loc.toLowerCase();
+		let score = 0;
+		for (const seg of deadSegments) {
+			if (locLower.includes(seg)) score += 1;
+		}
+		return { loc, score };
+	});
+	scored.sort((a, b) => b.score - a.score);
+	return scored.slice(0, DEMO_MAX_URLS).map((s) => s.loc);
+}
 
 function extractDemoLocs(xml: string, parentTag: string): string[] {
 	const urls: string[] = [];
