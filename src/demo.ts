@@ -648,7 +648,7 @@ export const demoPageHtml = `<!DOCTYPE html>
       // Cache key includes path so different paths can prioritize different sitemaps
       const cacheKey = domain + ':' + (deadPath || '');
       const entry = sitemapCache[cacheKey];
-      if (entry && (Date.now() - entry.ts) < 5 * 60 * 1000) return entry.pages;
+      if (entry && (Date.now() - entry.ts) < 5 * 60 * 1000) return entry;
       try {
         let url = '/api/demo/sitemap?domain=' + encodeURIComponent(domain);
         if (deadPath) url += '&path=' + encodeURIComponent(deadPath);
@@ -657,11 +657,13 @@ export const demoPageHtml = `<!DOCTYPE html>
         const pages = (data.pages || []).map(p => ({
           url: p.url, title: p.title || '', description: p.description || '', headings: '[]'
         }));
-        sitemapCache[cacheKey] = { pages, ts: Date.now() };
-        return pages;
+        const result = { pages, source: data.source || 'none', error: data.error || null, ts: Date.now() };
+        sitemapCache[cacheKey] = result;
+        return result;
       } catch {
-        sitemapCache[cacheKey] = { pages: [], ts: Date.now() };
-        return [];
+        const result = { pages: [], source: 'none', error: null, ts: Date.now() };
+        sitemapCache[cacheKey] = result;
+        return result;
       }
     }
 
@@ -806,16 +808,21 @@ export const demoPageHtml = `<!DOCTYPE html>
 
       let deadPath = '';
       try { deadPath = new URL(deadUrl).pathname; } catch {}
-      const pages = await fetchSitemapPages(hostname, deadPath);
-      if (pages.length === 0) {
-        document.getElementById('dead-url-context').textContent = 'No pages discovered';
+      const result = await fetchSitemapPages(hostname, deadPath);
+      if (result.pages.length === 0) {
+        const sourceLabel = result.source !== 'none' ? ' via ' + result.source : '';
+        document.getElementById('dead-url-context').textContent = 'No pages discovered' + sourceLabel;
         document.getElementById('results-count').textContent = '0 matches';
+        const errorMsg = result.error
+          ? result.error
+          : 'Could not discover pages on ' + hostname + '. The site may have no sitemap, llms.txt, or discoverable links.';
         document.getElementById('results-list').innerHTML =
-          '<div style="text-align:center;padding:2rem;color:#52525b;font-size:0.85rem;">Could not discover pages on ' + hostname + '. The site may block bots or have no discoverable links.</div>';
+          '<div style="text-align:center;padding:2rem;color:#52525b;font-size:0.85rem;">' + errorMsg + '</div>';
         return;
       }
-      document.getElementById('dead-url-context').textContent = pages.length + ' pages discovered';
-      showResults(deadUrl, '', pages);
+      const sourceLabel = result.source !== 'none' ? ' via ' + result.source : '';
+      document.getElementById('dead-url-context').textContent = result.pages.length + ' pages discovered' + sourceLabel;
+      showResults(deadUrl, '', result.pages);
     }
 
     function showResults(deadUrl, context, pages) {

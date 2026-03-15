@@ -91,10 +91,15 @@ app.get("/api/demo/sitemap", async (c) => {
 	}
 
 	try {
-		const pages = await discoverDemoPages(domain, deadPath);
-		return c.json({ domain, pages, source: pages.length > 0 ? "sitemap" : "none" });
+		const result = await discoverDemoPages(domain, deadPath);
+		return c.json({
+			domain,
+			pages: result.pages,
+			source: result.source,
+			...(result.error ? { error: result.error } : {}),
+		});
 	} catch {
-		return c.json({ domain, pages: [], error: "Could not discover pages" });
+		return c.json({ domain, pages: [], source: "none", error: "Could not discover pages" });
 	}
 });
 
@@ -115,9 +120,110 @@ const SITEMAP_PATHS = [
 	"/sitemap/sitemap.xml",
 	"/sitemap/index.xml",
 	"/wp-sitemap.xml",
+	"/sitemap.txt",
 ];
 
 type DemoPage = { url: string; title: string; description?: string };
+
+type DiscoveryResult = {
+	pages: DemoPage[];
+	source: "llms.txt" | "sitemap" | "crawl" | "none";
+	error?: string;
+};
+
+type FetchMeta = {
+	text: string | null;
+	status: number;
+	finalUrl: string;
+};
+
+/**
+ * Detect if a response indicates bot blocking.
+ */
+function detectBlockedResponse(status: number, body: string | null): string | null {
+	if (status === 401) return "This site requires authentication and cannot be crawled publicly.";
+	if (status === 429) return "This site is rate-limiting our requests. Try again later.";
+	if (status === 403) {
+		// Check for specific WAF markers in body
+		if (body) {
+			const lower = body.toLowerCase();
+			if (
+				lower.includes("cf-browser-verification") ||
+				lower.includes("__cf_chl_") ||
+				lower.includes("challenge-platform")
+			) {
+				return "This site is behind Cloudflare bot protection and requires browser verification.";
+			}
+			if (lower.includes("akamai") || lower.includes("ak_bmsc")) {
+				return "This site is behind Akamai bot protection and blocks automated access.";
+			}
+		}
+		return "This site returned 403 Forbidden — it likely blocks automated access.";
+	}
+	if (body) {
+		const lower = body.toLowerCase();
+		if (
+			(lower.includes("access denied") || lower.includes("captcha")) &&
+			lower.includes("<html") &&
+			body.length < 10_000
+		) {
+			return "This site appears to block automated access (access denied / captcha detected).";
+		}
+	}
+	return null;
+}
+
+/**
+ * Fetch a URL and return text + metadata (status, final URL after redirects).
+ */
+async function fetchDemoResponse(url: string): Promise<FetchMeta> {
+	const controller = new AbortController();
+	const timeout = setTimeout(() => controller.abort(), DEMO_FETCH_TIMEOUT_MS);
+	try {
+		const resp = await fetch(url, {
+			headers: {
+				"User-Agent": DEMO_USER_AGENT,
+				Accept: "text/plain, application/xml, text/xml, text/html, */*",
+			},
+			signal: controller.signal,
+			redirect: "follow",
+		});
+		const finalUrl = resp.url || url;
+		if (!resp.ok) {
+			// Read a small portion of the body for bot-detection purposes
+			const partialBody = await readBodyCapped(resp, 50_000);
+			return { text: partialBody, status: resp.status, finalUrl };
+		}
+		const contentLength = parseInt(resp.headers.get("content-length") || "0", 10);
+		if (contentLength > DEMO_MAX_BODY_BYTES) {
+			return { text: null, status: resp.status, finalUrl };
+		}
+		const text = await readBodyCapped(resp, DEMO_MAX_BODY_BYTES);
+		return { text, status: resp.status, finalUrl };
+	} catch {
+		return { text: null, status: 0, finalUrl: url };
+	} finally {
+		clearTimeout(timeout);
+	}
+}
+
+/**
+ * Check if discovered pages are relevant to the dead URL's section.
+ * Returns false if the dead URL has a clear path prefix (e.g., /docs/)
+ * but none of the discovered pages share that prefix.
+ */
+function hasRelevantPages(pages: DemoPage[], deadPath: string): boolean {
+	const deadSegments = deadPath.split("/").filter(Boolean);
+	if (deadSegments.length === 0) return pages.length > 0;
+	const deadPrefix = "/" + deadSegments[0] + "/";
+	return pages.some((p) => {
+		try {
+			return new URL(p.url).pathname.startsWith(deadPrefix);
+		} catch {
+			return false;
+		}
+	});
+}
 
 /**
  * Main discovery pipeline with overall timeout.
@@ -127,52 +233,130 @@ type DemoPage = { url: string; title: string; description?: string };
 async function discoverDemoPages(
 	domain: string,
 	deadPath: string,
-): Promise<DemoPage[]> {
+): Promise<DiscoveryResult> {
 	const deadline = Date.now() + DEMO_PIPELINE_TIMEOUT_MS;
+	let effectiveDomain = domain;
+	let blockedReason: string | null = null;
+	let llmsFallbackPages: DemoPage[] | null = null;
 
 	// 1. Try llms.txt — curated page list with real titles and descriptions
 	if (Date.now() < deadline) {
-		const llmsPages = await fetchLlmsTxt(domain, deadPath);
-		if (llmsPages.length > 0) return llmsPages;
+		const llmsResult = await fetchLlmsTxt(effectiveDomain, deadPath);
+		if (llmsResult.pages.length > 0) {
+			if (hasRelevantPages(llmsResult.pages, deadPath)) {
+				return { pages: llmsResult.pages, source: "llms.txt" };
+			}
+			// Pages found but not relevant to the dead URL's section — save as fallback
+			// and continue to sitemap/crawl for better results
+			llmsFallbackPages = llmsResult.pages;
+		}
+		if (llmsResult.redirectDomain) effectiveDomain = llmsResult.redirectDomain;
+		if (llmsResult.blocked) blockedReason = llmsResult.blocked;
 	}
 
 	// 2. Try sitemaps (robots.txt + path-prefix + common paths)
 	if (Date.now() < deadline) {
-		const sitemapUrls = await findSitemapUrls(domain, deadPath);
+		const sitemapUrls = await findSitemapUrls(effectiveDomain, deadPath);
 		for (const sitemapUrl of sitemapUrls) {
 			if (Date.now() >= deadline) break;
-			const pages = await fetchDemoSitemap(sitemapUrl, deadPath, 0);
-			if (pages.length > 0) return pages;
+			const pages = await fetchDemoSitemap(sitemapUrl, deadPath, 0, effectiveDomain);
+			if (pages.length > 0) return { pages, source: "sitemap" };
 		}
 	}
 
 	// 3. Fallback: crawl HTML links
 	if (Date.now() < deadline) {
-		return await crawlDemoLinks(domain, deadPath);
+		const crawlResult = await crawlDemoLinks(effectiveDomain, deadPath);
+		if (crawlResult.pages.length > 0) {
+			return { pages: crawlResult.pages, source: "crawl" };
+		}
+		if (crawlResult.spaDetected) {
+			return {
+				pages: [],
+				source: "none",
+				error:
+					"This site appears to be a single-page application (SPA) that renders content with JavaScript. We can only discover pages from server-rendered HTML, sitemaps, or llms.txt.",
+			};
+		}
+		if (crawlResult.blocked) blockedReason = crawlResult.blocked;
 	}
 
-	return [];
+	// All methods failed — use llms.txt fallback if we had one
+	if (llmsFallbackPages && llmsFallbackPages.length > 0) {
+		return { pages: llmsFallbackPages, source: "llms.txt" };
+	}
+
+	// Return with best error
+	if (blockedReason) {
+		return { pages: [], source: "none", error: blockedReason };
+	}
+	return {
+		pages: [],
+		source: "none",
+		error: `Could not discover pages on ${domain}. The site may have no sitemap, llms.txt, or discoverable links.`,
+	};
 }
 
 // ── llms.txt discovery ──
 
+type LlmsTxtResult = {
+	pages: DemoPage[];
+	redirectDomain?: string;
+	blocked?: string;
+};
+
 /**
  * Fetch and parse llms.txt — a structured file listing a site's key pages.
  * Handles nested llms.txt (like Cloudflare) by following child llms.txt links.
+ * When llms.txt has both real pages and child links, merges both.
  * Falls back to llms-full.txt if llms.txt yields nothing.
  */
 async function fetchLlmsTxt(
 	domain: string,
 	deadPath: string,
-): Promise<DemoPage[]> {
+): Promise<LlmsTxtResult> {
+	let redirectDomain: string | undefined;
+	let blocked: string | undefined;
+
 	// Try llms.txt first
-	const text = await fetchDemoText(`https://${domain}/llms.txt`);
-	if (text && text.length >= 20) {
-		const { pages, childLlmsTxtUrls } = parseLlmsTxt(text, domain);
-		if (pages.length > 0) return pages;
+	const resp = await fetchDemoResponse(`https://${domain}/llms.txt`);
+
+	// Check for cross-domain redirect
+	if (resp.finalUrl) {
+		try {
+			const finalHost = new URL(resp.finalUrl).hostname;
+			if (finalHost !== domain) redirectDomain = finalHost;
+		} catch {}
+	}
+
+	// Check for bot blocking
+	if (!resp.text && resp.status > 0) {
+		const blockMsg = detectBlockedResponse(resp.status, resp.text);
+		if (blockMsg) blocked = blockMsg;
+	}
+
+	const effectiveDomain = redirectDomain || domain;
+
+	if (resp.text && resp.text.length >= 20) {
+		const { pages, childLlmsTxtUrls } = parseLlmsTxt(resp.text, effectiveDomain);
+
+		// Mixed llms.txt: merge direct pages with child pages
+		if (pages.length > 0 && childLlmsTxtUrls.length > 0) {
+			const childPages = await followChildLlmsTxt(childLlmsTxtUrls, effectiveDomain, deadPath);
+			const seen = new Set(pages.map((p) => p.url));
+			for (const cp of childPages) {
+				if (!seen.has(cp.url) && pages.length < DEMO_MAX_URLS) {
+					seen.add(cp.url);
+					pages.push(cp);
+				}
+			}
+			return { pages, redirectDomain };
+		}
+
+		if (pages.length > 0) return { pages, redirectDomain };
 		if (childLlmsTxtUrls.length > 0) {
-			const childPages = await followChildLlmsTxt(childLlmsTxtUrls, domain, deadPath);
-			if (childPages.length > 0) return childPages;
+			const childPages = await followChildLlmsTxt(childLlmsTxtUrls, effectiveDomain, deadPath);
+			if (childPages.length > 0) return { pages: childPages, redirectDomain };
 		}
 	}
 
@@ -180,21 +364,21 @@ async function fetchLlmsTxt(
 	const deadSegments = deadPath.split("/").filter(Boolean);
 	for (let i = 1; i <= Math.min(deadSegments.length, 2); i++) {
 		const prefix = "/" + deadSegments.slice(0, i).join("/");
-		const prefixText = await fetchDemoText(`https://${domain}${prefix}/llms.txt`);
+		const prefixText = await fetchDemoText(`https://${effectiveDomain}${prefix}/llms.txt`);
 		if (prefixText && prefixText.length >= 20) {
-			const { pages } = parseLlmsTxt(prefixText, domain);
-			if (pages.length > 0) return pages;
+			const { pages } = parseLlmsTxt(prefixText, effectiveDomain);
+			if (pages.length > 0) return { pages, redirectDomain };
 		}
 	}
 
 	// Fallback: llms-full.txt (some sites only have this)
-	const fullText = await fetchDemoText(`https://${domain}/llms-full.txt`);
+	const fullText = await fetchDemoText(`https://${effectiveDomain}/llms-full.txt`);
 	if (fullText && fullText.length >= 20) {
-		const { pages } = parseLlmsTxt(fullText, domain);
-		if (pages.length > 0) return pages;
+		const { pages } = parseLlmsTxt(fullText, effectiveDomain);
+		if (pages.length > 0) return { pages, redirectDomain };
 	}
 
-	return [];
+	return { pages: [], redirectDomain, blocked };
 }
 
 /**
@@ -312,6 +496,7 @@ async function findSitemapUrls(domain: string, deadPath: string): Promise<string
 		const prefix = "/" + deadSegments.slice(0, i).join("/");
 		addUrl(`https://${domain}${prefix}/sitemap.xml`);
 		addUrl(`https://${domain}${prefix}/sitemap-0.xml`);
+		addUrl(`https://${domain}${prefix}/sitemap.txt`);
 	}
 
 	// Add common root paths not already discovered
@@ -449,15 +634,52 @@ function scoreChildSitemap(childUrl: string, deadPath: string): number {
 }
 
 /**
+ * Parse a plain-text sitemap (one URL per line).
+ */
+function parsePlainTextSitemap(text: string, filterDomain?: string): DemoPage[] {
+	const pages: DemoPage[] = [];
+	const seen = new Set<string>();
+	for (const line of text.split("\n")) {
+		const url = line.trim();
+		if (!url || !url.startsWith("https://")) continue;
+		if (seen.has(url) || pages.length >= DEMO_MAX_URLS) continue;
+		// Optionally filter to same domain
+		if (filterDomain) {
+			try {
+				const h = new URL(url).hostname;
+				if (h !== filterDomain && !h.endsWith("." + filterDomain)) continue;
+			} catch {
+				continue;
+			}
+		}
+		seen.add(url);
+		pages.push({ url, title: demoTitleFromUrl(url) });
+	}
+	return pages;
+}
+
+/**
  * Recursively fetch and parse sitemaps, prioritizing relevant children.
+ * Supports XML sitemaps and plain-text sitemaps (one URL per line).
  */
 async function fetchDemoSitemap(
 	url: string,
 	deadPath: string,
 	depth: number,
+	filterDomain?: string,
 ): Promise<DemoPage[]> {
 	const xml = await fetchDemoSitemapXml(url);
-	if (!xml) return [];
+	if (!xml) {
+		// Try as plain-text sitemap (one URL per line, e.g. sitemap.txt)
+		if (url.endsWith(".txt") || url.endsWith("/sitemap.txt")) {
+			const text = await fetchDemoText(url);
+			if (text) {
+				const pages = parsePlainTextSitemap(text, filterDomain);
+				if (pages.length > 0) return pages;
+			}
+		}
+		return [];
+	}
 
 	if (!xml.includes("<sitemapindex")) {
 		return extractDemoLocs(xml, "url")
@@ -479,24 +701,48 @@ async function fetchDemoSitemap(
 	const topChildren = scored.slice(0, limit);
 
 	const results = await Promise.all(
-		topChildren.map((child) => fetchDemoSitemap(child.loc, deadPath, depth + 1)),
+		topChildren.map((child) => fetchDemoSitemap(child.loc, deadPath, depth + 1, filterDomain)),
 	);
 	return results.flat().slice(0, DEMO_MAX_URLS);
 }
 
 // ── HTML crawl fallback ──
 
+type CrawlResult = {
+	pages: DemoPage[];
+	spaDetected: boolean;
+	blocked?: string;
+};
+
+/** SPA framework indicators in HTML source */
+const SPA_MARKERS = [
+	"__NEXT_DATA__",
+	"__NUXT__",
+	"window.__",
+	"bundle.js",
+	"app.js",
+	'id="root"></div>',
+	'id="app"></div>',
+	'id="__next"></div>',
+	"react",
+	"vue",
+	"angular",
+];
+
 /**
  * Crawl homepage + ancestor path pages, extract internal links.
  * Also follows one level of discovered links for broader coverage.
+ * Detects SPAs and bot blocking.
  */
 async function crawlDemoLinks(
 	domain: string,
 	deadPath: string,
-): Promise<DemoPage[]> {
+): Promise<CrawlResult> {
 	const baseUrl = `https://${domain}`;
 	const seen = new Set<string>();
 	const pages: DemoPage[] = [];
+	let spaDetected = false;
+	let blocked: string | undefined;
 
 	// Seed pages: homepage + ancestor paths
 	const seedPaths = ["/"];
@@ -507,8 +753,16 @@ async function crawlDemoLinks(
 
 	for (const seedPath of seedPaths) {
 		if (pages.length >= DEMO_MAX_URLS) break;
-		const html = await fetchDemoText(baseUrl + seedPath);
-		if (!html) continue;
+		const resp = await fetchDemoResponse(baseUrl + seedPath);
+
+		// Check for bot blocking on homepage
+		if (seedPath === "/" && !resp.text) {
+			const blockMsg = detectBlockedResponse(resp.status, resp.text);
+			if (blockMsg) blocked = blockMsg;
+		}
+
+		if (!resp.text || resp.status < 200 || resp.status >= 400) continue;
+		const html = resp.text;
 
 		const seedTitle = extractHtmlTitle(html);
 		const seedUrl = baseUrl + seedPath;
@@ -518,6 +772,16 @@ async function crawlDemoLinks(
 		}
 
 		const links = extractInternalLinks(html, domain);
+
+		// SPA detection: few internal links + script tags with SPA markers
+		if (seedPath === "/" && links.length < 3) {
+			const lowerHtml = html.toLowerCase();
+			const hasScripts = lowerHtml.includes("<script");
+			if (hasScripts && SPA_MARKERS.some((m) => lowerHtml.includes(m.toLowerCase()))) {
+				spaDetected = true;
+			}
+		}
+
 		for (const link of links) {
 			if (seen.has(link.url) || pages.length >= DEMO_MAX_URLS) continue;
 			seen.add(link.url);
@@ -546,7 +810,7 @@ async function crawlDemoLinks(
 		}
 	}
 
-	return pages;
+	return { pages, spaDetected, blocked };
 }
 
 /**
