@@ -86,13 +86,14 @@ export const demoPageHtml = `<!DOCTYPE html>
       display: flex;
       gap: 0.5rem;
       margin: 1.75rem auto;
-      max-width: 640px;
+      max-width: 800px;
       overflow-x: auto;
       padding-bottom: 0.25rem;
+      -webkit-overflow-scrolling: touch;
     }
     .scenario {
-      flex: 1;
-      min-width: 0;
+      flex: 0 0 auto;
+      min-width: 120px;
       padding: 0.7rem 0.85rem;
       background: var(--surface);
       border: 1px solid var(--border);
@@ -448,7 +449,7 @@ export const demoPageHtml = `<!DOCTYPE html>
         <div class="sc-dead">auth0.com/docs/customize/login-pages/acul</div>
       </div>
       <div class="scenario" onclick="runScenario(1)">
-        <div class="sc-label">Singular/plural</div>
+        <div class="sc-label">Typo</div>
         <div class="sc-dead">docs.stripe.com/payment/checkout</div>
       </div>
       <div class="scenario" onclick="runScenario(2)">
