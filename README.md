@@ -29,10 +29,13 @@ The script detects 404 pages using (in order):
 
 ### Fuzzy Matching
 
-Suggestions are ranked using three signals:
+Suggestions are ranked using four signals:
 - **Path segment similarity** — Jaccard similarity on URL segments, version-tolerant (`v2` → `v3` = partial match)
 - **Levenshtein distance** — catches typos and minor path differences
 - **Keyword overlap** — matches words from the dead URL against page titles and headings
+- **Semantic embeddings** — cosine similarity on OpenAI `text-embedding-3-small` vectors, catches URLs with zero lexical overlap but same meaning (e.g. `/docs/authentication` → `/guides/security/oauth`)
+
+When embeddings are unavailable (no API key or API down), the system gracefully falls back to the first three signals.
 
 ## API
 
@@ -77,35 +80,56 @@ Response:
 
 ## Self-hosting
 
+### One-click deploy
+
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fbharath31%2Fagent-404&env=POSTGRES_URL,EMBEDDING_API_KEY,CRON_SECRET&envDescription=POSTGRES_URL%3A%20Neon%2FVercel%20Postgres%20connection%20string.%20EMBEDDING_API_KEY%3A%20For%20semantic%20embeddings%20(optional%20but%20recommended).%20CRON_SECRET%3A%20Bearer%20token%20for%20the%20daily%20cron%20job.&project-name=agent-404&repository-name=agent-404)
+
+Click the button above and provide the required environment variables:
+- **`POSTGRES_URL`** — Connection string for a Neon or Vercel Postgres database
+- **`EMBEDDING_API_KEY`** — For semantic embeddings (optional but recommended, ~$0.02/1M tokens)
+- **`CRON_SECRET`** — Bearer token to authenticate the daily cron job
+
+After deploying, run the migration:
 ```bash
+npm run db:migrate
+```
+
+### Manual setup
+
+```bash
+# 1. Fork and clone the repo
+git clone https://github.com/bharath31/agent-404.git
+cd agent-404
 npm install
 
-# Set up Vercel Postgres
-# 1. Create a Postgres database in Vercel Dashboard → Storage
-# 2. Link it to your project
-# 3. Pull env vars:
-vercel env pull .env.local
+# 2. Create a Postgres database
+#    Option A: Vercel Dashboard → Storage → Create Postgres
+#    Option B: Create a Neon database at neon.tech
 
-# Run migration
+# 3. Set environment variables
+#    Create .env.local with:
+#      POSTGRES_URL=postgres://...
+#      EMBEDDING_API_KEY=sk-...      (optional)
+#      CRON_SECRET=your-secret
+
+# 4. Run migrations
 npm run db:migrate
 
-# Local dev
+# 5. Local dev
 npm run dev
 
-# Build client script
+# 6. Build client script
 npm run build:script
 
-# Deploy
+# 7. Deploy
 vercel --prod
-
-# Tests
-npm test
 ```
 
 ## Stack
 
 - **Runtime**: Vercel Edge Functions (Hono)
-- **Database**: Vercel Postgres (Neon)
+- **Database**: Vercel Postgres (Neon) + pgvector
+- **Embeddings**: OpenAI `text-embedding-3-small` (256d)
 - **Client**: Vanilla JS, <3KB
 - **Indexing**: Sitemap.xml crawl + client-side beacons
 

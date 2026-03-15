@@ -13,6 +13,7 @@ export interface PageRecord {
 	description: string;
 	headings: string; // JSON array of strings
 	lastSeen: string;
+	embedding?: number[] | null;
 }
 
 export interface Suggestion {

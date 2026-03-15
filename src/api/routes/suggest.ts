@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import type { PostgresStorage } from "../../storage/postgres.js";
 import { findSuggestions } from "../../engine/matcher.js";
+import { generateDeadUrlEmbedding } from "../../engine/embeddings.js";
 
 type Env = { Variables: { storage: PostgresStorage; siteId: string } };
 
@@ -16,8 +17,18 @@ suggest.post("/", async (c) => {
 		return c.json({ error: "url is required" }, 400);
 	}
 
-	const pages = await storage.getPages(siteId);
-	const suggestions = findSuggestions(body.url, pages);
+	// Generate embedding for the dead URL
+	const deadUrlEmbedding = await generateDeadUrlEmbedding(body.url);
+
+	// Use vector pre-filter if embedding available, otherwise fall back to full scan
+	let pages;
+	if (deadUrlEmbedding) {
+		pages = await storage.searchByEmbedding(siteId, deadUrlEmbedding, 20);
+	} else {
+		pages = await storage.getPages(siteId);
+	}
+
+	const suggestions = findSuggestions(body.url, pages, deadUrlEmbedding);
 
 	// Log asynchronously
 	if (suggestions.length > 0) {
