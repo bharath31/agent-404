@@ -1,5 +1,5 @@
 import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
-import type { PageRecord, SiteRecord, SiteStats } from "../types.js";
+import type { PageRecord, SiteRecord, SiteStats, SuggestionLog, MatchQualityStats } from "../types.js";
 import type { StorageAdapter } from "./interface.js";
 
 type Sql = NeonQueryFunction<false, true>;
@@ -140,10 +140,12 @@ export class PostgresStorage implements StorageAdapter {
 		siteId: string,
 		deadUrl: string,
 		suggestedUrls: string[],
+		scores?: string,
+		matchTypes?: string,
 	): Promise<void> {
 		await this.sql`
-			INSERT INTO suggestion_logs (site_id, dead_url, suggested_urls)
-			VALUES (${siteId}, ${deadUrl}, ${JSON.stringify(suggestedUrls)})
+			INSERT INTO suggestion_logs (site_id, dead_url, suggested_urls, scores, match_types)
+			VALUES (${siteId}, ${deadUrl}, ${JSON.stringify(suggestedUrls)}, ${scores ?? null}, ${matchTypes ?? null})
 		`;
 	}
 
@@ -156,6 +158,49 @@ export class PostgresStorage implements StorageAdapter {
 		return {
 			pageCount: Number(pages.rows[0]?.count ?? 0),
 			suggestionsServed: Number(suggestions.rows[0]?.count ?? 0),
+		};
+	}
+
+	async getSuggestionLogs(siteId: string, limit: number): Promise<SuggestionLog[]> {
+		const { rows } = await this.sql.query(
+			`SELECT dead_url, suggested_urls, scores, match_types, created_at
+			FROM suggestion_logs
+			WHERE site_id = $1
+			ORDER BY created_at DESC
+			LIMIT $2`,
+			[siteId, limit],
+		);
+		return rows.map((row: Record<string, unknown>) => ({
+			deadUrl: row.dead_url as string,
+			suggestedUrls: JSON.parse((row.suggested_urls as string) || "[]"),
+			scores: (row.scores as string) || null,
+			matchTypes: (row.match_types as string) || null,
+			createdAt: String(row.created_at),
+		}));
+	}
+
+	async getMatchQualityStats(siteId: string): Promise<MatchQualityStats> {
+		const { rows } = await this.sql`
+			SELECT
+				COUNT(*) FILTER (WHERE created_at > NOW() - INTERVAL '24 hours') as last_24h,
+				COUNT(*) FILTER (WHERE created_at > NOW() - INTERVAL '7 days') as last_7d,
+				COUNT(*) FILTER (WHERE created_at > NOW() - INTERVAL '30 days') as last_30d,
+				COUNT(*) FILTER (WHERE match_types LIKE '%moved%') as moved_count,
+				COUNT(*) FILTER (WHERE match_types LIKE '%similar%') as similar_count,
+				COUNT(*) FILTER (WHERE match_types LIKE '%related%') as related_count
+			FROM suggestion_logs
+			WHERE site_id = ${siteId}
+		`;
+		const row = rows[0] || {};
+		return {
+			last24h: Number(row.last_24h ?? 0),
+			last7d: Number(row.last_7d ?? 0),
+			last30d: Number(row.last_30d ?? 0),
+			matchTypeDistribution: {
+				moved: Number(row.moved_count ?? 0),
+				similar: Number(row.similar_count ?? 0),
+				related: Number(row.related_count ?? 0),
+			},
 		};
 	}
 

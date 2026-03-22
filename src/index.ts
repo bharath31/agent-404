@@ -11,6 +11,8 @@ import { pruneStalePages } from "./engine/indexer.js";
 import { buildEmbeddingText, generateBatchEmbeddings } from "./engine/embeddings.js";
 import { landingPageHtml } from "./landing.js";
 import { demoPageHtml } from "./demo.js";
+import { analyze } from "./api/routes/analyze.js";
+import { dashboardHtml } from "./dashboard.js";
 
 export type Bindings = {
 	DATABASE_URL: string;
@@ -55,6 +57,7 @@ app.use("*", async (c, next) => {
 app.use("/api/sites", rateLimiter({ windowMs: 60_000, max: 10 }));
 app.use("/api/register", rateLimiter({ windowMs: 60_000, max: 60 }));
 app.use("/api/suggest", rateLimiter({ windowMs: 60_000, max: 60 }));
+app.use("/api/analyze", rateLimiter({ windowMs: 300_000, max: 2 }));
 
 // Landing page
 app.get("/", (c) => c.html(landingPageHtml));
@@ -972,6 +975,41 @@ app.route("/api/register", register);
 
 app.use("/api/suggest", apiKeyAuth());
 app.route("/api/suggest", suggest);
+
+app.use("/api/analyze", apiKeyAuth());
+app.route("/api/analyze", analyze);
+
+// Dashboard — server-rendered, authenticated via query param
+app.get("/dashboard", async (c) => {
+	const key = c.req.query("key");
+	if (!key || typeof key !== "string") {
+		return c.text("Missing API key. Use /dashboard?key=YOUR_API_KEY", 401);
+	}
+
+	const dbUrl = c.env?.DATABASE_URL || process.env.DATABASE_URL || process.env.POSTGRES_URL;
+	const storage = new PostgresStorage(dbUrl);
+
+	const site = await storage.getSiteByApiKey(key);
+	if (!site) {
+		return c.text("Invalid API key", 401);
+	}
+
+	const [stats, recentLogs, matchQuality] = await Promise.all([
+		storage.getStats(site.id),
+		storage.getSuggestionLogs(site.id, 20),
+		storage.getMatchQualityStats(site.id),
+	]);
+
+	return c.html(
+		dashboardHtml({
+			domain: site.domain,
+			pageCount: stats.pageCount,
+			suggestionsServed: stats.suggestionsServed,
+			recentLogs,
+			matchQuality,
+		}),
+	);
+});
 
 // Cron: re-crawl sitemaps + prune stale pages
 app.get("/api/cron", async (c) => {
