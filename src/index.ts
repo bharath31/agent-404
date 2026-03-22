@@ -11,6 +11,7 @@ import { pruneStalePages } from "./engine/indexer.js";
 import { buildEmbeddingText, generateBatchEmbeddings } from "./engine/embeddings.js";
 import { landingPageHtml } from "./landing.js";
 import { demoPageHtml } from "./demo.js";
+import { analyze } from "./api/routes/analyze.js";
 
 export type Bindings = {
 	DATABASE_URL: string;
@@ -55,6 +56,7 @@ app.use("*", async (c, next) => {
 app.use("/api/sites", rateLimiter({ windowMs: 60_000, max: 10 }));
 app.use("/api/register", rateLimiter({ windowMs: 60_000, max: 60 }));
 app.use("/api/suggest", rateLimiter({ windowMs: 60_000, max: 60 }));
+app.use("/api/analyze", rateLimiter({ windowMs: 300_000, max: 2 }));
 
 // Landing page
 app.get("/", (c) => c.html(landingPageHtml));
@@ -972,6 +974,9 @@ app.route("/api/register", register);
 
 app.use("/api/suggest", apiKeyAuth());
 app.route("/api/suggest", suggest);
+
+app.use("/api/analyze", apiKeyAuth());
+app.route("/api/analyze", analyze);
 
 // Cron: re-crawl sitemaps + prune stale pages
 app.get("/api/cron", async (c) => {

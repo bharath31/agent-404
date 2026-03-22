@@ -28,3 +28,11 @@ export interface SiteStats {
 	pageCount: number;
 	suggestionsServed: number;
 }
+
+export interface AnalysisReport {
+	domain: string;
+	analyzedAt: string;
+	pagesAnalyzed: number;
+	brokenLinks: { sourcePage: string; targetUrl: string }[];
+	orphanPages: string[];
+}
