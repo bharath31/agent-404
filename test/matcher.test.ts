@@ -101,6 +101,38 @@ describe("findSuggestions", () => {
 		expect(urls.some((u) => u.includes("deploy"))).toBe(true);
 	});
 
+	it("should match via stemming (deploy → deployment)", () => {
+		const stemPages = [
+			makePage("https://example.com/docs/deployment", "Deployment Guide"),
+			makePage("https://example.com/docs/monitoring", "Monitoring Guide"),
+			makePage("https://example.com/docs/testing", "Testing Guide"),
+		];
+		const results = findSuggestions("https://example.com/docs/deploy", stemPages);
+		expect(results.length).toBeGreaterThan(0);
+		expect(results[0].url).toContain("/deployment");
+	});
+
+	it("should match via stemming (message → messaging)", () => {
+		const stemPages = [
+			makePage("https://example.com/docs/messaging", "Messaging API"),
+			makePage("https://example.com/docs/voice", "Voice API"),
+			makePage("https://example.com/docs/video", "Video API"),
+		];
+		const results = findSuggestions("https://example.com/docs/message", stemPages);
+		expect(results.length).toBeGreaterThan(0);
+		expect(results[0].url).toContain("/messaging");
+	});
+
+	it("should match via stemming (organize → organizations)", () => {
+		const stemPages = [
+			makePage("https://example.com/api/organizations", "Organizations API"),
+			makePage("https://example.com/api/users", "Users API"),
+		];
+		const results = findSuggestions("https://example.com/api/organize", stemPages);
+		expect(results.length).toBeGreaterThan(0);
+		expect(results[0].url).toContain("/organizations");
+	});
+
 	it("should rank similar paths higher", () => {
 		const results = findSuggestions("https://example.com/docs/v3/billing", pages);
 		expect(results[0].url).toBe("https://example.com/docs/v3/billing");

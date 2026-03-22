@@ -1,4 +1,5 @@
 import type { PageRecord, Suggestion } from "../types.js";
+import { stemToken } from "./stemmer.js";
 
 const SCORE_THRESHOLD = 0.2;
 const MAX_RESULTS = 5;
@@ -171,6 +172,15 @@ function jaccardVersionTolerant(a: string[], b: string[]): number {
 				if (prefixMatch) {
 					matches += 0.7;
 					used.add(prefixMatch);
+				} else {
+					// Stem match: "message" ↔ "messaging" = 0.6
+					const stemMatch = b.find(
+						(bSeg) => !used.has(bSeg) && stemToken(seg) === stemToken(bSeg),
+					);
+					if (stemMatch) {
+						matches += 0.6;
+						used.add(stemMatch);
+					}
 				}
 			}
 		}
@@ -231,10 +241,21 @@ function keywordOverlap(a: Set<string>, b: Set<string>): number {
 			intersection++;
 		} else {
 			// Prefix match: "message" matches "messaging" as 0.7
+			let matched = false;
 			for (const bWord of b) {
 				if (isPrefixMatch(word, bWord)) {
 					intersection += 0.7;
+					matched = true;
 					break;
+				}
+			}
+			// Stem match: "deploy" matches "deployment" as 0.6
+			if (!matched) {
+				for (const bWord of b) {
+					if (stemToken(word) === stemToken(bWord)) {
+						intersection += 0.6;
+						break;
+					}
 				}
 			}
 		}
