@@ -33,13 +33,17 @@ suggest.post("/", async (c) => {
 
 	const suggestions = findSuggestions(body.url, pages, deadUrlEmbedding);
 
-	// Log asynchronously
+	// Log asynchronously (include scores + match types for dashboard)
 	if (suggestions.length > 0) {
+		const scores = JSON.stringify(suggestions.map((s) => s.score));
+		const matchTypes = JSON.stringify(suggestions.map((s) => s.matchType));
 		storage
 			.recordSuggestionServed(
 				siteId,
 				body.url,
 				suggestions.map((s) => s.url),
+				scores,
+				matchTypes,
 			)
 			.catch(() => {});
 	}

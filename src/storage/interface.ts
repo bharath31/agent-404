@@ -1,4 +1,4 @@
-import type { PageRecord, SiteRecord, SiteStats } from "../types.js";
+import type { PageRecord, SiteRecord, SiteStats, SuggestionLog, MatchQualityStats } from "../types.js";
 
 export interface StorageAdapter {
 	createSite(domain: string): Promise<SiteRecord>;
@@ -19,6 +19,14 @@ export interface StorageAdapter {
 	searchByEmbedding(siteId: string, embedding: number[], limit: number): Promise<PageRecord[]>;
 	deleteStalePagesOlderThan(siteId: string, cutoff: string): Promise<number>;
 
-	recordSuggestionServed(siteId: string, deadUrl: string, suggestedUrls: string[]): Promise<void>;
+	recordSuggestionServed(
+		siteId: string,
+		deadUrl: string,
+		suggestedUrls: string[],
+		scores?: string,
+		matchTypes?: string,
+	): Promise<void>;
 	getStats(siteId: string): Promise<SiteStats>;
+	getSuggestionLogs(siteId: string, limit: number): Promise<SuggestionLog[]>;
+	getMatchQualityStats(siteId: string): Promise<MatchQualityStats>;
 }
