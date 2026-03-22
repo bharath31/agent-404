@@ -994,11 +994,20 @@ app.get("/dashboard", async (c) => {
 		return c.text("Invalid API key", 401);
 	}
 
-	const [stats, recentLogs, matchQuality] = await Promise.all([
-		storage.getStats(site.id),
-		storage.getSuggestionLogs(site.id, 20),
-		storage.getMatchQualityStats(site.id),
-	]);
+	const stats = await storage.getStats(site.id);
+	let recentLogs: import("./types.js").SuggestionLog[] = [];
+	let matchQuality: import("./types.js").MatchQualityStats = {
+		last24h: 0, last7d: 0, last30d: 0,
+		matchTypeDistribution: { moved: 0, similar: 0, related: 0 },
+	};
+	try {
+		[recentLogs, matchQuality] = await Promise.all([
+			storage.getSuggestionLogs(site.id, 20),
+			storage.getMatchQualityStats(site.id),
+		]);
+	} catch {
+		// columns may not exist if migration 0003 hasn't been run yet
+	}
 
 	return c.html(
 		dashboardHtml({
