@@ -56,6 +56,10 @@ Embeddings are generated via any OpenAI-compatible API (default: OpenRouter with
 - **Backfill** — the daily cron job generates embeddings for any pages that are missing them (in batches of 100)
 - **Config** — `EMBEDDING_API_URL` and `EMBEDDING_MODEL` env vars let you point at any provider (OpenAI, Azure, local)
 
+## Server-side mode
+
+The script-tag approach needs a 404 page that renders HTML and executes JS. For surfaces where that doesn't apply — bare `nginx =404` responses, static-site 404s that ship no bundle, CDN-cached 404s, or JSON API paths — see [agent404-server](https://github.com/kormco/agent404-server) by [@kormco](https://github.com/kormco). Sibling project: webserver-layer interception, sitemap-driven index, agent-vs-human content negotiation.
+
 ## API
 
 ### Register a site
