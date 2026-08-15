@@ -64,8 +64,11 @@ Unit tests (`vitest.config.ts`) exclude `e2e.test.ts` and `browser.test.ts`. E2E
 
 Configured in `.env.local` (gitignored). Required: `DATABASE_URL`. Optional: `EMBEDDING_API_KEY`, `EMBEDDING_API_URL`, `EMBEDDING_MODEL`, `CRON_SECRET`.
 
-## Roadmap
+## Planning documents
 
-### Matcher improvements
-- **Substring/prefix matching for path segments** — Currently "work" doesn't match "workers" because Jaccard requires exact token equality. Add partial-match scoring (e.g., if one segment is a prefix of another with min length 3, count as a 0.7 match instead of 0). This would fix cases like `developers.cloudflare.com/work/` → `/workers/`.
-- **Stemming or fuzzy token matching** — "message" doesn't match "messaging" at the token level. A lightweight stemmer or edit-distance-based token similarity (e.g., tokens within Levenshtein distance 2 count as partial matches) would improve recall for typo-like dead URLs.
+This repo is public and holds code, tests, and docs for what already ships. Roadmaps,
+plans, PRDs, briefs and go-to-market material live in the Linear project instead —
+see `AGENTS.md` for the rule and `.gitignore` for the filename patterns it blocks.
+
+The two matcher improvements previously listed here both shipped: prefix matching in
+`934d96b`, stemming in `72fef49`.

@@ -7,3 +7,27 @@ dist/
 *.log
 .vercel
 test-results/
+
+# Strategy and planning documents — see AGENTS.md.
+# This repo is public; plans, roadmaps, PRDs, briefs and go-to-market material
+# live in the Linear project instead. These patterns are a safety net, not the
+# rule: they will not catch an unanticipated filename, `git add -f`, or a file
+# that is already tracked.
+plans/
+docs/plans/
+docs/internal/
+*.plan.md
+*-plan.md
+*_plan.md
+[Rr][Oo][Aa][Dd][Mm][Aa][Pp]*.md
+[Pp][Rr][Dd].md
+*-[Pp][Rr][Dd].md
+*-brief.md
+*-briefs.md
+[Ll][Aa][Uu][Nn][Cc][Hh]*.md
+[Mm][Aa][Rr][Kk][Ee][Tt][Ii][Nn][Gg]*.md
+[Gg][Tt][Mm]*.md
+[Ss][Tt][Rr][Aa][Tt][Ee][Gg][Yy]*.md
+[Aa][Dd][Oo][Pp][Tt][Ii][Oo][Nn]*.md
+[Tt][Aa][Cc][Tt][Ii][Cc][Ss]*.md
+[Pp][Oo][Ss][Ii][Tt][Ii][Oo][Nn][Ii][Nn][Gg]*.md
