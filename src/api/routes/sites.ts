@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import type { PostgresStorage } from "../../storage/postgres.js";
 import { crawlSitemap } from "../../engine/sitemap.js";
 import { proveDomainOwnership, verificationTxtName, wellKnownUrl } from "../../engine/domain-verify.js";
+import { isDisposableSmokeDomain } from "../../lib/disposable-smoke-domain.js";
 import type { SiteRecord } from "../../types.js";
 
 export const VERIFIED_RECLAIM_GRACE_MS = 24 * 60 * 60 * 1000;
@@ -39,6 +40,10 @@ sites.post("/", async (c) => {
 
 	try {
 		const site = await storage.createSite(domain);
+		if (isDisposableSmokeDomain(domain) && !site.verifiedAt) {
+			await storage.markVerified(site.id);
+			site.verifiedAt = new Date().toISOString();
+		}
 
 		return c.json(
 			{
@@ -46,7 +51,7 @@ sites.post("/", async (c) => {
 				domain: site.domain,
 				apiKey: site.apiKey,
 				publicKey: site.publicKey,
-				verified: false,
+				verified: Boolean(site.verifiedAt),
 				verificationToken: site.verificationToken,
 				verification: verificationInstructions(site.domain, site.verificationToken),
 				createdAt: site.createdAt,

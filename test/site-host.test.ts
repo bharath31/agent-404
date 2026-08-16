@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { hostBelongsToDomain, urlBelongsToSite } from "../src/lib/site-host.js";
+import { isDisposableSmokeDomain } from "../src/lib/disposable-smoke-domain.js";
 
 describe("hostBelongsToDomain", () => {
 	it("matches the registered domain exactly", () => {
@@ -17,5 +18,14 @@ describe("hostBelongsToDomain", () => {
 		expect(urlBelongsToSite("https://example.com/x", "example.com")).toBe(true);
 		expect(urlBelongsToSite("https://evil.com/x", "example.com")).toBe(false);
 		expect(urlBelongsToSite("javascript:alert(1)", "example.com")).toBe(false);
+	});
+});
+
+describe("isDisposableSmokeDomain", () => {
+	it("matches CI smoke hosts only", () => {
+		expect(isDisposableSmokeDomain("smoke-1786853393592.example.com")).toBe(true);
+		expect(isDisposableSmokeDomain("new.example.com")).toBe(false);
+		expect(isDisposableSmokeDomain("smoke-abc.example.com")).toBe(false);
+		expect(isDisposableSmokeDomain("smoke-1.example.net")).toBe(false);
 	});
 });

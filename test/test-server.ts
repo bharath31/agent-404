@@ -24,6 +24,8 @@ export interface TestServerOptions {
 	apiBase?: string;
 	/** Omit data-api-base so the published script uses its baked-in origin. */
 	omitDataApiBase?: boolean;
+	/** README snippet path: data-public-key instead of the write secret. */
+	publicKey?: string;
 }
 
 function injectScript(
@@ -32,9 +34,13 @@ function injectScript(
 	apiKey: string,
 	scriptSrc: string,
 	apiBase: string,
+	publicKey?: string,
 ): string {
+	const keyAttr = publicKey
+		? `data-public-key="${publicKey}"`
+		: `data-api-key="${apiKey}"`;
 	const scriptTag =
-		`<script src="${scriptSrc}" data-site-id="${siteId}" data-api-key="${apiKey}"` +
+		`<script src="${scriptSrc}" data-site-id="${siteId}" ${keyAttr}` +
 		(apiBase ? ` data-api-base="${apiBase}"` : "") +
 		` defer></script>`;
 	return html.replace("</body>", `  ${scriptTag}\n</body>`);
@@ -189,12 +195,12 @@ export function startServer(
 
 			if (LIVE_PATHS.has(url)) {
 				res.writeHead(200, { "Content-Type": "text/html" });
-				res.end(injectScript(livePageHtml, siteId, apiKey, scriptSrc, apiOrigin));
+				res.end(injectScript(livePageHtml, siteId, apiKey, scriptSrc, apiOrigin, opts.publicKey));
 				return;
 			}
 
 			res.writeHead(404, { "Content-Type": "text/html" });
-			res.end(injectScript(notFoundHtml, siteId, apiKey, scriptSrc, apiOrigin));
+			res.end(injectScript(notFoundHtml, siteId, apiKey, scriptSrc, apiOrigin, opts.publicKey));
 		});
 
 		server.listen(0, "0.0.0.0", () => {

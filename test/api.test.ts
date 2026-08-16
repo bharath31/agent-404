@@ -682,6 +682,18 @@ describe("API routes", () => {
 			expect(suggestRes.status).toBe(403);
 		});
 
+		it("should auto-verify disposable CI smoke domains", async () => {
+			const res = await app.request("/api/sites", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ domain: `smoke-${Date.now()}.example.com` }),
+			});
+			expect(res.status).toBe(201);
+			const body = await res.json();
+			expect(body.verified).toBe(true);
+			expect(storage.sites.find((s) => s.id === body.id)?.verifiedAt).toBeTruthy();
+		});
+
 		it("should verify via the well-known file", async () => {
 			const created = await app.request("/api/sites", {
 				method: "POST",

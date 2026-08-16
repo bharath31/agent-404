@@ -4,6 +4,74 @@ import type { StorageAdapter } from "./interface.js";
 
 type Sql = NeonQueryFunction<false, true>;
 
+/**
+ * Production deploys the Hono app without running `npm run db:migrate`.
+ * Theme 5/6 INSERTs fail with 500 until 0004/0005 exist. Apply those
+ * ADD COLUMN IF NOT EXISTS statements once per isolate; fall back if DDL
+ * is denied.
+ */
+let schemaReady: Promise<SchemaFlags> | null = null;
+
+type SchemaFlags = {
+	trustColumns: boolean;
+	writeContentHash: boolean;
+};
+
+function missingColumn(err: unknown): boolean {
+	const msg = String((err as { message?: string })?.message || err);
+	return /42703|does not exist|undefined column/i.test(msg);
+}
+
+async function applyPendingSchema(sql: Sql): Promise<SchemaFlags> {
+	const flags: SchemaFlags = { trustColumns: true, writeContentHash: true };
+	try {
+		await sql.query(`ALTER TABLE sites ADD COLUMN IF NOT EXISTS public_key TEXT`);
+		await sql.query(`ALTER TABLE sites ADD COLUMN IF NOT EXISTS verified_at TIMESTAMP`);
+		await sql.query(`ALTER TABLE sites ADD COLUMN IF NOT EXISTS verification_token TEXT`);
+		await sql.query(`ALTER TABLE sites ADD COLUMN IF NOT EXISTS reclaim_token TEXT`);
+		await sql.query(`ALTER TABLE sites ADD COLUMN IF NOT EXISTS reclaim_requested_at TIMESTAMP`);
+		await sql.query(`ALTER TABLE sites ADD COLUMN IF NOT EXISTS last_cron_at TIMESTAMP`);
+		// Pre-trust rows have no public_key; grandfather those only. Do not
+		// stamp verified_at on every NULL — that would verify new sites.
+		await sql.query(
+			`UPDATE sites SET verified_at = created_at WHERE verified_at IS NULL AND public_key IS NULL`,
+		);
+		await sql.query(
+			`UPDATE sites SET public_key = 'pk_' || replace(gen_random_uuid()::text, '-', '') WHERE public_key IS NULL`,
+		);
+		await sql.query(
+			`UPDATE sites SET verification_token = 'vf_' || replace(gen_random_uuid()::text, '-', '') WHERE verification_token IS NULL`,
+		);
+		try {
+			await sql.query(`ALTER TABLE sites ALTER COLUMN public_key SET NOT NULL`);
+			await sql.query(`ALTER TABLE sites ALTER COLUMN verification_token SET NOT NULL`);
+			await sql.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_sites_public_key ON sites (public_key)`);
+		} catch {
+			// NOT NULL / unique index are optional if older rows could not be backfilled.
+		}
+	} catch (err) {
+		console.error("Trust schema ensure failed:", (err as Error)?.message || err);
+		flags.trustColumns = false;
+	}
+	try {
+		await sql.query(`ALTER TABLE pages ADD COLUMN IF NOT EXISTS content_hash TEXT`);
+	} catch (err) {
+		console.error("Scale schema ensure failed:", (err as Error)?.message || err);
+		flags.writeContentHash = false;
+	}
+	return flags;
+}
+
+function ensureSchema(sql: Sql): Promise<SchemaFlags> {
+	if (!schemaReady) {
+		schemaReady = applyPendingSchema(sql).catch((err) => {
+			schemaReady = null;
+			throw err;
+		});
+	}
+	return schemaReady;
+}
+
 export class PostgresStorage implements StorageAdapter {
 	private sql: Sql;
 
@@ -21,22 +89,40 @@ export class PostgresStorage implements StorageAdapter {
 		return this.sql;
 	}
 
+	private async flags(): Promise<SchemaFlags> {
+		return ensureSchema(this.sql);
+	}
+
 	async createSite(domain: string): Promise<SiteRecord> {
+		const flags = await this.flags();
 		const id = crypto.randomUUID();
 		const apiKey = `key_${crypto.randomUUID().replace(/-/g, "")}`;
 		const publicKey = `pk_${crypto.randomUUID().replace(/-/g, "")}`;
 		const verificationToken = `vf_${crypto.randomUUID().replace(/-/g, "")}`;
 
+		if (flags.trustColumns) {
+			try {
+				const { rows } = await this.sql`
+					INSERT INTO sites (id, domain, api_key, public_key, verification_token)
+					VALUES (${id}, ${domain}, ${apiKey}, ${publicKey}, ${verificationToken})
+					RETURNING *
+				`;
+				return this.mapSiteRow(rows[0]);
+			} catch (err) {
+				if (!missingColumn(err)) throw err;
+			}
+		}
+
 		const { rows } = await this.sql`
-			INSERT INTO sites (id, domain, api_key, public_key, verification_token)
-			VALUES (${id}, ${domain}, ${apiKey}, ${publicKey}, ${verificationToken})
+			INSERT INTO sites (id, domain, api_key)
+			VALUES (${id}, ${domain}, ${apiKey})
 			RETURNING *
 		`;
-
 		return this.mapSiteRow(rows[0]);
 	}
 
 	async getSite(id: string): Promise<SiteRecord | null> {
+		await this.flags();
 		const { rows } = await this.sql`SELECT * FROM sites WHERE id = ${id}`;
 		return rows[0] ? this.mapSiteRow(rows[0]) : null;
 	}
@@ -47,14 +133,24 @@ export class PostgresStorage implements StorageAdapter {
 	}
 
 	async getSiteByKey(key: string): Promise<{ site: SiteRecord; keyType: "secret" | "public" } | null> {
-		const { rows } = await this.sql`
-			SELECT * FROM sites WHERE api_key = ${key} OR public_key = ${key}
-		`;
+		const flags = await this.flags();
+		try {
+			if (flags.trustColumns) {
+				const { rows } = await this.sql`
+					SELECT * FROM sites WHERE api_key = ${key} OR public_key = ${key}
+				`;
+				if (!rows[0]) return null;
+				const site = this.mapSiteRow(rows[0]);
+				if (site.apiKey === key) return { site, keyType: "secret" };
+				if (site.publicKey === key) return { site, keyType: "public" };
+				return null;
+			}
+		} catch (err) {
+			if (!missingColumn(err)) throw err;
+		}
+		const { rows } = await this.sql`SELECT * FROM sites WHERE api_key = ${key}`;
 		if (!rows[0]) return null;
-		const site = this.mapSiteRow(rows[0]);
-		if (site.apiKey === key) return { site, keyType: "secret" };
-		if (site.publicKey === key) return { site, keyType: "public" };
-		return null;
+		return { site: this.mapSiteRow(rows[0]), keyType: "secret" };
 	}
 
 	async getSiteByDomain(domain: string): Promise<SiteRecord | null> {
@@ -63,6 +159,7 @@ export class PostgresStorage implements StorageAdapter {
 	}
 
 	async markVerified(id: string): Promise<void> {
+		await this.flags();
 		await this.sql`UPDATE sites SET verified_at = NOW(), reclaim_token = NULL, reclaim_requested_at = NULL WHERE id = ${id}`;
 	}
 
@@ -103,28 +200,6 @@ export class PostgresStorage implements StorageAdapter {
 		return `[${embedding.join(",")}]`;
 	}
 
-	private scaleReady: Promise<void> | null = null;
-	private writeContentHash = true;
-
-	private ensureScaleColumns(): Promise<void> {
-		if (!this.scaleReady) {
-			this.scaleReady = (async () => {
-				try {
-					await this.sql.query(`ALTER TABLE pages ADD COLUMN IF NOT EXISTS content_hash TEXT`);
-					await this.sql.query(`ALTER TABLE sites ADD COLUMN IF NOT EXISTS last_cron_at TIMESTAMP`);
-				} catch {
-					this.writeContentHash = false;
-				}
-			})();
-		}
-		return this.scaleReady;
-	}
-
-	private missingContentHashColumn(err: unknown): boolean {
-		const msg = String((err as { message?: string })?.message || err);
-		return /content_hash|42703|does not exist/i.test(msg);
-	}
-
 	async upsertPage(
 		siteId: string,
 		page: Pick<PageRecord, "url" | "title" | "description" | "headings"> & {
@@ -134,13 +209,13 @@ export class PostgresStorage implements StorageAdapter {
 	): Promise<void> {
 		const embeddingStr = embedding ? this.validateEmbedding(embedding) : null;
 		const hash = page.contentHash ?? null;
-		await this.ensureScaleColumns();
+		const flags = await this.flags();
 
 		try {
-			await this.upsertPageRow(siteId, page, embeddingStr, hash, this.writeContentHash);
+			await this.upsertPageRow(siteId, page, embeddingStr, hash, flags.writeContentHash);
 		} catch (err) {
-			if (this.writeContentHash && this.missingContentHashColumn(err)) {
-				this.writeContentHash = false;
+			if (flags.writeContentHash && missingColumn(err)) {
+				flags.writeContentHash = false;
 				await this.upsertPageRow(siteId, page, embeddingStr, hash, false);
 				return;
 			}
@@ -263,16 +338,16 @@ export class PostgresStorage implements StorageAdapter {
 	}
 
 	async getPageContentHash(siteId: string, url: string): Promise<string | null> {
-		await this.ensureScaleColumns();
-		if (!this.writeContentHash) return null;
+		const flags = await this.flags();
+		if (!flags.writeContentHash) return null;
 		try {
 			const { rows } = await this.sql`
 				SELECT content_hash FROM pages WHERE site_id = ${siteId} AND url = ${url}
 			`;
 			return (rows[0]?.content_hash as string) || null;
 		} catch (err) {
-			if (this.missingContentHashColumn(err)) {
-				this.writeContentHash = false;
+			if (missingColumn(err)) {
+				flags.writeContentHash = false;
 				return null;
 			}
 			throw err;
