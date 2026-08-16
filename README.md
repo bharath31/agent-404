@@ -26,7 +26,11 @@ export const middleware = agent404({
 });
 ```
 
-Same helper exists for Express (`recoverExpress404`), Cloudflare Workers (`agent404Worker`), Netlify Edge (`agent404Netlify`), and nginx (`adapters/nginx.md`). Shared logic lives in `adapters/core.ts`: `recover404()` injects JSON-LD, a suggestion list, `Link` alternates, and honors `Accept: application/json` (still a 404, with `Vary: Accept`).
+Same helper exists for Express (`recoverExpress404` from `adapters/express.ts`), Cloudflare Workers (`agent404Worker`), Netlify Edge (`agent404Netlify`), and nginx (`adapters/nginx.md`). Shared logic lives in `adapters/core.ts`: `recover404()` injects JSON-LD, a suggestion list, `Link` alternates, and honors `Accept: application/json` (still a 404, with `Vary: Accept`).
+
+App Router `not-found.tsx` must return JSX, not a `Response`. Keep `middleware.ts` for crawlers (Link headers + JSON Accept). In `not-found.tsx`, call `notFoundSuggestions()` from `adapters/next.ts` to render the same links for humans.
+
+Suggestions in the raw 404 body are visible to any `curl`, not only JS clients. The origin probe and the suggestion API each use a 2.5s timeout by default.
 
 ## Zero-config script (browsers only)
 

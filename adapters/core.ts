@@ -39,14 +39,30 @@ export function buildJsonLd(suggestions: { url: string; title: string; matchType
 	};
 }
 
+export function isSafeHttpUrl(url: string): boolean {
+	try {
+		const parsed = new URL(url);
+		return parsed.protocol === "http:" || parsed.protocol === "https:";
+	} catch {
+		return false;
+	}
+}
+
+export function sanitizeSuggestions<T extends { url: string; title?: string }>(suggestions: T[]): T[] {
+	return suggestions.filter((s) => isSafeHttpUrl(s.url));
+}
+
 export function buildLinkHeader(suggestions: { url: string; title: string }[]): string {
-	return suggestions
+	return sanitizeSuggestions(suggestions)
 		.map((s) => `<${s.url}>; rel="alternate"; title="${escapeLinkParam(s.title || s.url)}"`)
 		.join(", ");
 }
 
 function escapeLinkParam(value: string): string {
-	return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+	return value
+		.replace(/[\r\n]/g, " ")
+		.replace(/\\/g, "\\\\")
+		.replace(/"/g, '\\"');
 }
 
 export function prefersJson(accept: string | null | undefined): boolean {
@@ -70,7 +86,7 @@ function qValue(accept: string, type: string): number {
 }
 
 export function suggestionListHtml(suggestions: Suggestion[]): string {
-	const items = suggestions
+	const items = sanitizeSuggestions(suggestions)
 		.map(
 			(s) =>
 				`<li><a href="${escapeHtml(s.url)}">${escapeHtml(s.title || s.url)}</a> <span>${escapeHtml(s.matchType)}</span></li>`,
@@ -84,8 +100,9 @@ export function jsonLdScript(jsonLd: object): string {
 }
 
 export function injectRecoveryHtml(html: string, payload: SuggestPayload): string {
-	if (!payload.suggestions.length) return html;
-	const block = jsonLdScript(payload.jsonLd) + suggestionListHtml(payload.suggestions);
+	const suggestions = sanitizeSuggestions(payload.suggestions);
+	if (!suggestions.length) return html;
+	const block = jsonLdScript(payload.jsonLd) + suggestionListHtml(suggestions);
 	if (html.includes("</body>")) return html.replace("</body>", `${block}</body>`);
 	if (html.includes("</html>")) return html.replace("</html>", `${block}</html>`);
 	return html + block;
@@ -131,35 +148,53 @@ export async function recover404(
 	if (response.status !== 404) return response;
 	if (request.headers.get("x-agent-404") === "probe") return response;
 
-	const payload = await fetchSuggestions(request.url, {
-		...config,
-		origin: config.origin || originFromRequest(request),
-	});
-	if (!payload || payload.suggestions.length === 0) {
+	try {
+		const raw = await fetchSuggestions(request.url, {
+			...config,
+			origin: config.origin || originFromRequest(request),
+		});
+		const payload = raw
+			? { ...raw, suggestions: sanitizeSuggestions(raw.suggestions || []) }
+			: null;
+		if (!payload || payload.suggestions.length === 0) {
+			return withAcceptVary(response);
+		}
+
 		const headers = new Headers(response.headers);
 		headers.set("Vary", mergeVary(headers.get("Vary")));
-		return new Response(response.body, { status: 404, statusText: response.statusText, headers });
-	}
+		const link = buildLinkHeader(payload.suggestions);
+		if (link) {
+			try {
+				headers.set("Link", link);
+			} catch {
+				// Invalid header values must not turn a 404 into a 500.
+			}
+		}
 
+		if (prefersJson(request.headers.get("accept"))) {
+			headers.set("Content-Type", "application/json; charset=utf-8");
+			return new Response(JSON.stringify(payload), { status: 404, headers });
+		}
+
+		const contentType = headers.get("content-type") || "";
+		if (!contentType.includes("text/html") && !contentType.includes("application/xhtml")) {
+			headers.set("Content-Type", "text/html; charset=utf-8");
+			const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Not Found</title></head><body><h1>Not Found</h1>${suggestionListHtml(payload.suggestions)}${jsonLdScript(payload.jsonLd)}</body></html>`;
+			return new Response(html, { status: 404, headers });
+		}
+
+		const html = injectRecoveryHtml(await response.text(), payload);
+		headers.delete("content-length");
+		return new Response(html, { status: 404, headers });
+	} catch {
+		return withAcceptVary(response);
+	}
+}
+
+function withAcceptVary(response: Response): Response {
 	const headers = new Headers(response.headers);
 	headers.set("Vary", mergeVary(headers.get("Vary")));
-	headers.set("Link", buildLinkHeader(payload.suggestions));
-
-	if (prefersJson(request.headers.get("accept"))) {
-		headers.set("Content-Type", "application/json; charset=utf-8");
-		return new Response(JSON.stringify(payload), { status: 404, headers });
-	}
-
-	const contentType = headers.get("content-type") || "";
-	if (!contentType.includes("text/html") && !contentType.includes("application/xhtml")) {
-		headers.set("Content-Type", "text/html; charset=utf-8");
-		const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Not Found</title></head><body><h1>Not Found</h1>${suggestionListHtml(payload.suggestions)}${jsonLdScript(payload.jsonLd)}</body></html>`;
-		return new Response(html, { status: 404, headers });
-	}
-
-	const html = injectRecoveryHtml(await response.text(), payload);
-	headers.delete("content-length");
-	return new Response(html, { status: 404, headers });
+	return new Response(response.body, { status: 404, statusText: response.statusText, headers });
 }
 
 function originFromRequest(request: Request): string | undefined {

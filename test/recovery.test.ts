@@ -90,4 +90,63 @@ describe("HTTP recovery", () => {
 		expect(recovered.status).toBe(200);
 		expect(await recovered.text()).toBe("ok");
 	});
+
+	it("drops javascript: suggestion URLs and still returns 404", async () => {
+		vi.stubGlobal(
+			"fetch",
+			vi.fn().mockResolvedValue(
+				new Response(
+					JSON.stringify({
+						...payload,
+						suggestions: [
+							{ url: "javascript:alert(1)", title: "xss", score: 1, matchType: "related" },
+							payload.suggestions[0],
+						],
+					}),
+					{ status: 200 },
+				),
+			),
+		);
+		const request = new Request("https://docs.example.com/v2/auth", {
+			headers: { Accept: "text/html" },
+		});
+		const upstream = new Response("<html><body><h1>404</h1></body></html>", {
+			status: 404,
+			headers: { "Content-Type": "text/html" },
+		});
+		const recovered = await recover404(request, upstream, { apiKey: "pk_test" });
+		expect(recovered.status).toBe(404);
+		const html = await recovered.text();
+		expect(html).not.toContain("javascript:");
+		expect(html).toContain("/v3/auth");
+		expect(recovered.headers.get("link")).not.toContain("javascript:");
+	});
+
+	it("does not throw when a suggestion title contains CR/LF", async () => {
+		vi.stubGlobal(
+			"fetch",
+			vi.fn().mockResolvedValue(
+				new Response(
+					JSON.stringify({
+						...payload,
+						suggestions: [
+							{
+								url: "https://docs.example.com/v3/auth",
+								title: "Auth\r\nInjected: 1",
+								score: 0.9,
+								matchType: "moved",
+							},
+						],
+					}),
+					{ status: 200 },
+				),
+			),
+		);
+		const request = new Request("https://docs.example.com/v2/auth");
+		const upstream = new Response("nope", { status: 404, headers: { "Content-Type": "text/html" } });
+		const recovered = await recover404(request, upstream, { apiKey: "pk_test" });
+		expect(recovered.status).toBe(404);
+		expect(recovered.headers.get("link")).toBeTruthy();
+		expect(recovered.headers.get("link")).not.toMatch(/[\r\n]/);
+	});
 });
