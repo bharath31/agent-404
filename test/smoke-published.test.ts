@@ -6,6 +6,10 @@
  * script only updates after a production deploy. Each run inserts a
  * `smoke-<timestamp>.example.com` row; there is no public delete API, so
  * treat these as disposable telemetry sites.
+ *
+ * This job races Vercel: it hits the *currently deployed* API, not the
+ * commit under test. Retries register until production is healthy so a
+ * just-merged schema change can finish rolling out.
  */
 import { test, expect } from "@playwright/test";
 import { startServer } from "./test-server.js";
@@ -13,8 +17,35 @@ import { CANONICAL_ORIGIN, CANONICAL_SCRIPT_URL } from "../src/config.js";
 
 const run = process.env.SMOKE_PRODUCTION === "1";
 
+async function sleep(ms: number): Promise<void> {
+	await new Promise((r) => setTimeout(r, ms));
+}
+
+async function registerUntilOk(
+	apiKey: string,
+	page: { url: string; title: string; description: string; headings: string[] },
+): Promise<void> {
+	const deadline = Date.now() + 180_000;
+	let last = "";
+	while (Date.now() < deadline) {
+		const res = await fetch(`${CANONICAL_ORIGIN}/api/register`, {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+				"x-api-key": apiKey,
+			},
+			body: JSON.stringify(page),
+		});
+		last = `${res.status} ${await res.text()}`;
+		if (res.ok) return;
+		await sleep(5_000);
+	}
+	throw new Error(`production /api/register did not recover: ${last}`);
+}
+
 test.describe("published snippet smoke", () => {
 	test.skip(!run, "Set SMOKE_PRODUCTION=1 to hit the published origin");
+	test.describe.configure({ timeout: 240_000 });
 
 	const TEST_DOMAIN = `smoke-${Date.now()}.example.com`;
 	let siteId: string;
@@ -28,7 +59,7 @@ test.describe("published snippet smoke", () => {
 			headers: { "Content-Type": "application/json" },
 			body: JSON.stringify({ domain: TEST_DOMAIN }),
 		});
-		expect(siteRes.ok).toBe(true);
+		expect(siteRes.ok, await siteRes.text()).toBe(true);
 		const siteBody = await siteRes.json();
 		siteId = siteBody.id;
 		apiKey = siteBody.apiKey;
@@ -41,18 +72,11 @@ test.describe("published snippet smoke", () => {
 		closeServer = server.close;
 
 		const pageHost = new URL(pageOrigin).host;
-		await fetch(`${CANONICAL_ORIGIN}/api/register`, {
-			method: "POST",
-			headers: {
-				"Content-Type": "application/json",
-				"x-api-key": apiKey,
-			},
-			body: JSON.stringify({
-				url: `http://${pageHost}/docs/v3/authentication`,
-				title: "Authentication Guide",
-				description: "How to authenticate with the API",
-				headings: ["OAuth2 Flow"],
-			}),
+		await registerUntilOk(apiKey, {
+			url: `http://${pageHost}/docs/v3/authentication`,
+			title: "Authentication Guide",
+			description: "How to authenticate with the API",
+			headings: ["OAuth2 Flow"],
 		});
 	});
 
@@ -67,7 +91,9 @@ test.describe("published snippet smoke", () => {
 		await page.goto(`${pageOrigin}/docs/v3/authentication`);
 		const resp = await beacon;
 		expect(new URL(resp.url()).origin).toBe(CANONICAL_ORIGIN);
-		expect(resp.ok()).toBe(true);
+		if (!resp.ok()) {
+			throw new Error(`beacon failed: HTTP ${resp.status()} ${await resp.text()}`);
+		}
 
 		const status = await fetch(`${CANONICAL_ORIGIN}/api/install/status`, {
 			headers: { "x-api-key": apiKey },

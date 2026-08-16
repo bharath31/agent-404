@@ -53,6 +53,28 @@ export class PostgresStorage implements StorageAdapter {
 		return `[${embedding.join(",")}]`;
 	}
 
+	private scaleReady: Promise<void> | null = null;
+	private writeContentHash = true;
+
+	private ensureScaleColumns(): Promise<void> {
+		if (!this.scaleReady) {
+			this.scaleReady = (async () => {
+				try {
+					await this.sql.query(`ALTER TABLE pages ADD COLUMN IF NOT EXISTS content_hash TEXT`);
+					await this.sql.query(`ALTER TABLE sites ADD COLUMN IF NOT EXISTS last_cron_at TIMESTAMP`);
+				} catch {
+					this.writeContentHash = false;
+				}
+			})();
+		}
+		return this.scaleReady;
+	}
+
+	private missingContentHashColumn(err: unknown): boolean {
+		const msg = String((err as { message?: string })?.message || err);
+		return /content_hash|42703|does not exist/i.test(msg);
+	}
+
 	async upsertPage(
 		siteId: string,
 		page: Pick<PageRecord, "url" | "title" | "description" | "headings"> & {
@@ -62,8 +84,28 @@ export class PostgresStorage implements StorageAdapter {
 	): Promise<void> {
 		const embeddingStr = embedding ? this.validateEmbedding(embedding) : null;
 		const hash = page.contentHash ?? null;
+		await this.ensureScaleColumns();
 
-		if (embeddingStr) {
+		try {
+			await this.upsertPageRow(siteId, page, embeddingStr, hash, this.writeContentHash);
+		} catch (err) {
+			if (this.writeContentHash && this.missingContentHashColumn(err)) {
+				this.writeContentHash = false;
+				await this.upsertPageRow(siteId, page, embeddingStr, hash, false);
+				return;
+			}
+			throw err;
+		}
+	}
+
+	private async upsertPageRow(
+		siteId: string,
+		page: Pick<PageRecord, "url" | "title" | "description" | "headings">,
+		embeddingStr: string | null,
+		hash: string | null,
+		withHash: boolean,
+	): Promise<void> {
+		if (embeddingStr && withHash) {
 			await this.sql.query(
 				`INSERT INTO pages (site_id, url, title, description, headings, embedding, content_hash)
 				VALUES ($1, $2, $3, $4, $5, $6::vector, $7)
@@ -74,17 +116,25 @@ export class PostgresStorage implements StorageAdapter {
 					embedding = COALESCE(EXCLUDED.embedding, pages.embedding),
 					content_hash = COALESCE(EXCLUDED.content_hash, pages.content_hash),
 					last_seen = NOW()`,
-				[
-					siteId,
-					page.url,
-					page.title,
-					page.description,
-					page.headings,
-					embeddingStr,
-					hash,
-				],
+				[siteId, page.url, page.title, page.description, page.headings, embeddingStr, hash],
 			);
-		} else {
+			return;
+		}
+		if (embeddingStr) {
+			await this.sql.query(
+				`INSERT INTO pages (site_id, url, title, description, headings, embedding)
+				VALUES ($1, $2, $3, $4, $5, $6::vector)
+				ON CONFLICT (site_id, url) DO UPDATE SET
+					title = EXCLUDED.title,
+					description = EXCLUDED.description,
+					headings = EXCLUDED.headings,
+					embedding = COALESCE(EXCLUDED.embedding, pages.embedding),
+					last_seen = NOW()`,
+				[siteId, page.url, page.title, page.description, page.headings, embeddingStr],
+			);
+			return;
+		}
+		if (withHash) {
 			await this.sql.query(
 				`INSERT INTO pages (site_id, url, title, description, headings, content_hash)
 				VALUES ($1, $2, $3, $4, $5, $6)
@@ -96,7 +146,18 @@ export class PostgresStorage implements StorageAdapter {
 					last_seen = NOW()`,
 				[siteId, page.url, page.title, page.description, page.headings, hash],
 			);
+			return;
 		}
+		await this.sql.query(
+			`INSERT INTO pages (site_id, url, title, description, headings)
+			VALUES ($1, $2, $3, $4, $5)
+			ON CONFLICT (site_id, url) DO UPDATE SET
+				title = EXCLUDED.title,
+				description = EXCLUDED.description,
+				headings = EXCLUDED.headings,
+				last_seen = NOW()`,
+			[siteId, page.url, page.title, page.description, page.headings],
+		);
 	}
 
 	async upsertPages(
@@ -152,10 +213,20 @@ export class PostgresStorage implements StorageAdapter {
 	}
 
 	async getPageContentHash(siteId: string, url: string): Promise<string | null> {
-		const { rows } = await this.sql`
-			SELECT content_hash FROM pages WHERE site_id = ${siteId} AND url = ${url}
-		`;
-		return (rows[0]?.content_hash as string) || null;
+		await this.ensureScaleColumns();
+		if (!this.writeContentHash) return null;
+		try {
+			const { rows } = await this.sql`
+				SELECT content_hash FROM pages WHERE site_id = ${siteId} AND url = ${url}
+			`;
+			return (rows[0]?.content_hash as string) || null;
+		} catch (err) {
+			if (this.missingContentHashColumn(err)) {
+				this.writeContentHash = false;
+				return null;
+			}
+			throw err;
+		}
 	}
 
 	async touchPage(siteId: string, url: string): Promise<void> {
