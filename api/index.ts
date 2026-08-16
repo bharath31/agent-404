@@ -12,7 +12,14 @@ export function applyForwardedProto(req: Request): Request {
 	}
 	const url = new URL(req.url);
 	url.protocol = `${proto}:`;
-	return new Request(url, req);
+	const targetUrl = url.toString();
+	return new Proxy(req, {
+		get(target, prop, receiver) {
+			if (prop === "url") return targetUrl;
+			const val = Reflect.get(target, prop, receiver);
+			return typeof val === "function" ? val.bind(target) : val;
+		},
+	});
 }
 
 export default getRequestListener(
