@@ -82,7 +82,11 @@ sites.post("/", async (c) => {
 			await storage.markVerified(site.id);
 			site.verifiedAt = new Date().toISOString();
 		}
-		crawlSitemap(domain, site.id, storage).catch(() => {});
+		// Crawl only once ownership is proven — unverified sites must not turn
+		// registration into a free fetch-and-embed against an arbitrary domain.
+		if (site.verifiedAt) {
+			crawlSitemap(domain, site.id, storage).catch(() => {});
+		}
 		return c.json(publicSite(site), 201);
 	} catch (err: any) {
 		if (err?.message?.includes("unique") || err?.message?.includes("duplicate")) {
@@ -137,7 +141,7 @@ sites.post("/:id/verify", async (c) => {
 	const id = c.req.param("id");
 	const storage = c.get("storage");
 	const site = await storage.getSite(id);
-	if (!site) {
+	if (!site || site.ownerSub !== c.get("ownerSub")) {
 		return c.json({ error: "Site not found" }, 404);
 	}
 	if (site.verifiedAt) {
@@ -240,7 +244,7 @@ sites.post("/reclaim/complete", async (c) => {
 		);
 	}
 
-	const updated = await storage.reclaimSite(site.id);
+	const updated = await storage.reclaimSite(site.id, c.get("ownerSub"));
 	crawlSitemap(updated.domain, updated.id, storage).catch(() => {});
 	return c.json({
 		ok: true,
@@ -260,7 +264,7 @@ sites.get("/:id/stats", async (c) => {
 	if (!site) {
 		return c.json({ error: "Site not found" }, 404);
 	}
-	if (site.ownerSub && site.ownerSub !== c.get("ownerSub")) {
+	if (site.ownerSub !== c.get("ownerSub")) {
 		return c.json({ error: "Site not found" }, 404);
 	}
 

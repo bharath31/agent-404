@@ -1058,8 +1058,14 @@ app.get("/dashboard", requireOwnerPage(), async (c) => {
 	const storage = c.get("storage");
 	const ownerSub = c.get("ownerSub");
 	let claimDomain: string | null = null;
+	let pendingDomain: string | null = null;
 	let notice: string | null = null;
 
+	// Read-only: this is a GET handler, so registration itself must happen via
+	// an explicit POST /api/sites (below, in the browser) — never as a side
+	// effect of loading a URL. A top-level GET carries session cookies under
+	// SameSite=Lax, so mutating here would let any page CSRF a signed-in owner
+	// into registering (and crawling) an attacker-chosen domain.
 	const registerRaw = c.req.query("register");
 	if (registerRaw) {
 		const domain = normalizeDomain(registerRaw);
@@ -1068,14 +1074,10 @@ app.get("/dashboard", requireOwnerPage(), async (c) => {
 		} else {
 			const existing = await storage.getSiteByDomain(domain);
 			if (!existing) {
-				const site = await storage.createSite(domain, ownerSub);
-				crawlSitemap(domain, site.id, storage).catch(() => {});
+				pendingDomain = domain;
+			} else if (existing.ownerSub === ownerSub) {
 				return c.redirect("/dashboard");
-			}
-			if (existing.ownerSub === ownerSub) {
-				return c.redirect("/dashboard");
-			}
-			if (!existing.ownerSub) {
+			} else if (!existing.ownerSub) {
 				claimDomain = domain;
 			} else {
 				notice = "This domain is linked to another account. Sign in with the email that created it.";
@@ -1095,6 +1097,7 @@ app.get("/dashboard", requireOwnerPage(), async (c) => {
 				id: site.id,
 				domain: site.domain,
 				apiKey: site.apiKey,
+				publicKey: site.publicKey,
 				pageCount: stats.pageCount,
 				suggestionsServed: stats.suggestionsServed,
 				lastBeaconAt: stats.lastBeaconAt,
@@ -1117,6 +1120,7 @@ app.get("/dashboard", requireOwnerPage(), async (c) => {
 			email,
 			sites: sitesData,
 			claimDomain,
+			pendingDomain,
 			notice,
 		}),
 	);

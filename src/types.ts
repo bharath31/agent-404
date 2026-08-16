@@ -64,6 +64,7 @@ export interface DashboardSiteData {
 	id: string;
 	domain: string;
 	apiKey: string;
+	publicKey: string;
 	pageCount: number;
 	suggestionsServed: number;
 	lastBeaconAt: string | null;
@@ -75,5 +76,6 @@ export interface DashboardData {
 	email: string | null;
 	sites: DashboardSiteData[];
 	claimDomain: string | null;
+	pendingDomain: string | null;
 	notice: string | null;
 }

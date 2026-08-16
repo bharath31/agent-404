@@ -77,7 +77,7 @@ class MemoryStorage implements StorageAdapter {
 		return token;
 	}
 
-	async reclaimSite(id: string): Promise<SiteRecord> {
+	async reclaimSite(id: string, ownerSub: string): Promise<SiteRecord> {
 		const site = this.sites.find((s) => s.id === id);
 		if (!site) throw new Error("not found");
 		this.pages = this.pages.filter((p) => p.siteId !== id);
@@ -87,6 +87,7 @@ class MemoryStorage implements StorageAdapter {
 		site.reclaimToken = null;
 		site.reclaimRequestedAt = null;
 		site.verifiedAt = new Date().toISOString();
+		site.ownerSub = ownerSub;
 		return site;
 	}
 
@@ -925,6 +926,35 @@ describe("API routes", () => {
 			expect(body.apiKey).not.toBe(site.apiKey);
 			expect(body.verified).toBe(true);
 			expect(storage.pages.filter((p) => p.siteId === site.id)).toHaveLength(0);
+		});
+
+		it("should transfer ownership to the reclaimer", async () => {
+			const created = await app.request("/api/sites", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ domain: "stolen.example.com" }),
+			});
+			const site = await created.json();
+
+			const other = createTestApp(storage, "auth0|reclaimer");
+			const start = await other.request("/api/sites/reclaim", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ domain: "stolen.example.com" }),
+			});
+			const { reclaimToken } = await start.json();
+			mockOwnershipFetch({ wellKnown: reclaimToken });
+			const done = await other.request("/api/sites/reclaim/complete", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ domain: "stolen.example.com" }),
+			});
+			expect(done.status).toBe(200);
+
+			const reclaimerSites = await storage.listSitesByOwner("auth0|reclaimer");
+			expect(reclaimerSites.map((s) => s.id)).toContain(site.id);
+			const originalOwnerSites = await storage.listSitesByOwner("auth0|test-user");
+			expect(originalOwnerSites.map((s) => s.id)).not.toContain(site.id);
 		});
 
 		it("should not rotate keys on a verified site before the cooling-off period", async () => {

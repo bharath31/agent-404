@@ -15,6 +15,7 @@ function site(overrides: Partial<DashboardSiteData> = {}): DashboardSiteData {
 		id: "site-1",
 		domain: "example.com",
 		apiKey: "key_abc",
+		publicKey: "pk_abc",
 		pageCount: 0,
 		suggestionsServed: 0,
 		lastBeaconAt: null,
@@ -29,6 +30,7 @@ function data(overrides: Partial<DashboardData> = {}): DashboardData {
 		email: "owner@example.com",
 		sites: [site()],
 		claimDomain: null,
+		pendingDomain: null,
 		notice: null,
 		...overrides,
 	};
@@ -47,12 +49,14 @@ describe("dashboardHtml", () => {
 		expect(html).not.toContain("No beacons received");
 	});
 
-	it("shows an escaped script tag with site id and api key", () => {
+	it("shows an escaped script tag with site id and public key, never the secret key", () => {
 		const html = dashboardHtml(data());
 		expect(html).toContain("data-site-id");
-		expect(html).toContain("data-api-key");
+		expect(html).toContain("data-public-key");
 		expect(html).toContain("site-1");
-		expect(html).toContain("key_abc");
+		expect(html).toContain("pk_abc");
+		expect(html).not.toContain("data-api-key");
+		expect(html).not.toContain("key_abc");
 		expect(html).toContain(CANONICAL_SCRIPT_URL);
 		expect(html).not.toContain("<script\n  src=");
 	});

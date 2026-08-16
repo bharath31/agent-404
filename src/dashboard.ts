@@ -13,16 +13,24 @@ function truncate(str: string, max: number): string {
 	return str.length > max ? str.slice(0, max - 1) + "\u2026" : str;
 }
 
-function snippetHtml(site: Pick<DashboardSiteData, "id" | "apiKey">): string {
-	const src = escapeHtml(CANONICAL_SCRIPT_URL);
-	const id = escapeHtml(site.id);
-	const key = escapeHtml(site.apiKey);
-	return `&lt;script
-  src="${src}"
-  data-site-id="${id}"
-  data-api-key="${key}"
+/**
+ * Single source of truth for the install snippet — used for both the
+ * rendered <pre> preview (HTML-entity escaped) and the Copy button's
+ * data-copy attribute (attribute escaped). Never embed apiKey (the secret
+ * write key) here: the middleware and client script both reject browser
+ * writes made with it, so a copy-pasted secret key silently breaks beacons.
+ */
+function rawSnippet(site: Pick<DashboardSiteData, "id" | "publicKey">): string {
+	return `<script
+  src="${CANONICAL_SCRIPT_URL}"
+  data-site-id="${site.id}"
+  data-public-key="${site.publicKey}"
   defer
-&gt;&lt;/script&gt;`;
+></script>`;
+}
+
+function snippetHtml(site: Pick<DashboardSiteData, "id" | "publicKey">): string {
+	return escapeHtml(rawSnippet(site));
 }
 
 function siteSection(site: DashboardSiteData): string {
@@ -71,12 +79,7 @@ ${warning}
 <div class="code-block">
   <div class="label">Script tag</div>
   <pre class="snippet">${snippetHtml(site)}</pre>
-  <button type="button" class="copy-btn" data-copy="${escapeHtml(`<script
-  src="${CANONICAL_SCRIPT_URL}"
-  data-site-id="${site.id}"
-  data-api-key="${site.apiKey}"
-  defer
-></script>`)}">Copy</button>
+  <button type="button" class="copy-btn" data-copy="${escapeHtml(rawSnippet(site))}">Copy</button>
 </div>
 <div class="stats">
   <div class="stat-card"><div class="label">Indexed Pages</div><div class="value">${site.pageCount}</div></div>
@@ -118,6 +121,21 @@ export function dashboardHtml(data: DashboardData): string {
     <button type="submit">Link site</button>
   </form>
   <p id="claim-error" class="form-error" hidden></p>
+</div>`
+		: "";
+
+	// Registering is a real write, so it must happen via an explicit POST the
+	// user triggers here — never as a side effect of the GET that loaded this
+	// page (see the comment on the /dashboard route in src/index.ts).
+	const pending = data.pendingDomain
+		? `<div class="claim" role="form">
+  <strong>Register ${escapeHtml(data.pendingDomain)}</strong>
+  <p>Confirm to add this domain to your account and generate an install snippet.</p>
+  <form method="post" action="/api/sites" id="register-form">
+    <input type="hidden" name="domain" value="${escapeHtml(data.pendingDomain)}" />
+    <button type="submit">Register site</button>
+  </form>
+  <p id="register-error" class="form-error" hidden></p>
 </div>`
 		: "";
 
@@ -204,6 +222,7 @@ tr:last-child td { border-bottom: none; }
 ${emailLine}
 ${notice}
 ${claim}
+${pending}
 ${sitesHtml}
 <script>
   document.querySelectorAll('.copy-btn').forEach((btn) => {
@@ -236,6 +255,34 @@ ${sitesHtml}
       }
       const body = await res.json().catch(() => ({}));
       errEl.textContent = body.error || 'Could not link this site.';
+      errEl.hidden = false;
+    });
+  }
+  const registerForm = document.getElementById('register-form');
+  if (registerForm) {
+    registerForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const domain = registerForm.querySelector('input[name="domain"]').value;
+      const errEl = document.getElementById('register-error');
+      errEl.hidden = true;
+      const res = await fetch('/api/sites', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ domain })
+      });
+      if (res.ok) {
+        window.location = '/dashboard';
+        return;
+      }
+      if (res.status === 409) {
+        // Re-fetch the page in the "unowned"/"owned by other" state instead
+        // of duplicating that branch logic here.
+        window.location = '/dashboard?register=' + encodeURIComponent(domain);
+        return;
+      }
+      const body = await res.json().catch(() => ({}));
+      errEl.textContent = body.error || 'Could not register this domain.';
       errEl.hidden = false;
     });
   }

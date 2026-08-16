@@ -25,7 +25,7 @@ npx vitest run test/matcher.test.ts
 
 ## Architecture
 
-**Dual deployment target**: The same Hono app runs on both Vercel Edge Functions and Cloudflare Workers.
+**Dual deployment target**: The same Hono app runs on both Vercel (Node.js Serverless Functions) and Cloudflare Workers. `api/index.ts` intentionally has no `runtime: "edge"` export — `@auth0/auth0-hono` pulls in `openid-client`/`jose`'s JWE decrypt, which Vercel Edge Functions don't support.
 
 - `src/index.ts` — Hono app with all routes, middleware, and cron handler. This is the central entry point.
 - `api/index.ts` — Vercel adapter (wraps the Hono app via `hono/vercel`)

@@ -231,7 +231,7 @@ npm run deploy:cf     # Cloudflare Workers
 
 ## Stack
 
-- **Runtime**: Vercel Edge Functions / Cloudflare Workers (Hono)
+- **Runtime**: Vercel Node.js Serverless Functions / Cloudflare Workers (Hono)
 - **Database**: Neon Postgres + pgvector
 - **Embeddings**: OpenAI `text-embedding-3-small` (256d)
 - **Client**: Vanilla JS, <3KB

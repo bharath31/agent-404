@@ -130,10 +130,21 @@ export class PostgresStorage implements StorageAdapter {
 			}
 		}
 
+		if (flags.ownerColumn) {
+			const { rows } = await this.sql`
+				INSERT INTO sites (id, domain, api_key, owner_sub)
+				VALUES (${id}, ${domain}, ${apiKey}, ${ownerSub})
+				RETURNING id, domain, api_key, created_at, owner_sub
+			`;
+			return this.mapSiteRow(rows[0]);
+		}
+
+		// owner_sub itself is missing (DDL denied) — the caller's ownership is
+		// simply lost for this isolate rather than throwing 500 on every signup.
 		const { rows } = await this.sql`
-			INSERT INTO sites (id, domain, api_key, owner_sub)
-			VALUES (${id}, ${domain}, ${apiKey}, ${ownerSub})
-			RETURNING id, domain, api_key, created_at, owner_sub
+			INSERT INTO sites (id, domain, api_key)
+			VALUES (${id}, ${domain}, ${apiKey})
+			RETURNING id, domain, api_key, created_at
 		`;
 		return this.mapSiteRow(rows[0]);
 	}
@@ -190,7 +201,7 @@ export class PostgresStorage implements StorageAdapter {
 		const { rows } = await this.sql`
 			UPDATE sites SET owner_sub = ${ownerSub}
 			WHERE domain = ${domain} AND owner_sub IS NULL AND api_key = ${apiKey}
-			RETURNING id, domain, api_key, created_at, owner_sub
+			RETURNING *
 		`;
 		return rows[0] ? this.mapSiteRow(rows[0]) : null;
 	}
@@ -209,7 +220,7 @@ export class PostgresStorage implements StorageAdapter {
 		return token;
 	}
 
-	async reclaimSite(id: string): Promise<SiteRecord> {
+	async reclaimSite(id: string, ownerSub: string): Promise<SiteRecord> {
 		const apiKey = `key_${crypto.randomUUID().replace(/-/g, "")}`;
 		const publicKey = `pk_${crypto.randomUUID().replace(/-/g, "")}`;
 		const verificationToken = `vf_${crypto.randomUUID().replace(/-/g, "")}`;
@@ -222,7 +233,8 @@ export class PostgresStorage implements StorageAdapter {
 				verification_token = ${verificationToken},
 				reclaim_token = NULL,
 				reclaim_requested_at = NULL,
-				verified_at = NOW()
+				verified_at = NOW(),
+				owner_sub = ${ownerSub}
 			WHERE id = ${id}
 			RETURNING *
 		`;
