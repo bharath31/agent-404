@@ -3,6 +3,7 @@ import {
 	isPrivateOrReservedIp,
 	ipsFromDnsJson,
 } from "../lib/ssrf-guard.js";
+import { readBodyCapped } from "./crawler.js";
 
 const TXT_NAME_PREFIX = "_agent404.";
 const WELL_KNOWN_MAX_BYTES = 4096;
@@ -21,32 +22,6 @@ export function tokenMatches(text: string, expected: string): boolean {
 	if (!expected || !body) return false;
 	if (body === expected) return true;
 	return body.split(/\s+/).some((part) => part.replace(/^"|"$/g, "") === expected);
-}
-
-async function readBodyCapped(resp: Response, maxBytes: number): Promise<string | null> {
-	if (resp.body && typeof resp.body.getReader === "function") {
-		const reader = resp.body.getReader();
-		const chunks: Uint8Array[] = [];
-		let totalSize = 0;
-		try {
-			while (true) {
-				const { done, value } = await reader.read();
-				if (done) break;
-				totalSize += value.byteLength;
-				if (totalSize > maxBytes) {
-					reader.cancel();
-					return null;
-				}
-				chunks.push(value);
-			}
-		} catch {
-			return null;
-		}
-		const decoder = new TextDecoder();
-		return chunks.map((c) => decoder.decode(c, { stream: true })).join("") + decoder.decode();
-	}
-	const text = await resp.text();
-	return text.length > maxBytes ? null : text;
 }
 
 async function fetchWellKnown(url: string): Promise<Response | null> {

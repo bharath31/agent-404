@@ -1,7 +1,6 @@
 import type { PageRecord } from "../types.js";
+import { getEmbeddingConfig } from "../config.js";
 
-const EMBEDDING_URL = process.env.EMBEDDING_API_URL || "https://openrouter.ai/api/v1/embeddings";
-const MODEL = process.env.EMBEDDING_MODEL || "openai/text-embedding-3-small";
 const DIMENSIONS = 256;
 
 /**
@@ -18,13 +17,13 @@ export async function generateEmbedding(text: string): Promise<number[] | null> 
  * Returns null for any text that fails.
  */
 export async function generateBatchEmbeddings(texts: string[]): Promise<(number[] | null)[]> {
-	const apiKey = process.env.EMBEDDING_API_KEY || process.env.OPENAI_API_KEY;
+	const { url, model, apiKey } = getEmbeddingConfig();
 	if (!apiKey || texts.length === 0) {
 		return texts.map(() => null);
 	}
 
 	try {
-		const resp = await fetch(EMBEDDING_URL, {
+		const resp = await fetch(url, {
 			method: "POST",
 			headers: {
 				Authorization: `Bearer ${apiKey}`,
@@ -32,7 +31,7 @@ export async function generateBatchEmbeddings(texts: string[]): Promise<(number[
 			},
 			body: JSON.stringify({
 				input: texts,
-				model: MODEL,
+				model,
 				dimensions: DIMENSIONS,
 			}),
 		});

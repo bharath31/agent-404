@@ -1,6 +1,7 @@
 import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
 import type { PageRecord, SiteRecord, SiteStats, SuggestionLog, MatchQualityStats } from "../types.js";
 import type { StorageAdapter } from "./interface.js";
+import { getDatabaseUrl } from "../config.js";
 
 type Sql = NeonQueryFunction<false, true>;
 
@@ -13,91 +14,11 @@ function timingSafeEqual(a: string, b: string): boolean {
 	return result === 0;
 }
 
-/**
- * Production deploys the Hono app without running `npm run db:migrate`.
- * Theme 5/6 INSERTs fail with 500 until 0004/0005/0006 exist. Apply those
- * ADD COLUMN IF NOT EXISTS statements once per isolate; fall back if DDL
- * is denied.
- */
-let schemaReady: Promise<SchemaFlags> | null = null;
-
-type SchemaFlags = {
-	trustColumns: boolean;
-	writeContentHash: boolean;
-	ownerColumn: boolean;
-};
-
-function missingColumn(err: unknown): boolean {
-	const msg = String((err as { message?: string })?.message || err);
-	return /42703|does not exist|undefined column/i.test(msg);
-}
-
-async function applyPendingSchema(sql: Sql): Promise<SchemaFlags> {
-	const flags: SchemaFlags = { trustColumns: true, writeContentHash: true, ownerColumn: true };
-	try {
-		await sql.query(`ALTER TABLE sites ADD COLUMN IF NOT EXISTS public_key TEXT`);
-		await sql.query(`ALTER TABLE sites ADD COLUMN IF NOT EXISTS verified_at TIMESTAMP`);
-		await sql.query(`ALTER TABLE sites ADD COLUMN IF NOT EXISTS verification_token TEXT`);
-		await sql.query(`ALTER TABLE sites ADD COLUMN IF NOT EXISTS reclaim_token TEXT`);
-		await sql.query(`ALTER TABLE sites ADD COLUMN IF NOT EXISTS reclaim_requested_at TIMESTAMP`);
-		await sql.query(`ALTER TABLE sites ADD COLUMN IF NOT EXISTS last_cron_at TIMESTAMP`);
-		// Pre-trust rows have no public_key; grandfather those only. Do not
-		// stamp verified_at on every NULL — that would verify new sites.
-		await sql.query(
-			`UPDATE sites SET verified_at = created_at WHERE verified_at IS NULL AND public_key IS NULL`,
-		);
-		await sql.query(
-			`UPDATE sites SET public_key = 'pk_' || replace(gen_random_uuid()::text, '-', '') WHERE public_key IS NULL`,
-		);
-		await sql.query(
-			`UPDATE sites SET verification_token = 'vf_' || replace(gen_random_uuid()::text, '-', '') WHERE verification_token IS NULL`,
-		);
-		try {
-			await sql.query(`ALTER TABLE sites ALTER COLUMN public_key SET NOT NULL`);
-			await sql.query(`ALTER TABLE sites ALTER COLUMN verification_token SET NOT NULL`);
-			await sql.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_sites_public_key ON sites (public_key)`);
-		} catch {
-			// NOT NULL / unique index are optional if older rows could not be backfilled.
-		}
-	} catch (err) {
-		console.error("Trust schema ensure failed:", (err as Error)?.message || err);
-		flags.trustColumns = false;
-	}
-	try {
-		await sql.query(`ALTER TABLE pages ADD COLUMN IF NOT EXISTS content_hash TEXT`);
-	} catch (err) {
-		console.error("Scale schema ensure failed:", (err as Error)?.message || err);
-		flags.writeContentHash = false;
-	}
-	try {
-		await sql.query(`ALTER TABLE sites ADD COLUMN IF NOT EXISTS owner_sub TEXT`);
-		await sql.query(`CREATE INDEX IF NOT EXISTS idx_sites_owner_sub ON sites (owner_sub)`);
-	} catch (err) {
-		console.error("Owner schema ensure failed:", (err as Error)?.message || err);
-		flags.ownerColumn = false;
-	}
-	return flags;
-}
-
-function ensureSchema(sql: Sql): Promise<SchemaFlags> {
-	if (!schemaReady) {
-		schemaReady = applyPendingSchema(sql).catch((err) => {
-			schemaReady = null;
-			throw err;
-		});
-	}
-	return schemaReady;
-}
-
 export class PostgresStorage implements StorageAdapter {
 	private sql: Sql;
 
 	constructor(databaseUrl?: string) {
-		const url =
-			databaseUrl ||
-			process.env.DATABASE_URL ||
-			process.env.POSTGRES_URL ||
-			"";
+		const url = databaseUrl || getDatabaseUrl();
 		this.sql = neon(url, { fullResults: true });
 	}
 
@@ -106,51 +27,21 @@ export class PostgresStorage implements StorageAdapter {
 		return this.sql;
 	}
 
-	private async flags(): Promise<SchemaFlags> {
-		return ensureSchema(this.sql);
-	}
-
 	async createSite(domain: string, ownerSub: string): Promise<SiteRecord> {
-		const flags = await this.flags();
 		const id = crypto.randomUUID();
 		const apiKey = `key_${crypto.randomUUID().replace(/-/g, "")}`;
 		const publicKey = `pk_${crypto.randomUUID().replace(/-/g, "")}`;
 		const verificationToken = `vf_${crypto.randomUUID().replace(/-/g, "")}`;
 
-		if (flags.trustColumns && flags.ownerColumn) {
-			try {
-				const { rows } = await this.sql`
-					INSERT INTO sites (id, domain, api_key, public_key, verification_token, owner_sub)
-					VALUES (${id}, ${domain}, ${apiKey}, ${publicKey}, ${verificationToken}, ${ownerSub})
-					RETURNING *
-				`;
-				return this.mapSiteRow(rows[0]);
-			} catch (err) {
-				if (!missingColumn(err)) throw err;
-			}
-		}
-
-		if (flags.ownerColumn) {
-			const { rows } = await this.sql`
-				INSERT INTO sites (id, domain, api_key, owner_sub)
-				VALUES (${id}, ${domain}, ${apiKey}, ${ownerSub})
-				RETURNING id, domain, api_key, created_at, owner_sub
-			`;
-			return this.mapSiteRow(rows[0]);
-		}
-
-		// owner_sub itself is missing (DDL denied) — the caller's ownership is
-		// simply lost for this isolate rather than throwing 500 on every signup.
 		const { rows } = await this.sql`
-			INSERT INTO sites (id, domain, api_key)
-			VALUES (${id}, ${domain}, ${apiKey})
-			RETURNING id, domain, api_key, created_at
+			INSERT INTO sites (id, domain, api_key, public_key, verification_token, owner_sub)
+			VALUES (${id}, ${domain}, ${apiKey}, ${publicKey}, ${verificationToken}, ${ownerSub})
+			RETURNING *
 		`;
 		return this.mapSiteRow(rows[0]);
 	}
 
 	async getSite(id: string): Promise<SiteRecord | null> {
-		await this.flags();
 		const { rows } = await this.sql`SELECT * FROM sites WHERE id = ${id}`;
 		return rows[0] ? this.mapSiteRow(rows[0]) : null;
 	}
@@ -161,24 +52,14 @@ export class PostgresStorage implements StorageAdapter {
 	}
 
 	async getSiteByKey(key: string): Promise<{ site: SiteRecord; keyType: "secret" | "public" } | null> {
-		const flags = await this.flags();
-		try {
-			if (flags.trustColumns) {
-				const { rows } = await this.sql`
-					SELECT * FROM sites WHERE api_key = ${key} OR public_key = ${key}
-				`;
-				if (!rows[0]) return null;
-				const site = this.mapSiteRow(rows[0]);
-				if (site.apiKey === key) return { site, keyType: "secret" };
-				if (site.publicKey === key) return { site, keyType: "public" };
-				return null;
-			}
-		} catch (err) {
-			if (!missingColumn(err)) throw err;
-		}
-		const { rows } = await this.sql`SELECT * FROM sites WHERE api_key = ${key}`;
+		const { rows } = await this.sql`
+			SELECT * FROM sites WHERE api_key = ${key} OR public_key = ${key}
+		`;
 		if (!rows[0]) return null;
-		return { site: this.mapSiteRow(rows[0]), keyType: "secret" };
+		const site = this.mapSiteRow(rows[0]);
+		if (site.apiKey === key) return { site, keyType: "secret" };
+		if (site.publicKey === key) return { site, keyType: "public" };
+		return null;
 	}
 
 	async getSiteByDomain(domain: string): Promise<SiteRecord | null> {
@@ -207,7 +88,6 @@ export class PostgresStorage implements StorageAdapter {
 	}
 
 	async markVerified(id: string): Promise<void> {
-		await this.flags();
 		await this.sql`UPDATE sites SET verified_at = NOW(), reclaim_token = NULL, reclaim_requested_at = NULL WHERE id = ${id}`;
 	}
 
@@ -258,28 +138,8 @@ export class PostgresStorage implements StorageAdapter {
 	): Promise<void> {
 		const embeddingStr = embedding ? this.validateEmbedding(embedding) : null;
 		const hash = page.contentHash ?? null;
-		const flags = await this.flags();
 
-		try {
-			await this.upsertPageRow(siteId, page, embeddingStr, hash, flags.writeContentHash);
-		} catch (err) {
-			if (flags.writeContentHash && missingColumn(err)) {
-				flags.writeContentHash = false;
-				await this.upsertPageRow(siteId, page, embeddingStr, hash, false);
-				return;
-			}
-			throw err;
-		}
-	}
-
-	private async upsertPageRow(
-		siteId: string,
-		page: Pick<PageRecord, "url" | "title" | "description" | "headings">,
-		embeddingStr: string | null,
-		hash: string | null,
-		withHash: boolean,
-	): Promise<void> {
-		if (embeddingStr && withHash) {
+		if (embeddingStr) {
 			await this.sql.query(
 				`INSERT INTO pages (site_id, url, title, description, headings, embedding, content_hash)
 				VALUES ($1, $2, $3, $4, $5, $6::vector, $7)
@@ -294,43 +154,17 @@ export class PostgresStorage implements StorageAdapter {
 			);
 			return;
 		}
-		if (embeddingStr) {
-			await this.sql.query(
-				`INSERT INTO pages (site_id, url, title, description, headings, embedding)
-				VALUES ($1, $2, $3, $4, $5, $6::vector)
-				ON CONFLICT (site_id, url) DO UPDATE SET
-					title = EXCLUDED.title,
-					description = EXCLUDED.description,
-					headings = EXCLUDED.headings,
-					embedding = COALESCE(EXCLUDED.embedding, pages.embedding),
-					last_seen = NOW()`,
-				[siteId, page.url, page.title, page.description, page.headings, embeddingStr],
-			);
-			return;
-		}
-		if (withHash) {
-			await this.sql.query(
-				`INSERT INTO pages (site_id, url, title, description, headings, content_hash)
-				VALUES ($1, $2, $3, $4, $5, $6)
-				ON CONFLICT (site_id, url) DO UPDATE SET
-					title = EXCLUDED.title,
-					description = EXCLUDED.description,
-					headings = EXCLUDED.headings,
-					content_hash = COALESCE(EXCLUDED.content_hash, pages.content_hash),
-					last_seen = NOW()`,
-				[siteId, page.url, page.title, page.description, page.headings, hash],
-			);
-			return;
-		}
+
 		await this.sql.query(
-			`INSERT INTO pages (site_id, url, title, description, headings)
-			VALUES ($1, $2, $3, $4, $5)
+			`INSERT INTO pages (site_id, url, title, description, headings, content_hash)
+			VALUES ($1, $2, $3, $4, $5, $6)
 			ON CONFLICT (site_id, url) DO UPDATE SET
 				title = EXCLUDED.title,
 				description = EXCLUDED.description,
 				headings = EXCLUDED.headings,
+				content_hash = COALESCE(EXCLUDED.content_hash, pages.content_hash),
 				last_seen = NOW()`,
-			[siteId, page.url, page.title, page.description, page.headings],
+			[siteId, page.url, page.title, page.description, page.headings, hash],
 		);
 	}
 
@@ -387,20 +221,10 @@ export class PostgresStorage implements StorageAdapter {
 	}
 
 	async getPageContentHash(siteId: string, url: string): Promise<string | null> {
-		const flags = await this.flags();
-		if (!flags.writeContentHash) return null;
-		try {
-			const { rows } = await this.sql`
-				SELECT content_hash FROM pages WHERE site_id = ${siteId} AND url = ${url}
-			`;
-			return (rows[0]?.content_hash as string) || null;
-		} catch (err) {
-			if (missingColumn(err)) {
-				flags.writeContentHash = false;
-				return null;
-			}
-			throw err;
-		}
+		const { rows } = await this.sql`
+			SELECT content_hash FROM pages WHERE site_id = ${siteId} AND url = ${url}
+		`;
+		return (rows[0]?.content_hash as string) || null;
 	}
 
 	async touchPage(siteId: string, url: string): Promise<void> {
