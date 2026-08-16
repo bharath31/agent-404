@@ -1,40 +1,147 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 300" fill="none">
-  <rect width="1200" height="300" rx="16" fill="#0a0a0b"/>
-  <rect x="0.5" y="0.5" width="1199" height="299" rx="15.5" stroke="#27272a"/>
-
-  <!-- Subtle grid pattern -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 560" width="1200" height="560">
   <defs>
-    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
-      <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#27272a" stroke-width="0.5" opacity="0.4"/>
-    </pattern>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#09090b"/>
+      <stop offset="100%" stop-color="#0d0d11"/>
+    </linearGradient>
+    
+    <linearGradient id="cardGradBad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#141113"/>
+      <stop offset="100%" stop-color="#111114"/>
+    </linearGradient>
+    
+    <linearGradient id="cardGradGood" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0f1613"/>
+      <stop offset="100%" stop-color="#111114"/>
+    </linearGradient>
+
+    <filter id="cardGlowGood" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="16" stdDeviation="20" flood-color="#000000" flood-opacity="0.7"/>
+    </filter>
   </defs>
-  <rect width="1200" height="300" rx="16" fill="url(#grid)"/>
 
-  <!-- Accent glow -->
-  <ellipse cx="600" cy="150" rx="300" ry="120" fill="#3b82f6" opacity="0.04"/>
+  <style>
+    .sans { font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, sans-serif; }
+    .mono { font-family: 'JetBrains Mono', 'Geist Mono', 'SFMono-Regular', Menlo, Monaco, Consolas, monospace; }
+  </style>
 
-  <!-- Logo mark -->
-  <rect x="80" y="100" width="88" height="88" rx="18" fill="#3b82f6"/>
-  <text x="124" y="155" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="36" font-weight="800" fill="white" text-anchor="middle" dominant-baseline="middle">404</text>
+  <!-- Canvas Background -->
+  <rect width="1200" height="560" fill="url(#bg)"/>
 
-  <!-- Title -->
-  <text x="196" y="132" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="44" font-weight="700" fill="#fafafa">agent<tspan fill="#52525b">-</tspan>404</text>
+  <!-- Subtle Architecture Grid -->
+  <g opacity="0.035" stroke="#ffffff" stroke-width="1">
+    <line x1="0" y1="70" x2="1200" y2="70"/>
+    <line x1="0" y1="140" x2="1200" y2="140"/>
+    <line x1="0" y1="210" x2="1200" y2="210"/>
+    <line x1="0" y1="280" x2="1200" y2="280"/>
+    <line x1="0" y1="350" x2="1200" y2="350"/>
+    <line x1="0" y1="420" x2="1200" y2="420"/>
+    <line x1="0" y1="490" x2="1200" y2="490"/>
+    <line x1="100" y1="0" x2="100" y2="560"/>
+    <line x1="250" y1="0" x2="250" y2="560"/>
+    <line x1="400" y1="0" x2="400" y2="560"/>
+    <line x1="550" y1="0" x2="550" y2="560"/>
+    <line x1="700" y1="0" x2="700" y2="560"/>
+    <line x1="850" y1="0" x2="850" y2="560"/>
+    <line x1="1000" y1="0" x2="1000" y2="560"/>
+    <line x1="1150" y1="0" x2="1150" y2="560"/>
+  </g>
 
-  <!-- Tagline -->
-  <text x="196" y="172" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif" font-size="18" fill="#a1a1aa">Agent-friendly 404 pages. One script tag.</text>
+  <!-- Top Navigation & Brand Header -->
+  <g transform="translate(64, 48)">
+    <!-- Brand Logo -->
+    <text x="0" y="24" class="sans" font-size="22" font-weight="800" fill="#f4f4f5" letter-spacing="-0.035em">
+      agent<tspan fill="#71717a">-</tspan>404
+    </text>
 
-  <!-- Pills -->
-  <rect x="710" y="115" width="120" height="30" rx="15" fill="none" stroke="#27272a"/>
-  <text x="770" y="134" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12" fill="#22c55e" text-anchor="middle">open source</text>
+    <!-- Version & OSS Pill -->
+    <g transform="translate(136, 4)">
+      <rect x="0" y="0" width="102" height="24" rx="12" fill="#18181c" stroke="#27272a" stroke-width="1"/>
+      <circle cx="12" cy="12" r="3.5" fill="#10b981"/>
+      <text x="22" y="16" class="mono" font-size="10.5" font-weight="600" fill="#a1a1aa" letter-spacing="0.04em">v0.1 · MIT</text>
+    </g>
 
-  <rect x="840" y="115" width="80" height="30" rx="15" fill="none" stroke="#27272a"/>
-  <text x="880" y="134" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12" fill="#a1a1aa" text-anchor="middle">MIT</text>
+    <!-- Compatible Adapters -->
+    <g transform="translate(730, 4)">
+      <rect x="0" y="0" width="342" height="26" rx="13" fill="#121215" stroke="#27272a" stroke-width="1"/>
+      <text x="171" y="17" class="mono" font-size="11" font-weight="500" fill="#71717a" text-anchor="middle" letter-spacing="0.01em">
+        Next.js · Cloudflare · Express · Netlify
+      </text>
+    </g>
+  </g>
 
-  <rect x="930" y="115" width="110" height="30" rx="15" fill="none" stroke="#27272a"/>
-  <text x="985" y="134" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12" fill="#3b82f6" text-anchor="middle">pgvector</text>
+  <!-- Hero Header Title & Subtitle -->
+  <g transform="translate(64, 126)">
+    <text x="0" y="34" class="sans" font-size="36" font-weight="800" fill="#fafafa" letter-spacing="-0.04em">
+      Self-Healing 404s for AI Agents &amp; Crawlers
+    </text>
+    <text x="0" y="68" class="sans" font-size="16" font-weight="400" fill="#a1a1aa" letter-spacing="-0.01em">
+      HTTP-layer interception returning ranked semantic replacements in RFC Link headers and JSON-LD schema.
+    </text>
+  </g>
 
-  <!-- Bottom detail line -->
-  <line x1="80" y1="230" x2="1120" y2="230" stroke="#27272a" stroke-width="1"/>
-  <text x="80" y="258" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="13" fill="#52525b">$ curl -X POST /api/suggest -d '{"url": "https://example.com/docs/v2/auth"}'</text>
-  <text x="1120" y="258" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="13" fill="#22c55e" text-anchor="end">→ /docs/v3/auth (0.85)</text>
+  <!-- Interactive Terminal Comparison (Signature Visual) -->
+  <g transform="translate(64, 238)" filter="url(#cardGlowGood)">
+    <!-- LEFT BOX: Without agent-404 (Failure State) -->
+    <g transform="translate(0, 0)">
+      <rect width="520" height="254" rx="12" fill="url(#cardGradBad)" stroke="#27272a" stroke-width="1"/>
+      
+      <!-- Window Titlebar -->
+      <path d="M 0 12 C 0 5.373 5.373 0 12 0 L 508 0 C 514.627 0 520 5.373 520 12 L 520 38 L 0 38 Z" fill="#18181c"/>
+      <line x1="0" y1="38" x2="520" y2="38" stroke="#27272a" stroke-width="1"/>
+      
+      <circle cx="20" cy="19" r="4.5" fill="#27272a"/>
+      <circle cx="34" cy="19" r="4.5" fill="#27272a"/>
+      <circle cx="48" cy="19" r="4.5" fill="#27272a"/>
+      
+      <text x="74" y="23" class="mono" font-size="11" font-weight="700" fill="#f43f5e" letter-spacing="0.05em">STANDARD 404 (CRAWLER ABANDONS)</text>
+      
+      <!-- Terminal Lines -->
+      <g transform="translate(22, 66)" class="mono" font-size="12.5" xml:space="preserve">
+        <text x="0" y="0" fill="#f43f5e">GET /docs/v1/authentication</text>
+        <text x="0" y="26" fill="#f59e0b">HTTP/1.1 404 Not Found</text>
+        <text x="0" y="52" fill="#71717a">Content-Type: text/html</text>
+        
+        <text x="0" y="88" fill="#52525b">&lt;!-- Client SPA HTML. Crawlers do not run JS. --&gt;</text>
+        <text x="0" y="114" fill="#52525b">&lt;!-- Body is blank / unparseable to LLM bots. --&gt;</text>
+        
+        <g transform="translate(0, 144)">
+          <rect x="-4" y="-14" width="316" height="24" rx="4" fill="rgba(244, 63, 94, 0.12)" stroke="rgba(244, 63, 94, 0.25)" stroke-width="1"/>
+          <text x="6" y="2" fill="#f43f5e" font-weight="600">✗ ClaudeBot halts &amp; hallucinates</text>
+        </g>
+      </g>
+    </g>
+
+    <!-- RIGHT BOX: With agent-404 (Self-Healing Recovery) -->
+    <g transform="translate(552, 0)">
+      <rect width="520" height="254" rx="12" fill="url(#cardGradGood)" stroke="#27272a" stroke-width="1"/>
+      
+      <!-- Window Titlebar -->
+      <path d="M 0 12 C 0 5.373 5.373 0 12 0 L 508 0 C 514.627 0 520 5.373 520 12 L 520 38 L 0 38 Z" fill="#18181c"/>
+      <line x1="0" y1="38" x2="520" y2="38" stroke="#27272a" stroke-width="1"/>
+      
+      <circle cx="20" cy="19" r="4.5" fill="#27272a"/>
+      <circle cx="34" cy="19" r="4.5" fill="#27272a"/>
+      <circle cx="48" cy="19" r="4.5" fill="#27272a"/>
+      
+      <text x="74" y="23" class="mono" font-size="11" font-weight="700" fill="#10b981" letter-spacing="0.05em">WITH AGENT-404 (SELF-HEALING)</text>
+      
+      <rect x="412" y="9" width="94" height="20" rx="4" fill="rgba(16, 185, 129, 0.15)" stroke="rgba(16, 185, 129, 0.3)" stroke-width="1"/>
+      <text x="459" y="23" class="mono" font-size="10" font-weight="700" fill="#34d399" text-anchor="middle">&lt;25MS EDGE</text>
+      
+      <!-- Terminal Lines -->
+      <g transform="translate(22, 66)" class="mono" font-size="12.5" xml:space="preserve">
+        <text x="0" y="0" fill="#f43f5e">GET /docs/v1/authentication</text>
+        <text x="0" y="26" fill="#f59e0b">HTTP/1.1 404 Not Found</text>
+        <text x="0" y="52" fill="#38bdf8">Link: &lt;/docs/v2/auth&gt;; rel="alternate"</text>
+        <text x="0" y="78" fill="#71717a">Content-Type: text/html; schema.org</text>
+        <text x="0" y="104" fill="#34d399">&lt;script type="application/ld+json"&gt; ... &lt;/script&gt;</text>
+        
+        <g transform="translate(0, 144)">
+          <rect x="-4" y="-14" width="300" height="24" rx="4" fill="rgba(16, 185, 129, 0.14)" stroke="rgba(16, 185, 129, 0.3)" stroke-width="1"/>
+          <text x="6" y="2" fill="#10b981" font-weight="600">✓ Agent recovers in 1 single hop</text>
+        </g>
+      </g>
+    </g>
+  </g>
 </svg>
