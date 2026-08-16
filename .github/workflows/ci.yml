@@ -5,6 +5,7 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
 
 jobs:
   test:
@@ -17,3 +18,33 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx vitest run
+
+  browser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run build:script
+      - run: npx playwright install --with-deps chromium
+      - run: npx playwright test test/browser.test.ts
+
+  smoke-production:
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run build:script
+      - run: npx playwright install --with-deps chromium
+      - name: Run published-snippet smoke against production
+        env:
+          SMOKE_PRODUCTION: "1"
+        run: npx playwright test test/smoke-published.test.ts

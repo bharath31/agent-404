@@ -15,12 +15,16 @@ One script tag. That's it.
 
 ```html
 <script
-  src="https://agent404.dev/agent-404.min.js"
+  src="https://www.agent404.dev/agent-404.min.js"
   data-site-id="your-site-id"
   data-api-key="your-api-key"
   defer
 ></script>
 ```
+
+Use `https://www.agent404.dev` (not the apex). `agent404.dev` 307-redirects to `www`, and a CORS preflight that receives a redirect is a hard failure — the script will not register pages or render suggestions.
+
+Self-hosters can override the API origin with `data-api-base="https://your-origin.example"`.
 
 ## How it works
 
@@ -65,17 +69,26 @@ The script-tag approach needs a 404 page that renders HTML and executes JS. For 
 ### Register a site
 
 ```bash
-curl -X POST https://agent404.dev/api/sites \
+curl -X POST https://www.agent404.dev/api/sites \
   -H "Content-Type: application/json" \
   -d '{"domain": "example.com"}'
 ```
 
 Returns `siteId` and `apiKey`. The sitemap is crawled automatically on registration.
 
+### Verify the install
+
+```bash
+curl https://www.agent404.dev/api/install/status \
+  -H "x-api-key: your-api-key"
+```
+
+`installVerified` is true only after at least one page has been indexed. An empty index is a failure, not a quiet success.
+
 ### Beacon a page (client script does this automatically)
 
 ```bash
-curl -X POST https://agent404.dev/api/register \
+curl -X POST https://www.agent404.dev/api/register \
   -H "Content-Type: application/json" \
   -H "x-api-key: your-api-key" \
   -d '{"url": "https://example.com/docs/auth", "title": "Auth Guide", "headings": ["OAuth", "API Keys"]}'
@@ -84,7 +97,7 @@ curl -X POST https://agent404.dev/api/register \
 ### Get suggestions for a dead URL
 
 ```bash
-curl -X POST https://agent404.dev/api/suggest \
+curl -X POST https://www.agent404.dev/api/suggest \
   -H "Content-Type: application/json" \
   -H "x-api-key: your-api-key" \
   -d '{"url": "https://example.com/docs/v2/auth"}'

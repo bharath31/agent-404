@@ -1,3 +1,5 @@
+import { resolveApiBase } from "./resolve-api-base.js";
+
 (function () {
 	const script = document.currentScript as HTMLScriptElement | null;
 	if (!script) return;
@@ -5,7 +7,7 @@
 	const siteId = script.getAttribute("data-site-id");
 	const apiKey = script.getAttribute("data-api-key");
 	const selector404 = script.getAttribute("data-404-selector");
-	const apiBase = new URL(script.src).origin;
+	const apiBase = resolveApiBase(script);
 
 	if (!siteId || !apiKey) {
 		console.warn("[agent-404] Missing data-site-id or data-api-key");
@@ -50,7 +52,15 @@
 			headers,
 			body: data,
 			keepalive: true,
-		}).catch(() => {});
+		})
+			.then((resp) => {
+				if (!resp.ok) {
+					warnOwner("Page beacon failed", resp.status);
+				}
+			})
+			.catch((err) => {
+				warnOwner("Page beacon failed", undefined, err);
+			});
 	}
 
 	async function handleNotFound(): Promise<void> {
@@ -61,7 +71,10 @@
 				body: JSON.stringify({ url: location.href }),
 			});
 
-			if (!resp.ok) return;
+			if (!resp.ok) {
+				warnOwner("Suggestion request failed", resp.status);
+				return;
+			}
 
 			const result = await resp.json() as {
 				suggestions: Array<{
@@ -78,9 +91,20 @@
 
 			injectSuggestions(result.suggestions);
 			injectJsonLd(result.jsonLd);
-		} catch {
-			// Silently fail — don't break the host page
+		} catch (err) {
+			// Don't break the host page — surface the failure to the owner.
+			warnOwner("Suggestion request failed", undefined, err);
 		}
+	}
+
+	function warnOwner(operation: string, status?: number, err?: unknown): void {
+		const statusBit = status ? ` (HTTP ${status})` : "";
+		console.warn(
+			`[agent-404] ${operation}${statusBit}. The host page is unaffected. ` +
+				"If this is a CORS error, use https://www.agent404.dev (not the apex) — " +
+				"redirects break preflight. Verify with GET /api/install/status or the dashboard.",
+			err ?? "",
+		);
 	}
 
 	function injectSuggestions(
