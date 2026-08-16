@@ -1021,13 +1021,16 @@ app.get("/api/cron", async (c) => {
 
 	const storage = c.get("storage");
 	const sql = storage.getSql();
-	const shard = new Date().getUTCHours() % 24;
+	// Vercel Hobby allows only daily crons. Shard by UTC day so a daily
+	// 03:00 run still covers every site over a week; hourly Workers use
+	// last_cron_at to skip already-processed rows the same day.
+	const shard = Math.floor(Date.now() / 86_400_000) % 7;
 	const { rows } = await sql.query(
 		`SELECT id, domain FROM sites
-		 WHERE abs(hashtext(id::text)) % 24 = $1
+		 WHERE abs(hashtext(id::text)) % 7 = $1
 		   AND (last_cron_at IS NULL OR last_cron_at < NOW() - INTERVAL '20 hours')
 		 ORDER BY last_cron_at NULLS FIRST
-		 LIMIT 40`,
+		 LIMIT 25`,
 		[shard],
 	);
 
