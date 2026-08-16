@@ -168,34 +168,40 @@ import { resolveApiBase } from "./resolve-api-base.js";
 		container.id = "agent-404-suggestions";
 		container.setAttribute(
 			"style",
-			"max-width:600px;margin:2rem auto;padding:1.5rem;border:1px solid #e2e8f0;border-radius:8px;font-family:system-ui,sans-serif;background:#f8fafc",
+			"max-width:560px;margin:2rem auto;padding:1.25rem 1.5rem;border:1px solid rgba(128,128,128,0.2);border-radius:10px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:rgba(128,128,128,0.05);box-shadow:0 4px 12px rgba(0,0,0,0.05);text-align:left;",
 		);
 
 		const heading = document.createElement("h3");
 		heading.textContent = "Were you looking for one of these?";
-		heading.setAttribute("style", "margin:0 0 1rem;font-size:1.1rem;color:#1e293b");
+		heading.setAttribute(
+			"style",
+			"margin:0 0 0.85rem;font-size:0.95rem;font-weight:600;letter-spacing:-0.01em;",
+		);
 		container.appendChild(heading);
 
 		const list = document.createElement("ul");
-		list.setAttribute("style", "list-style:none;padding:0;margin:0");
+		list.setAttribute("style", "list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:0.5rem;");
 
 		for (const s of suggestions) {
 			const li = document.createElement("li");
-			li.setAttribute("style", "margin:0.5rem 0");
+			li.setAttribute(
+				"style",
+				"display:flex;align-items:center;justify-content:space-between;gap:0.75rem;padding:0.4rem 0;border-bottom:1px solid rgba(128,128,128,0.1);",
+			);
 
 			const a = document.createElement("a");
 			a.href = s.url;
 			a.textContent = s.title || s.url;
 			a.setAttribute(
 				"style",
-				"color:#2563eb;text-decoration:none;font-weight:500",
+				"color:#3b82f6;text-decoration:none;font-weight:500;font-size:0.875rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;",
 			);
 
 			const badge = document.createElement("span");
 			badge.textContent = s.matchType;
 			badge.setAttribute(
 				"style",
-				"display:inline-block;margin-left:0.5rem;padding:0.1rem 0.4rem;font-size:0.75rem;border-radius:4px;background:#e2e8f0;color:#64748b",
+				"display:inline-block;padding:0.15rem 0.45rem;font-size:0.7rem;font-family:ui-monospace,monospace;border-radius:4px;background:rgba(128,128,128,0.12);color:inherit;font-weight:500;text-transform:uppercase;",
 			);
 
 			li.appendChild(a);
