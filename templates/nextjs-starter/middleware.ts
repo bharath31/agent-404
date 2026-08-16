@@ -1,15 +1,12 @@
-import { NextResponse } from "next/server";
-import type { NextRequest } from "next/server";
+import { type NextRequest, NextResponse } from "next/server";
 
 export async function middleware(request: NextRequest) {
-	const response = NextResponse.next();
-
-	// Check if this route is a 404 or custom condition
-	// For edge rewriting, you can call Agent 404 suggest API
 	const apiKey = process.env.NEXT_PUBLIC_AGENT404_KEY;
-	if (!apiKey) return response;
+	if (!apiKey) return NextResponse.next();
 
-	return response;
+	// In production, you can import { agent404 } from "@agent-404/adapters/next";
+	// Or query the Agent 404 suggest endpoint directly for 404 paths.
+	return NextResponse.next();
 }
 
 export const config = {

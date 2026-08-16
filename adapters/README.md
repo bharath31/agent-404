@@ -18,19 +18,26 @@ export default agent404Worker({
 ### 2. Next.js (`adapters/next.ts`)
 Middleware for Next.js App Router and Pages Router.
 ```ts
-import { agent404Next } from "./adapters/next.js";
+import { agent404 } from "./adapters/next.js";
 
-export const middleware = agent404Next({
+export const middleware = agent404({
   apiKey: process.env.NEXT_PUBLIC_AGENT404_KEY!,
 });
 ```
 
 ### 3. Express (`adapters/express.ts`)
-Node.js Express middleware for server-rendered 404 recovery.
-```ts
-import { agent404Express } from "./adapters/express.js";
+Express handler helper for server-rendered 404 recovery.
+```js
+import { recoverExpress404 } from "./adapters/express.js";
 
-app.use(agent404Express({ apiKey: process.env.AGENT404_KEY! }));
+app.use(async (req, res) => {
+  const recovered = await recoverExpress404(req, "<h1>Not Found</h1>", {
+    apiKey: process.env.AGENT404_KEY,
+  });
+  res.status(404);
+  recovered.headers.forEach((v, k) => res.setHeader(k, v));
+  res.send(await recovered.text());
+});
 ```
 
 ### 4. Netlify Edge (`adapters/netlify.ts`)
