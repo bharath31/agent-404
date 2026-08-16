@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { DEFAULT_API_BASE, resolveApiBase } from "../script/resolve-api-base.js";
+import { CANONICAL_ORIGIN } from "../src/config.js";
 
 function script(attrs: Record<string, string | null>) {
 	return {
@@ -12,7 +13,7 @@ function script(attrs: Record<string, string | null>) {
 describe("resolveApiBase", () => {
 	it("uses the canonical origin instead of script.src", () => {
 		expect(resolveApiBase(script({}))).toBe(DEFAULT_API_BASE);
-		expect(DEFAULT_API_BASE).toBe("https://www.agent404.dev");
+		expect(DEFAULT_API_BASE).toBe(CANONICAL_ORIGIN);
 	});
 
 	it("honors data-api-base for self-hosters", () => {

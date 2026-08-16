@@ -3,7 +3,9 @@
  * on a fixture page served from a different origin.
  *
  * Runs on deploy (SMOKE_PRODUCTION=1), not on every PR — the published
- * script only updates after a production deploy.
+ * script only updates after a production deploy. Each run inserts a
+ * `smoke-<timestamp>.example.com` row; there is no public delete API, so
+ * treat these as disposable telemetry sites.
  */
 import { test, expect } from "@playwright/test";
 import { startServer } from "./test-server.js";

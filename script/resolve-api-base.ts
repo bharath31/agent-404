@@ -1,3 +1,9 @@
+/**
+ * Fallback when the esbuild `__AGENT404_API_BASE__` define is missing (unit tests,
+ * unbundled source). Keep this literal in lockstep with `CANONICAL_ORIGIN` in
+ * `src/config.ts`. This file cannot import that module: it is bundled for the
+ * browser and must stay free of server/Node imports.
+ */
 export const DEFAULT_API_BASE = "https://www.agent404.dev";
 
 declare const __AGENT404_API_BASE__: string | undefined;
