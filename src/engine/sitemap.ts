@@ -1,5 +1,6 @@
 import type { PageRecord } from "../types.js";
 import type { StorageAdapter } from "../storage/interface.js";
+import { isBlockedInternalHost } from "../lib/ssrf-guard.js";
 import { buildEmbeddingText, generateBatchEmbeddings } from "./embeddings.js";
 
 const EMBEDDING_BATCH_SIZE = 100;
@@ -7,33 +8,10 @@ const MAX_SITEMAP_URLS = 5000;
 const FETCH_TIMEOUT_MS = 10_000;
 
 /**
- * Check if a hostname resolves to a private/internal IP range.
- */
-function isPrivateHost(hostname: string): boolean {
-	const blocked = [
-		"localhost",
-		"127.",
-		"0.0.0.0",
-		"10.",
-		"172.16.", "172.17.", "172.18.", "172.19.",
-		"172.20.", "172.21.", "172.22.", "172.23.",
-		"172.24.", "172.25.", "172.26.", "172.27.",
-		"172.28.", "172.29.", "172.30.", "172.31.",
-		"192.168.",
-		"169.254.",
-		"[::1]",
-		"[fc",
-		"[fd",
-	];
-	const lower = hostname.toLowerCase();
-	return blocked.some((b) => lower === b || lower.startsWith(b));
-}
-
-/**
  * Crawl a domain's sitemap.xml and upsert all discovered URLs with embeddings.
  */
 export async function crawlSitemap(domain: string, siteId: string, storage: StorageAdapter): Promise<number> {
-	if (isPrivateHost(domain)) {
+	if (isBlockedInternalHost(domain)) {
 		console.error(`Blocked sitemap crawl for private host: ${domain}`);
 		return 0;
 	}
@@ -76,7 +54,7 @@ async function fetchSitemapUrls(url: string): Promise<string[]> {
 	// SSRF: validate the URL points to a public host
 	try {
 		const parsed = new URL(url);
-		if (isPrivateHost(parsed.hostname)) return [];
+		if (isBlockedInternalHost(parsed.hostname)) return [];
 		if (parsed.protocol !== "https:") return [];
 	} catch {
 		return [];

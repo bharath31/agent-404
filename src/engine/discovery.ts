@@ -1,3 +1,5 @@
+import { readBodyCapped } from "./crawler.js";
+
 // ── Demo page discovery constants ──
 const DEMO_FETCH_TIMEOUT_MS = 8_000;
 const DEMO_PIPELINE_TIMEOUT_MS = 20_000;
@@ -472,38 +474,6 @@ export async function fetchDemoText(url: string): Promise<string | null> {
 	} finally {
 		clearTimeout(timeout);
 	}
-}
-
-/**
- * Read response body up to maxBytes. Returns null if body exceeds limit.
- */
-export async function readBodyCapped(resp: Response, maxBytes: number): Promise<string | null> {
-	// If body is a ReadableStream, read in chunks with a cap
-	if (resp.body && typeof resp.body.getReader === "function") {
-		const reader = resp.body.getReader();
-		const chunks: Uint8Array[] = [];
-		let totalSize = 0;
-		try {
-			while (true) {
-				const { done, value } = await reader.read();
-				if (done) break;
-				totalSize += value.byteLength;
-				if (totalSize > maxBytes) {
-					reader.cancel();
-					return null;
-				}
-				chunks.push(value);
-			}
-		} catch {
-			return null;
-		}
-		const decoder = new TextDecoder();
-		return chunks.map((c) => decoder.decode(c, { stream: true })).join("") +
-			decoder.decode();
-	}
-	// Fallback for environments without streaming
-	const text = await resp.text();
-	return text.length > maxBytes ? null : text;
 }
 
 /**
