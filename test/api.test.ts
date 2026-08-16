@@ -691,12 +691,31 @@ describe("API routes", () => {
 			});
 
 			expect(res.status).toBe(200);
+			expect(res.headers.get("vary")).toContain("Origin");
+			expect(res.headers.get("cache-control")).toBe("private, no-cache");
 			const body = await res.json();
 			expect(body.deadUrl).toBe("https://test.example.com/docs/v2/auth");
 			expect(body.suggestions.length).toBeGreaterThan(0);
 			expect(body.suggestions[0].url).toContain("/auth");
 			expect(body.suggestions[0].score).toBeGreaterThan(0.5);
 			expect(body.suggestions[0].matchType).toBe("moved"); // version migration
+		});
+
+		it("should support GET /api/suggest with edge Cache-Control headers", async () => {
+			const res = await app.request(
+				`/api/suggest?url=${encodeURIComponent("https://test.example.com/docs/v2/auth")}`,
+				{
+					headers: { "x-api-key": apiKey },
+				},
+			);
+
+			expect(res.status).toBe(200);
+			expect(res.headers.get("vary")).toContain("Origin");
+			expect(res.headers.get("cache-control")).toBe(
+				"public, max-age=60, s-maxage=300, stale-while-revalidate=60",
+			);
+			const body = await res.json();
+			expect(body.suggestions.length).toBeGreaterThan(0);
 		});
 
 		it("should return JSON-LD in response", async () => {
