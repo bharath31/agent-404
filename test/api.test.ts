@@ -346,6 +346,22 @@ describe("API routes", () => {
 			expect(res.status).toBe(401);
 		});
 
+		it("should allow unauthenticated registration for disposable CI smoke domains", async () => {
+			const storage = new MemoryStorage();
+			const anon = createTestApp(storage, null);
+			const res = await anon.request("/api/sites", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ domain: "smoke-1786853393592.example.com" }),
+			});
+			expect(res.status).toBe(201);
+			const body = await res.json();
+			expect(body.domain).toBe("smoke-1786853393592.example.com");
+			expect(body.verified).toBe(true);
+			expect(body.apiKey).toMatch(/^key_/);
+			expect(body.publicKey).toMatch(/^pk_/);
+		});
+
 		it("should register a new site", async () => {
 			const res = await app.request("/api/sites", {
 				method: "POST",

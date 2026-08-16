@@ -25,10 +25,10 @@ npx vitest run test/matcher.test.ts
 
 ## Architecture
 
-**Dual deployment target**: The same Hono app runs on both Vercel (Node.js Serverless Functions) and Cloudflare Workers. `api/index.ts` intentionally has no `runtime: "edge"` export — `@auth0/auth0-hono` pulls in `openid-client`/`jose`'s JWE decrypt, which Vercel Edge Functions don't support.
+**Dual deployment target**: The same Hono app runs on both Vercel (Node.js Serverless Functions via `@hono/node-server`) and Cloudflare Workers.
 
 - `src/index.ts` — Hono app with all routes, middleware, and cron handler. This is the central entry point.
-- `api/index.ts` — Vercel adapter (wraps the Hono app via `hono/vercel`)
+- `api/index.ts` — Vercel adapter (wraps the Hono app via `@hono/node-server` for Node.js Serverless Functions)
 - `src/worker.ts` — Cloudflare Workers adapter (exports `fetch` + `scheduled` handler)
 - `adapters/` — HTTP-layer 404 recovery for Next/Express/Cloudflare/Netlify (`recover404` in `adapters/core.ts`). The Hono `/api/suggest` route reuses this for `Link` / `Accept` negotiation. Import framework adapters from their files (`adapters/next.ts`, `adapters/express.ts`) rather than the barrel if you need Node-only Express.
 
