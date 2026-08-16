@@ -48,7 +48,8 @@
 			).slice(0, 20),
 		});
 
-		// sendBeacon can't set custom headers, so we use fetch with keepalive
+		// Secret keys must not live in HTML. New installs index via sitemap after
+		// verification. Legacy `data-api-key` still beacons from the page.
 		if (!secretKey || secretKey.startsWith("pk_")) {
 			return;
 		}

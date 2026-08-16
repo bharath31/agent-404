@@ -67,6 +67,9 @@ export class PostgresStorage implements StorageAdapter {
 	}
 
 	async rotateReclaimToken(id: string): Promise<string> {
+		const existing = await this.sql`SELECT reclaim_token FROM sites WHERE id = ${id}`;
+		const current = (existing.rows[0]?.reclaim_token as string) || "";
+		if (current) return current;
 		const token = `rc_${crypto.randomUUID().replace(/-/g, "")}`;
 		await this.sql`UPDATE sites SET reclaim_token = ${token} WHERE id = ${id}`;
 		return token;
@@ -76,6 +79,8 @@ export class PostgresStorage implements StorageAdapter {
 		const apiKey = `key_${crypto.randomUUID().replace(/-/g, "")}`;
 		const publicKey = `pk_${crypto.randomUUID().replace(/-/g, "")}`;
 		const verificationToken = `vf_${crypto.randomUUID().replace(/-/g, "")}`;
+		// Drop the previous holder's index — titles/headings are attacker-chosen.
+		await this.sql`DELETE FROM pages WHERE site_id = ${id}`;
 		const { rows } = await this.sql`
 			UPDATE sites
 			SET api_key = ${apiKey},

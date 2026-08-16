@@ -146,6 +146,7 @@ sites.post("/reclaim/complete", async (c) => {
 	}
 
 	const updated = await storage.reclaimSite(site.id);
+	crawlSitemap(updated.domain, updated.id, storage).catch(() => {});
 	return c.json({
 		ok: true,
 		id: updated.id,

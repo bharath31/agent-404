@@ -659,7 +659,8 @@ export const landingPageHtml = `<!DOCTYPE html>
         '<span class="tag"># prove ownership, then POST /api/sites/' + site.id + '/verify</span>\\n' +
         '<span class="tag"># DNS TXT ' + (txt.name || '') + ' = ' + (txt.value || site.verificationToken) + '</span>\\n' +
         '<span class="tag"># or ' + (wk.url || '') + '</span>\\n' +
-        '<span class="tag"># secret write key (server only): ' + site.apiKey + '</span>';
+        '<span class="tag"># after verify, sitemap crawl indexes pages (do not put the secret key in HTML)</span>\\n' +
+        '<span class="tag"># secret write key (server / curl only): ' + site.apiKey + '</span>';
 
       document.getElementById('registered-domain').textContent = site.domain;
 

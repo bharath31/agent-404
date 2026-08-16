@@ -55,6 +55,7 @@ app.use("*", async (c, next) => {
 
 // Rate limiting
 app.use("/api/sites", rateLimiter({ windowMs: 60_000, max: 10 }));
+app.use("/api/sites/*", rateLimiter({ windowMs: 60_000, max: 10 }));
 app.use("/api/register", rateLimiter({ windowMs: 60_000, max: 60 }));
 app.use("/api/suggest", rateLimiter({ windowMs: 60_000, max: 60 }));
 app.use("/api/analyze", rateLimiter({ windowMs: 300_000, max: 2 }));

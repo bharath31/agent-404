@@ -63,15 +63,18 @@ class MemoryStorage implements StorageAdapter {
 	}
 
 	async rotateReclaimToken(id: string): Promise<string> {
-		const token = `rc_${crypto.randomUUID().replace(/-/g, "")}`;
 		const site = this.sites.find((s) => s.id === id);
-		if (site) site.reclaimToken = token;
+		if (!site) throw new Error("not found");
+		if (site.reclaimToken) return site.reclaimToken;
+		const token = `rc_${crypto.randomUUID().replace(/-/g, "")}`;
+		site.reclaimToken = token;
 		return token;
 	}
 
 	async reclaimSite(id: string): Promise<SiteRecord> {
 		const site = this.sites.find((s) => s.id === id);
 		if (!site) throw new Error("not found");
+		this.pages = this.pages.filter((p) => p.siteId !== id);
 		site.apiKey = `key_${crypto.randomUUID().replace(/-/g, "")}`;
 		site.publicKey = `pk_${crypto.randomUUID().replace(/-/g, "")}`;
 		site.verificationToken = `vf_${crypto.randomUUID().replace(/-/g, "")}`;
@@ -393,6 +396,20 @@ describe("API routes", () => {
 			});
 			expect(res.status).toBe(403);
 		});
+
+		it("should reject a secret key when Origin is present (browser)", async () => {
+			const res = await app.request("/api/register", {
+				method: "POST",
+				headers: {
+					"Content-Type": "application/json",
+					"x-api-key": apiKey,
+					Origin: "https://test.example.com",
+				},
+				body: JSON.stringify({ url: "https://test.example.com/docs/auth" }),
+			});
+			expect(res.status).toBe(403);
+			expect(storage.pages).toHaveLength(0);
+		});
 	});
 
 	describe("POST /api/suggest (auth required)", () => {
@@ -594,6 +611,124 @@ describe("API routes", () => {
 			const verify = await app.request(`/api/sites/${site.id}/verify`, { method: "POST" });
 			expect(verify.status).toBe(200);
 			expect(storage.sites[0].verifiedAt).toBeTruthy();
+		});
+
+		it("should not treat a well-known redirect as proof", async () => {
+			const created = await app.request("/api/sites", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ domain: "redirect.example.com" }),
+			});
+			const site = await created.json();
+			vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+				const url = String(input);
+				if (url.includes("/.well-known/agent-404.txt")) {
+					return new Response("", {
+						status: 302,
+						headers: { Location: "http://169.254.169.254/latest/meta-data/" },
+					});
+				}
+				return new Response("no", { status: 404 });
+			});
+			const verify = await app.request(`/api/sites/${site.id}/verify`, { method: "POST" });
+			expect(verify.status).toBe(400);
+			expect(storage.sites[0].verifiedAt).toBeNull();
+		});
+
+		it("should verify via DNS TXT (DoH)", async () => {
+			const created = await app.request("/api/sites", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ domain: "dns.example.com" }),
+			});
+			const site = await created.json();
+			vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+				const url = String(input);
+				if (url.includes("cloudflare-dns.com")) {
+					return new Response(
+						JSON.stringify({ Answer: [{ data: `"${site.verificationToken}"` }] }),
+						{ status: 200, headers: { "Content-Type": "application/dns-json" } },
+					);
+				}
+				return new Response("no", { status: 404 });
+			});
+			const verify = await app.request(`/api/sites/${site.id}/verify`, { method: "POST" });
+			expect(verify.status).toBe(200);
+			expect(storage.sites[0].verifiedAt).toBeTruthy();
+		});
+	});
+
+	describe("reclaim", () => {
+		it("should start reclaim and keep the same token on a second call", async () => {
+			await app.request("/api/sites", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ domain: "takeover.example.com" }),
+			});
+			const first = await app.request("/api/sites/reclaim", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ domain: "takeover.example.com" }),
+			});
+			expect(first.status).toBe(200);
+			const a = await first.json();
+			const second = await app.request("/api/sites/reclaim", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ domain: "takeover.example.com" }),
+			});
+			const b = await second.json();
+			expect(b.reclaimToken).toBe(a.reclaimToken);
+			expect(b.siteId).toBe(a.siteId);
+		});
+
+		it("should fail complete when no reclaim is in progress", async () => {
+			await app.request("/api/sites", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ domain: "idle.example.com" }),
+			});
+			const res = await app.request("/api/sites/reclaim/complete", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ domain: "idle.example.com" }),
+			});
+			expect(res.status).toBe(400);
+		});
+
+		it("should rotate keys, purge pages, and verify after proof", async () => {
+			const created = await createVerifiedSite(app, storage, "reclaim.example.com");
+			await storage.upsertPage(created.id, {
+				url: "https://reclaim.example.com/poison",
+				title: "Attacker title",
+				description: "",
+				headings: "evil",
+			});
+			const start = await app.request("/api/sites/reclaim", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ domain: "reclaim.example.com" }),
+			});
+			const { reclaimToken } = await start.json();
+			vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+				const url = String(input);
+				if (url.includes("/.well-known/agent-404.txt")) {
+					return new Response(reclaimToken, { status: 200 });
+				}
+				return new Response("no", { status: 404 });
+			});
+			const done = await app.request("/api/sites/reclaim/complete", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ domain: "reclaim.example.com" }),
+			});
+			expect(done.status).toBe(200);
+			const body = await done.json();
+			expect(body.apiKey).not.toBe(created.apiKey);
+			expect(body.publicKey).not.toBe(created.publicKey);
+			expect(body.verified).toBe(true);
+			expect(storage.pages.filter((p) => p.siteId === created.id)).toHaveLength(0);
+			expect(storage.sites[0].reclaimToken).toBeNull();
 		});
 	});
 

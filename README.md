@@ -22,13 +22,15 @@ One script tag. That's it.
 ></script>
 ```
 
-The public key is **read-only** (`/api/suggest`). Keep the secret write key off the page — it is the only credential that can call `/api/register` and `/api/analyze`. Existing installs that still send `data-api-key` continue to work for suggestions (the old key is treated as the secret key).
+The public key is **read-only** (`/api/suggest`). Keep the secret write key off the page — it is the only credential that can call `/api/register` and `/api/analyze`. **Indexing for new installs is sitemap-driven:** after you prove ownership, we crawl `sitemap.xml` (and re-crawl daily). The script tag with `data-public-key` only serves 404 suggestions; it does not beacon writes. Existing installs that still send `data-api-key` continue to work for suggestions (the old key is treated as the secret key). Browser requests that send a secret key plus an `Origin` header are rejected so the secret cannot be used from page HTML.
+
+`Origin` on `/api/suggest` stops other sites' **browser** JavaScript from using your public key. Non-browser clients can set `Origin` freely — it is not a substitute for keeping the secret key off the page.
 
 Use `https://www.agent404.dev` (not the apex). Apex 307-redirects break CORS preflight.
 
 ## How it works
 
-1. **On live pages** — the script beacons page metadata (URL, title, headings) to build your site index
+1. **Index** — after domain verification, a sitemap crawl (and the daily cron) registers pages. Do not put the secret key in HTML.
 2. **On 404 pages** — the script fetches ranked suggestions and injects them as:
    - A human-readable suggestion list
    - A `schema.org/ItemList` JSON-LD block that agents already understand

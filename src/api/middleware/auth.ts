@@ -51,6 +51,18 @@ export function apiKeyAuth(mode: "read" | "write" = "write") {
 			);
 		}
 
+		// Secret keys must not be used from browsers (Origin is set by the UA).
+		// Sitemap crawls and curl have no Origin. Legacy HTML `data-api-key` beacons
+		// will start failing — use data-public-key + sitemap indexing instead.
+		if (mode === "write" && found.keyType === "secret" && c.req.header("origin")) {
+			return c.json(
+				{
+					error: "Secret key cannot be used from a browser. Put data-public-key in HTML; index pages via sitemap after verification.",
+				},
+				403,
+			);
+		}
+
 		if (mode === "read" && found.keyType === "public") {
 			const origin = c.req.header("origin") || "";
 			if (!origin || !originBelongsToSite(origin, found.site.domain)) {
