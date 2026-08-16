@@ -63,7 +63,8 @@ function suggestJson(
 	const suggestions = (
 		payload as { suggestions?: Array<{ url: string; title: string; matchType: string }> }
 	).suggestions;
-	c.header("Vary", "Accept");
+	c.header("Vary", "Accept, Origin");
+	c.header("Cache-Control", "public, max-age=60, s-maxage=300, stale-while-revalidate=60");
 	if (suggestions && suggestions.length > 0) {
 		try {
 			c.header("Link", buildLinkHeader(suggestions));
