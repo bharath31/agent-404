@@ -38,7 +38,7 @@ audit.use("/*", rateLimiter({ windowMs: 60_000, max: 30 }));
 
 // Create or run a new standing audit
 audit.post("/", async (c) => {
-	const body = await c.req.json<{ domain?: string; deadPath?: string }>().catch(() => ({ domain: "" }));
+	const body = await c.req.json<{ domain?: string; deadPath?: string }>().catch(() => ({ domain: "", deadPath: "" }));
 	const rawDomain = body.domain || "";
 	const domain = normalizeDomain(rawDomain);
 
