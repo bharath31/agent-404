@@ -10,13 +10,14 @@
  */
 import { test, expect } from "@playwright/test";
 import { startServer } from "./test-server.js";
+import { CANONICAL_ORIGIN } from "../src/config.js";
 
-const API_BASE = "https://www.agent404.dev";
+const API_BASE = CANONICAL_ORIGIN;
 const TEST_DOMAIN = `browser-test-${Date.now()}.example.com`;
 
 let siteId: string;
 let apiKey: string;
-let serverPort: number;
+let pageOrigin: string;
 let closeServer: () => void;
 
 test.beforeAll(async () => {
@@ -54,12 +55,13 @@ test.beforeAll(async () => {
 
 	// 3. Start the local test server
 	const server = await startServer(siteId, apiKey);
-	serverPort = server.port;
+	pageOrigin = server.pageOrigin;
 	closeServer = server.close;
+	const pageHost = new URL(pageOrigin).host;
 
-	// 4. Now register pages with correct localhost URLs
+	// 4. Now register pages with URLs that match the fixture origin
 	for (const page of pages) {
-		page.url = page.url.replace("localhost:0", `localhost:${serverPort}`);
+		page.url = page.url.replace("localhost:0", pageHost);
 		await fetch(`${API_BASE}/api/register`, {
 			method: "POST",
 			headers: {
@@ -81,11 +83,12 @@ test("live page beacons metadata to the API", async ({ page }) => {
 		req.url().includes("/api/register") && req.method() === "POST",
 	);
 
-	await page.goto(`http://localhost:${serverPort}/docs/v3/authentication`);
+	await page.goto(`${pageOrigin}/docs/v3/authentication`);
 
 	const beaconReq = await beaconPromise;
 	const body = beaconReq.postDataJSON();
 
+	expect(new URL(beaconReq.url()).origin).toBe(API_BASE);
 	expect(body.url).toContain("/docs/v3/authentication");
 	expect(body.title).toBe("Authentication Guide");
 	expect(body.description).toBe("How to authenticate with the API using OAuth2 and API keys");
@@ -94,7 +97,7 @@ test("live page beacons metadata to the API", async ({ page }) => {
 });
 
 test("404 page detects error via meta tag and fetches suggestions", async ({ page }) => {
-	await page.goto(`http://localhost:${serverPort}/docs/v2/authentication`);
+	await page.goto(`${pageOrigin}/docs/v2/authentication`);
 
 	// Wait for the suggestion container to appear (script fetches suggestions async)
 	const container = page.locator("#agent-404-suggestions");
@@ -102,7 +105,7 @@ test("404 page detects error via meta tag and fetches suggestions", async ({ pag
 });
 
 test("404 page injects suggestion links", async ({ page }) => {
-	await page.goto(`http://localhost:${serverPort}/docs/v2/authentication`);
+	await page.goto(`${pageOrigin}/docs/v2/authentication`);
 
 	const container = page.locator("#agent-404-suggestions");
 	await expect(container).toBeVisible({ timeout: 10000 });
@@ -126,7 +129,7 @@ test("404 page injects suggestion links", async ({ page }) => {
 });
 
 test("404 page injects match type badges", async ({ page }) => {
-	await page.goto(`http://localhost:${serverPort}/docs/v2/authentication`);
+	await page.goto(`${pageOrigin}/docs/v2/authentication`);
 
 	const container = page.locator("#agent-404-suggestions");
 	await expect(container).toBeVisible({ timeout: 10000 });
@@ -145,7 +148,7 @@ test("404 page injects match type badges", async ({ page }) => {
 });
 
 test("404 page injects JSON-LD structured data", async ({ page }) => {
-	await page.goto(`http://localhost:${serverPort}/docs/v2/authentication`);
+	await page.goto(`${pageOrigin}/docs/v2/authentication`);
 
 	// Wait for suggestions to appear first
 	await page.locator("#agent-404-suggestions").waitFor({ timeout: 10000 });
@@ -172,7 +175,7 @@ test("404 page injects JSON-LD structured data", async ({ page }) => {
 });
 
 test("live page does NOT inject suggestions", async ({ page }) => {
-	await page.goto(`http://localhost:${serverPort}/docs/v3/authentication`);
+	await page.goto(`${pageOrigin}/docs/v3/authentication`);
 
 	// Wait briefly to ensure the script has run
 	await page.waitForTimeout(2000);
@@ -184,7 +187,7 @@ test("live page does NOT inject suggestions", async ({ page }) => {
 
 test("404 page with no matching pages shows no suggestions container", async ({ page }) => {
 	// Navigate to a completely unrelated URL
-	await page.goto(`http://localhost:${serverPort}/xyzzy/quantum/entanglement/wormhole`);
+	await page.goto(`${pageOrigin}/xyzzy/quantum/entanglement/wormhole`);
 
 	// Wait briefly for the script to run
 	await page.waitForTimeout(5000);

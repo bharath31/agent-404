@@ -155,9 +155,14 @@ export class PostgresStorage implements StorageAdapter {
 		const suggestions =
 			await this.sql`SELECT COUNT(*) as count FROM suggestion_logs WHERE site_id = ${siteId}`;
 
+		const lastSeen = await this.sql`
+			SELECT MAX(last_seen) as last_seen FROM pages WHERE site_id = ${siteId}
+		`;
+
 		return {
 			pageCount: Number(pages.rows[0]?.count ?? 0),
 			suggestionsServed: Number(suggestions.rows[0]?.count ?? 0),
+			lastBeaconAt: lastSeen.rows[0]?.last_seen ? String(lastSeen.rows[0].last_seen) : null,
 		};
 	}
 

@@ -73,12 +73,35 @@ tr:last-child td { border-bottom: none; }
 .dot-similar { background: var(--green); }
 .dot-related { background: var(--orange); }
 .empty { color: var(--text-secondary); padding: 2rem; text-align: center; }
+.warning {
+  background: #431407;
+  border: 1px solid #c2410c;
+  color: #fed7aa;
+  border-radius: 8px;
+  padding: 1rem 1.25rem;
+  margin-bottom: 1.5rem;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+.warning strong { display: block; margin-bottom: 0.25rem; color: #fdba74; }
+.warning code { font-size: 0.85em; }
 </style>
 </head>
 <body>
 <h1>${escapeHtml(data.domain)}</h1>
 <p class="subtitle">agent-404 dashboard</p>
 
+${
+	data.pageCount === 0
+		? `<div class="warning" role="alert">
+  <strong>No beacons received</strong>
+  This site has not indexed any pages yet. The install is not working — an empty page count is not a quiet success.
+  Confirm the snippet uses <code>https://www.agent404.dev</code> (not the apex; redirects break CORS preflight),
+  then open a live page and check the browser console for <code>[agent-404]</code> warnings.
+  You can also call <code>GET /api/install/status</code> with your API key.
+</div>`
+		: ""
+}
 <div class="stats">
   <div class="stat-card"><div class="label">Indexed Pages</div><div class="value">${data.pageCount}</div></div>
   <div class="stat-card"><div class="label">Suggestions Served</div><div class="value">${data.suggestionsServed}</div></div>

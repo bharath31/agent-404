@@ -1,3 +1,5 @@
+import { CANONICAL_SCRIPT_URL } from "./config.js";
+
 export const landingPageHtml = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -648,7 +650,7 @@ export const landingPageHtml = `<!DOCTYPE html>
       const pre = document.getElementById('snippet-pre');
       pre.innerHTML =
         '<span class="tag">&lt;script</span>\\n' +
-        '  <span class="attr">src</span>=<span class="str">"https://agent404.dev/agent-404.min.js"</span>\\n' +
+        '  <span class="attr">src</span>=<span class="str">"${CANONICAL_SCRIPT_URL}"</span>\\n' +
         '  <span class="attr">data-site-id</span>=<span class="str">"' + siteId + '"</span>\\n' +
         '  <span class="attr">data-api-key</span>=<span class="str">"' + apiKey + '"</span>\\n' +
         '  <span class="attr">defer</span>\\n' +
@@ -662,7 +664,7 @@ export const landingPageHtml = `<!DOCTYPE html>
     }
   </script>
   <script
-    src="https://agent404.dev/agent-404.min.js"
+    src="${CANONICAL_SCRIPT_URL}"
     data-site-id="a0beb545-91af-4ea4-8de5-f37c5e0118df"
     data-api-key="key_e644afe7a33f4b13b8e21446abe70ccb"
     defer
