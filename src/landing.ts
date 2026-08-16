@@ -435,8 +435,18 @@ export function landingPageHtml(opts: { signedIn?: boolean } = {}): string {
 
     <div class="hero">
       <div class="badge">open source &middot; MIT licensed</div>
-      <h1>Turn dead links into<br><span class="highlight">smart redirects for AI agents</span></h1>
-      <p>AI crawlers do not run JavaScript. Put ranked suggestions in the 404 response — HTML, JSON-LD, and Link headers — so ClaudeBot and GPTBot can recover. The script tag is the zero-config option for browsers.</p>
+      <h1>Your 404 pages are<br><span class="highlight">invisible to AI agents</span></h1>
+      <p>GPTBot, ClaudeBot, and PerplexityBot do not execute JavaScript — they never see a script tag. agent-404 puts ranked suggestions directly in the 404 response: JSON-LD, a suggestion list, and Link headers. Middleware is the path that actually reaches crawlers.</p>
+    </div>
+
+    <div class="code-block" id="middleware-block">
+      <div class="label">Install (HTTP layer &mdash; recommended)</div>
+      <pre><span class="tag">import</span> { agent404 } <span class="tag">from</span> <span class="str">"./adapters/next"</span>;
+
+<span class="tag">export const</span> middleware = agent404({
+  apiKey: process.env.AGENT404_PUBLIC_KEY!,
+});</pre>
+      <p style="margin-top:0.75rem;font-size:0.75rem;color:var(--text-secondary)">Same pattern for Express, Cloudflare Workers, Netlify Edge, and nginx.</p>
     </div>
 
     <div class="demo">
@@ -455,41 +465,6 @@ export function landingPageHtml(opts: { signedIn?: boolean } = {}): string {
           <span class="demo-label hit">found</span>
           <span class="demo-url live" id="demo-live"></span>
         </div>
-      </div>
-    </div>
-
-    <div class="code-block" id="get-started-block">
-      <div class="label">Get your script tag</div>
-      <div id="get-started"></div>
-      <div id="register-form">
-        <div style="display:flex;gap:0.5rem;align-items:stretch">
-          <input type="text" id="domain-input" placeholder="your-site.com"
-            style="flex:1;padding:0.6rem 0.8rem;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--mono);font-size:0.85rem;outline:none"
-            onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border)'"
-          >
-          <button id="register-btn" onclick="registerSite()"
-            style="padding:0.6rem 1.25rem;background:var(--accent);color:white;border:none;border-radius:8px;font-size:0.85rem;font-weight:600;cursor:pointer;white-space:nowrap;transition:background 0.15s"
-            onmouseover="this.style.background='var(--accent-dim)'" onmouseout="this.style.background='var(--accent)'"
-          >Generate</button>
-        </div>
-        <p style="margin-top:0.5rem;font-size:0.75rem;color:var(--text-secondary)">Enter your domain. We email a one-time code — no password.</p>
-        <p id="register-error" class="form-error" hidden style="margin-top:0.5rem;font-size:0.8rem;color:var(--red)"></p>
-        <div id="claim-panel" hidden style="margin-top:0.75rem">
-          <p style="font-size:0.8rem;color:var(--text-secondary);margin-bottom:0.4rem">Paste the API key from your existing script tag to link this domain.</p>
-          <div style="display:flex;gap:0.5rem">
-            <input type="text" id="claim-key-input" placeholder="key_…" autocomplete="off"
-              style="flex:1;padding:0.6rem 0.8rem;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--mono);font-size:0.85rem;outline:none">
-            <button type="button" id="claim-btn"
-              style="padding:0.6rem 1.25rem;background:var(--accent);color:white;border:none;border-radius:8px;font-size:0.85rem;font-weight:600;cursor:pointer;white-space:nowrap"
-            >Link site</button>
-          </div>
-        </div>
-      </div>
-      <div id="snippet-result" style="display:none">
-        <pre id="snippet-pre"></pre>
-        <p style="margin-top:0.75rem;font-size:0.75rem;color:var(--text-secondary)">
-          <span id="registered-domain" style="color:var(--green)"></span> &mdash; paste this into every page on your site
-        </p>
       </div>
     </div>
 
@@ -527,9 +502,48 @@ export function landingPageHtml(opts: { signedIn?: boolean } = {}): string {
       </div>
     </div>
 
+    <div class="section">
+      <h2>Zero-config script (browsers only)</h2>
+      <p style="color:var(--text-secondary);font-size:0.9rem;margin-bottom:1.5rem;max-width:560px">Reaches humans and browser-driving agents. It does not reach GPTBot, ClaudeBot, or PerplexityBot — for that, use the middleware above.</p>
+      <div class="code-block" id="get-started-block">
+        <div class="label">Get your script tag</div>
+        <div id="get-started"></div>
+        <div id="register-form">
+          <div style="display:flex;gap:0.5rem;align-items:stretch">
+            <input type="text" id="domain-input" placeholder="your-site.com"
+              style="flex:1;padding:0.6rem 0.8rem;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--mono);font-size:0.85rem;outline:none"
+              onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border)'"
+            >
+            <button id="register-btn" onclick="registerSite()"
+              style="padding:0.6rem 1.25rem;background:var(--accent);color:white;border:none;border-radius:8px;font-size:0.85rem;font-weight:600;cursor:pointer;white-space:nowrap;transition:background 0.15s"
+              onmouseover="this.style.background='var(--accent-dim)'" onmouseout="this.style.background='var(--accent)'"
+            >Generate</button>
+          </div>
+          <p style="margin-top:0.5rem;font-size:0.75rem;color:var(--text-secondary)">Enter your domain. We email a one-time code — no password.</p>
+          <p id="register-error" class="form-error" hidden style="margin-top:0.5rem;font-size:0.8rem;color:var(--red)"></p>
+          <div id="claim-panel" hidden style="margin-top:0.75rem">
+            <p style="font-size:0.8rem;color:var(--text-secondary);margin-bottom:0.4rem">Paste the API key from your existing script tag to link this domain.</p>
+            <div style="display:flex;gap:0.5rem">
+              <input type="text" id="claim-key-input" placeholder="key_…" autocomplete="off"
+                style="flex:1;padding:0.6rem 0.8rem;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--mono);font-size:0.85rem;outline:none">
+              <button type="button" id="claim-btn"
+                style="padding:0.6rem 1.25rem;background:var(--accent);color:white;border:none;border-radius:8px;font-size:0.85rem;font-weight:600;cursor:pointer;white-space:nowrap"
+              >Link site</button>
+            </div>
+          </div>
+        </div>
+        <div id="snippet-result" style="display:none">
+          <pre id="snippet-pre"></pre>
+          <p style="margin-top:0.75rem;font-size:0.75rem;color:var(--text-secondary)">
+            <span id="registered-domain" style="color:var(--green)"></span> &mdash; paste this into every page on your site
+          </p>
+        </div>
+      </div>
+    </div>
+
     <div class="cta">
       <h2>Stop losing agents to dead links</h2>
-      <p>Add one script tag. Your 404 pages start working for you.<br>Fully open source — self-host with one click or use the hosted version.</p>
+      <p>Wire up the middleware and your 404s start working for agents.<br>Fully open source — self-host with one click or use the hosted version.</p>
       <div class="btn-group">
         <a href="https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fbharath31%2Fagent-404&env=DATABASE_URL,EMBEDDING_API_KEY,CRON_SECRET,AUTH0_DOMAIN,AUTH0_CLIENT_ID,AUTH0_CLIENT_SECRET,AUTH0_SESSION_ENCRYPTION_KEY,BASE_URL&envDescription=DATABASE_URL%3A%20Neon%20Postgres.%20Auth0%20passwordless%20email%20OTP%20required%20for%20the%20dashboard.&project-name=agent-404&repository-name=agent-404" class="btn btn-vercel">
           <svg width="16" height="16" viewBox="0 0 76 65" fill="currentColor"><path d="M37.5274 0L75.0548 65H0L37.5274 0Z"/></svg>
