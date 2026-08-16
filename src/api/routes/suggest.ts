@@ -2,6 +2,8 @@ import { Hono } from "hono";
 import type { PostgresStorage } from "../../storage/postgres.js";
 import { findSuggestions } from "../../engine/matcher.js";
 import { generateDeadUrlEmbedding } from "../../engine/embeddings.js";
+import { getCachedSuggest, setCachedSuggest } from "../../engine/suggest-cache.js";
+import { normalizeDeadUrl, pathHint } from "../../engine/url-normalize.js";
 
 type Env = { Variables: { storage: PostgresStorage; siteId: string } };
 
@@ -20,18 +22,27 @@ suggest.post("/", async (c) => {
 		return c.json({ error: "url too long" }, 400);
 	}
 
-	// Generate embedding for the dead URL
-	const deadUrlEmbedding = await generateDeadUrlEmbedding(body.url);
+	const deadUrl = normalizeDeadUrl(body.url);
+	const cached = getCachedSuggest(siteId, deadUrl);
+	if (cached) {
+		return c.json(cached);
+	}
 
-	// Use vector pre-filter if embedding available, otherwise fall back to full scan
+	// Generate embedding for the dead URL
+	const deadUrlEmbedding = await generateDeadUrlEmbedding(deadUrl);
+
+	// Use vector pre-filter if embedding available, otherwise a bounded lexical scan
 	let pages;
 	if (deadUrlEmbedding) {
 		pages = await storage.searchByEmbedding(siteId, deadUrlEmbedding, 20);
 	} else {
-		pages = await storage.getPages(siteId);
+		pages = await storage.getPages(siteId, { limit: 500, pathHint: pathHint(deadUrl) });
+		if (pages.length < 5) {
+			pages = await storage.getPages(siteId, { limit: 500 });
+		}
 	}
 
-	const suggestions = findSuggestions(body.url, pages, deadUrlEmbedding);
+	const suggestions = findSuggestions(deadUrl, pages, deadUrlEmbedding);
 
 	// Log asynchronously (include scores + match types for dashboard)
 	if (suggestions.length > 0) {
@@ -40,7 +51,7 @@ suggest.post("/", async (c) => {
 		storage
 			.recordSuggestionServed(
 				siteId,
-				body.url,
+				deadUrl,
 				suggestions.map((s) => s.url),
 				scores,
 				matchTypes,
@@ -48,11 +59,13 @@ suggest.post("/", async (c) => {
 			.catch(() => {});
 	}
 
-	return c.json({
-		deadUrl: body.url,
+	const payload = {
+		deadUrl,
 		suggestions,
 		jsonLd: buildJsonLd(suggestions),
-	});
+	};
+	setCachedSuggest(siteId, deadUrl, payload);
+	return c.json(payload);
 });
 
 function buildJsonLd(suggestions: { url: string; title: string; matchType: string }[]) {

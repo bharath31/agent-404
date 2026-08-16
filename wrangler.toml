@@ -3,7 +3,7 @@ main = "src/worker.ts"
 compatibility_date = "2024-12-01"
 
 [triggers]
-crons = ["0 3 * * *"]
+crons = ["0 * * * *"]
 
 [assets]
 directory = "./public"

@@ -1021,7 +1021,15 @@ app.get("/api/cron", async (c) => {
 
 	const storage = c.get("storage");
 	const sql = storage.getSql();
-	const { rows } = await sql`SELECT id, domain FROM sites`;
+	const shard = new Date().getUTCHours() % 24;
+	const { rows } = await sql.query(
+		`SELECT id, domain FROM sites
+		 WHERE abs(hashtext(id::text)) % 24 = $1
+		   AND (last_cron_at IS NULL OR last_cron_at < NOW() - INTERVAL '20 hours')
+		 ORDER BY last_cron_at NULLS FIRST
+		 LIMIT 40`,
+		[shard],
+	);
 
 	const results = [];
 	for (const row of rows) {
@@ -1030,11 +1038,16 @@ app.get("/api/cron", async (c) => {
 		const crawled = await crawlSitemap(domain, siteId, storage);
 		const pruned = await pruneStalePages(storage, siteId, 30);
 
-		// Backfill embeddings for pages missing them
+		// Backfill embeddings for pages missing them (bounded + batched)
 		let backfilled = 0;
-		const { rows: nullPages } = await sql`
-			SELECT * FROM pages WHERE site_id = ${siteId} AND embedding IS NULL
-		`;
+		const BACKFILL_LIMIT = 200;
+		const { rows: nullPages } = await sql.query(
+			`SELECT id, url, title, description FROM pages
+			 WHERE site_id = $1 AND embedding IS NULL
+			 ORDER BY id
+			 LIMIT $2`,
+			[siteId, BACKFILL_LIMIT],
+		);
 		if (nullPages.length > 0) {
 			const BATCH_SIZE = 100;
 			for (let i = 0; i < nullPages.length; i += BATCH_SIZE) {
@@ -1047,24 +1060,30 @@ app.get("/api/cron", async (c) => {
 					}),
 				);
 				const embeddings = await generateBatchEmbeddings(texts);
+				const ids: number[] = [];
+				const vectors: string[] = [];
 				for (let j = 0; j < batch.length; j++) {
 					const emb = embeddings[j];
 					if (emb && emb.every((v) => typeof v === "number" && Number.isFinite(v))) {
-						const embStr = `[${emb.join(",")}]`;
-						await sql.query(
-							`UPDATE pages SET embedding = $1::vector WHERE id = $2`,
-							[embStr, batch[j].id],
-						);
+						ids.push(batch[j].id as number);
+						vectors.push(`[${emb.join(",")}]`);
 						backfilled++;
 					}
+				}
+				for (let k = 0; k < ids.length; k++) {
+					await sql.query(`UPDATE pages SET embedding = $1::vector WHERE id = $2`, [
+						vectors[k],
+						ids[k],
+					]);
 				}
 			}
 		}
 
-		results.push({ domain, crawled, pruned, backfilled });
+		await sql`UPDATE sites SET last_cron_at = NOW() WHERE id = ${siteId}`;
+		results.push({ domain, crawled, pruned, backfilled, shard });
 	}
 
-	return c.json({ ok: true, results });
+	return c.json({ ok: true, shard, processed: results.length, results });
 });
 
 export default app;

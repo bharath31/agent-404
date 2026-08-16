@@ -14,6 +14,7 @@ export interface PageRecord {
 	headings: string; // JSON array of strings
 	lastSeen: string;
 	embedding?: number[] | null;
+	contentHash?: string | null;
 }
 
 export interface Suggestion {
