@@ -19,6 +19,7 @@ import { dashboardHtml } from "./dashboard.js";
 import { isBlockedInternalHost } from "./lib/ssrf-guard.js";
 import { invalidateSuggestCache } from "./engine/suggest-cache.js";
 import { install } from "./api/routes/install.js";
+import { audit } from "./api/routes/audit.js";
 import {
 	AUTH0_PASSWORDLESS_CONNECTION,
 	AUTH_CALLBACK_PATH,
@@ -1052,6 +1053,9 @@ app.route("/api/analyze", analyze);
 
 app.use("/api/install/*", apiKeyAuth());
 app.route("/api/install", install);
+
+// Standing audit permalinks & ClaudeBot 404 response check (BAT-38, BAT-39)
+app.route("/api/audit", audit);
 
 // Dashboard — Auth0 passwordless email session; snippet lives here
 app.get("/dashboard", requireOwnerPage(), async (c) => {
