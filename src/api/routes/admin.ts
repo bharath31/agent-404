@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import type { PostgresStorage } from "../../storage/postgres.js";
 import { getCronSecret } from "../../config.js";
+import { getFunnelMetrics } from "../../lib/funnel-telemetry.js";
 
 type Env = {
 	Bindings: { CRON_SECRET?: string };
@@ -31,6 +32,15 @@ admin.get("/metrics", async (c) => {
 		storage.getTotalSiteCount(),
 	]);
 	return c.json({ liveInstalls, totalSites, goal: 1000 });
+});
+
+// BAT-42: Audit-to-install funnel telemetry metrics
+admin.get("/funnel", async (c) => {
+	if (!isCronAuthorized(c)) {
+		return c.json({ error: "Unauthorized" }, 401);
+	}
+	const metrics = getFunnelMetrics();
+	return c.json(metrics);
 });
 
 export { admin };

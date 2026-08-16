@@ -3,6 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "bin": {
+    "agent-404": "./bin/agent-404.js"
+  },
   "scripts": {
     "dev": "vercel dev",
     "dev:cf": "wrangler dev",

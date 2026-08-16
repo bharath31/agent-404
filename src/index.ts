@@ -147,6 +147,7 @@ app.get("/", async (c) => {
 	return c.html(landingPageHtml({ signedIn }));
 });
 app.get("/demo", (c) => c.html(demoPageHtml));
+app.get("/report/:id", (c) => c.html(demoPageHtml));
 
 // Health check
 app.get("/api/health", (c) => c.json({ status: "ok" }));

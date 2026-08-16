@@ -20,3 +20,17 @@ buildSync({
 });
 
 console.log("Built public/agent-404.min.js");
+
+// Build CLI binary
+buildSync({
+	entryPoints: [resolve(__dirname, "../bin/agent-404.ts")],
+	outfile: resolve(__dirname, "../bin/agent-404.js"),
+	bundle: true,
+	minify: false,
+	format: "esm",
+	target: "node18",
+	platform: "node",
+});
+
+console.log("Built bin/agent-404.js");
+
