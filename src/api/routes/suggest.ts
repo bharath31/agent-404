@@ -4,6 +4,7 @@ import { findSuggestions } from "../../engine/matcher.js";
 import { generateDeadUrlEmbedding } from "../../engine/embeddings.js";
 import { getCachedSuggest, setCachedSuggest } from "../../engine/suggest-cache.js";
 import { normalizeDeadUrl, pathHint } from "../../engine/url-normalize.js";
+import { buildJsonLd, buildLinkHeader } from "../../../adapters/core.js";
 
 type Env = { Variables: { storage: PostgresStorage; siteId: string } };
 
@@ -26,7 +27,7 @@ suggest.post("/", async (c) => {
 	const cached = getCachedSuggest(siteId, deadUrl);
 	if (cached) {
 		logSuggestionsServed(storage, siteId, deadUrl, cached);
-		return c.json(cached);
+		return suggestJson(c, cached);
 	}
 
 	// Generate embedding for the dead URL
@@ -52,8 +53,26 @@ suggest.post("/", async (c) => {
 	};
 	logSuggestionsServed(storage, siteId, deadUrl, payload);
 	setCachedSuggest(siteId, deadUrl, payload);
-	return c.json(payload);
+	return suggestJson(c, payload);
 });
+
+function suggestJson(
+	c: { header: (name: string, value: string) => void; json: (body: unknown) => Response },
+	payload: unknown,
+): Response {
+	const suggestions = (
+		payload as { suggestions?: Array<{ url: string; title: string; matchType: string }> }
+	).suggestions;
+	c.header("Vary", "Accept");
+	if (suggestions && suggestions.length > 0) {
+		try {
+			c.header("Link", buildLinkHeader(suggestions));
+		} catch {
+			// Invalid header values must not turn suggest into a 500.
+		}
+	}
+	return c.json(payload);
+}
 
 function logSuggestionsServed(
 	storage: PostgresStorage,
@@ -75,24 +94,6 @@ function logSuggestionsServed(
 			matchTypes,
 		)
 		.catch(() => {});
-}
-
-function buildJsonLd(suggestions: { url: string; title: string; matchType: string }[]) {
-	return {
-		"@context": "https://schema.org",
-		"@type": "WebPage",
-		name: "Page Not Found",
-		mainEntity: {
-			"@type": "ItemList",
-			itemListElement: suggestions.map((s, i) => ({
-				"@type": "ListItem",
-				position: i + 1,
-				url: s.url,
-				name: s.title || s.url,
-				description: s.matchType,
-			})),
-		},
-	};
 }
 
 export { suggest };

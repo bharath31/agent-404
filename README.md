@@ -9,32 +9,52 @@
 [![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fbharath31%2Fagent-404&env=DATABASE_URL,EMBEDDING_API_KEY,CRON_SECRET&envDescription=DATABASE_URL%3A%20Neon%20Postgres%20connection%20string.%20EMBEDDING_API_KEY%3A%20For%20semantic%20embeddings%20(optional).%20CRON_SECRET%3A%20Bearer%20token%20for%20cron.&project-name=agent-404&repository-name=agent-404)
 [![Deploy to Cloudflare Workers](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/bharath31/agent-404)
 
-Make your 404 pages agent-friendly. When AI agents and crawlers hit a dead link, they give up or hallucinate. **agent-404** returns structured suggestions of the next best pages — so agents recover gracefully.
+Make your 404 pages agent-friendly. When AI agents and crawlers hit a dead link, they give up or hallucinate. **agent-404** puts ranked suggestions in the **404 response itself** — HTML, JSON-LD, and `Link` headers — so agents that never run JavaScript can still recover.
 
-One script tag. That's it.
+GPTBot, ClaudeBot, and PerplexityBot do not execute JS. The script tag is the zero-config path for browsers and browser-driving agents. Middleware is the path that actually reaches crawlers.
+
+## Install (HTTP layer — recommended)
+
+Intercept 404s before the response is written. `curl -A ClaudeBot https://yoursite/dead-link` should return **404** with suggestions in the body.
+
+```ts
+// Next.js middleware.ts
+import { agent404 } from "./adapters/next";
+
+export const middleware = agent404({
+  apiKey: process.env.AGENT404_PUBLIC_KEY!,
+});
+```
+
+Same helper exists for Express (`recoverExpress404` from `adapters/express.ts`), Cloudflare Workers (`agent404Worker`), Netlify Edge (`agent404Netlify`), and nginx (`adapters/nginx.md`). Shared logic lives in `adapters/core.ts`: `recover404()` injects JSON-LD, a suggestion list, `Link` alternates, and honors `Accept: application/json` (still a 404, with `Vary: Accept`).
+
+App Router `not-found.tsx` must return JSX, not a `Response`. Keep `middleware.ts` for crawlers (Link headers + JSON Accept). In `not-found.tsx`, call `notFoundSuggestions()` from `adapters/next.ts` to render the same links for humans.
+
+Suggestions in the raw 404 body are visible to any `curl`, not only JS clients. The origin probe and the suggestion API each use a 2.5s timeout by default.
+
+## Zero-config script (browsers only)
+
+Reaches humans and agents that execute JavaScript. It does **not** reach GPTBot / ClaudeBot / PerplexityBot.
 
 ```html
 <script
-  src="https://agent404.dev/agent-404.min.js"
+  src="https://www.agent404.dev/agent-404.min.js"
   data-site-id="your-site-id"
   data-api-key="your-api-key"
   defer
 ></script>
 ```
 
+Use `https://www.agent404.dev` (not the apex). `agent404.dev` 307-redirects to `www`, and a CORS preflight that receives a redirect is a hard failure — the script will not register pages or render suggestions.
+
+Self-hosters can override the API origin with `data-api-base="https://your-origin.example"`.
+
 ## How it works
 
-1. **On live pages** — the script beacons page metadata (URL, title, headings) to build your site index
-2. **On 404 pages** — the script fetches ranked suggestions and injects them as:
-   - A human-readable suggestion list
-   - A `schema.org/ItemList` JSON-LD block that agents already understand
+1. **At the HTTP layer** — middleware rewrites a 404 **before** the body is sent: suggestion list, `schema.org/ItemList` JSON-LD, and `Link` headers. Crawlers that never run JS still see them. `Accept: application/json` returns the same payload as `/api/suggest` with status 404.
+2. **In the browser (optional)** — the script tag beacons live pages into the index and injects suggestions for humans / JS-capable agents.
 
-### 404 Detection
-
-The script detects 404 pages using (in order):
-- `data-404-selector` — CSS selector you provide (e.g. `".not-found"`)
-- `<meta name="agent-404:status" content="404">` — meta tag
-- Page title containing "404" or "not found"
+Sibling: [agent404-server](https://github.com/kormco/agent404-server) by [@kormco](https://github.com/kormco) for webserver-layer interception.
 
 ### Ranking — 4 signals
 
@@ -56,26 +76,38 @@ Embeddings are generated via any OpenAI-compatible API (default: OpenRouter with
 - **Backfill** — the daily cron job generates embeddings for any pages that are missing them (in batches of 100)
 - **Config** — `EMBEDDING_API_URL` and `EMBEDDING_MODEL` env vars let you point at any provider (OpenAI, Azure, local)
 
-## Server-side mode
+## Script-tag 404 detection
 
-The script-tag approach needs a 404 page that renders HTML and executes JS. For surfaces where that doesn't apply — bare `nginx =404` responses, static-site 404s that ship no bundle, CDN-cached 404s, or JSON API paths — see [agent404-server](https://github.com/kormco/agent404-server) by [@kormco](https://github.com/kormco). Sibling project: webserver-layer interception, sitemap-driven index, agent-vs-human content negotiation.
+When using the optional browser snippet:
+- `data-404-selector` — CSS selector you provide (e.g. `".not-found"`)
+- `<meta name="agent-404:status" content="404">` — meta tag
+- Page title containing "404" or "not found"
 
 ## API
 
 ### Register a site
 
 ```bash
-curl -X POST https://agent404.dev/api/sites \
+curl -X POST https://www.agent404.dev/api/sites \
   -H "Content-Type: application/json" \
   -d '{"domain": "example.com"}'
 ```
 
 Returns `siteId` and `apiKey`. The sitemap is crawled automatically on registration.
 
+### Verify the install
+
+```bash
+curl https://www.agent404.dev/api/install/status \
+  -H "x-api-key: your-api-key"
+```
+
+`installVerified` is true only after at least one page has been indexed. An empty index is a failure, not a quiet success.
+
 ### Beacon a page (client script does this automatically)
 
 ```bash
-curl -X POST https://agent404.dev/api/register \
+curl -X POST https://www.agent404.dev/api/register \
   -H "Content-Type: application/json" \
   -H "x-api-key: your-api-key" \
   -d '{"url": "https://example.com/docs/auth", "title": "Auth Guide", "headings": ["OAuth", "API Keys"]}'
@@ -84,7 +116,7 @@ curl -X POST https://agent404.dev/api/register \
 ### Get suggestions for a dead URL
 
 ```bash
-curl -X POST https://agent404.dev/api/suggest \
+curl -X POST https://www.agent404.dev/api/suggest \
   -H "Content-Type: application/json" \
   -H "x-api-key: your-api-key" \
   -d '{"url": "https://example.com/docs/v2/auth"}'

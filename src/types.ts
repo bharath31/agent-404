@@ -28,6 +28,7 @@ export interface Suggestion {
 export interface SiteStats {
 	pageCount: number;
 	suggestionsServed: number;
+	lastBeaconAt: string | null;
 }
 
 export interface AnalysisReport {
@@ -57,6 +58,7 @@ export interface DashboardData {
 	domain: string;
 	pageCount: number;
 	suggestionsServed: number;
+	lastBeaconAt: string | null;
 	recentLogs: SuggestionLog[];
 	matchQuality: MatchQualityStats;
 }

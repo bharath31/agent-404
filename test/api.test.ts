@@ -4,6 +4,7 @@ import { cors } from "hono/cors";
 import { sites } from "../src/api/routes/sites.js";
 import { register } from "../src/api/routes/register.js";
 import { suggest } from "../src/api/routes/suggest.js";
+import { install } from "../src/api/routes/install.js";
 import { apiKeyAuth } from "../src/api/middleware/auth.js";
 import type { StorageAdapter } from "../src/storage/interface.js";
 import type { PostgresStorage } from "../src/storage/postgres.js";
@@ -115,9 +116,28 @@ class MemoryStorage implements StorageAdapter {
 	}
 
 	async getStats(siteId: string) {
+		const pages = this.pages.filter((p) => p.siteId === siteId);
+		const lastBeaconAt =
+			pages.length === 0
+				? null
+				: pages.reduce((latest, p) => (p.lastSeen > latest ? p.lastSeen : latest), pages[0].lastSeen);
 		return {
-			pageCount: this.pages.filter((p) => p.siteId === siteId).length,
+			pageCount: pages.length,
 			suggestionsServed: this.suggestionLogs.filter((l) => l.siteId === siteId).length,
+			lastBeaconAt,
+		};
+	}
+
+	async getSuggestionLogs() {
+		return [];
+	}
+
+	async getMatchQualityStats() {
+		return {
+			last24h: 0,
+			last7d: 0,
+			last30d: 0,
+			matchTypeDistribution: { moved: 0, similar: 0, related: 0 },
 		};
 	}
 }
@@ -141,6 +161,8 @@ function createTestApp(storage: MemoryStorage) {
 	app.route("/api/register", register);
 	app.use("/api/suggest", apiKeyAuth());
 	app.route("/api/suggest", suggest);
+	app.use("/api/install/*", apiKeyAuth());
+	app.route("/api/install", install);
 
 	return app;
 }
@@ -505,11 +527,68 @@ describe("API routes", () => {
 			const stats = await statsRes.json();
 			expect(stats.pageCount).toBe(1);
 			expect(stats.suggestionsServed).toBe(0);
+			expect(stats.lastBeaconAt).toBeTruthy();
 		});
 
 		it("should return 404 for unknown site", async () => {
 			const res = await app.request("/api/sites/nonexistent/stats");
 			expect(res.status).toBe(404);
+		});
+	});
+
+	describe("GET /api/install/status", () => {
+		it("should warn when no beacons have been received", async () => {
+			vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("Not Found", { status: 404 }));
+
+			const createRes = await app.request("/api/sites", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ domain: "silent.example.com" }),
+			});
+			const { apiKey } = await createRes.json();
+
+			const res = await app.request("/api/install/status", {
+				headers: { "x-api-key": apiKey },
+			});
+			expect(res.status).toBe(200);
+			const body = await res.json();
+			expect(body.installVerified).toBe(false);
+			expect(body.pageCount).toBe(0);
+			expect(body.warning).toMatch(/No beacons received/);
+		});
+
+		it("should report verified after a page is registered", async () => {
+			vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("Not Found", { status: 404 }));
+
+			const createRes = await app.request("/api/sites", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ domain: "live.example.com" }),
+			});
+			const { apiKey } = await createRes.json();
+
+			await app.request("/api/register", {
+				method: "POST",
+				headers: {
+					"Content-Type": "application/json",
+					"x-api-key": apiKey,
+				},
+				body: JSON.stringify({ url: "https://live.example.com/docs", title: "Docs" }),
+			});
+
+			const res = await app.request("/api/install/status", {
+				headers: { "x-api-key": apiKey },
+			});
+			const body = await res.json();
+			expect(body.installVerified).toBe(true);
+			expect(body.pageCount).toBe(1);
+			expect(body.warning).toBeNull();
+			expect(body.lastBeaconAt).toBeTruthy();
+		});
+
+		it("should reject missing API key", async () => {
+			const res = await app.request("/api/install/status");
+			expect(res.status).toBe(401);
 		});
 	});
 });
