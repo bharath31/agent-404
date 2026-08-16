@@ -4,7 +4,7 @@ import { cors } from "hono/cors";
 import { sites } from "../src/api/routes/sites.js";
 import { register } from "../src/api/routes/register.js";
 import { suggest } from "../src/api/routes/suggest.js";
-import { apiKeyAuth } from "../src/api/middleware/auth.js";
+import { apiKeyAuth, requireVerified } from "../src/api/middleware/auth.js";
 import type { StorageAdapter } from "../src/storage/interface.js";
 import type { PostgresStorage } from "../src/storage/postgres.js";
 import type { SiteRecord, PageRecord } from "../src/types.js";
@@ -24,6 +24,10 @@ class MemoryStorage implements StorageAdapter {
 			id: crypto.randomUUID(),
 			domain,
 			apiKey: `key_${crypto.randomUUID().replace(/-/g, "")}`,
+			publicKey: `pk_${crypto.randomUUID().replace(/-/g, "")}`,
+			verifiedAt: null,
+			verificationToken: `vf_${crypto.randomUUID().replace(/-/g, "")}`,
+			reclaimToken: null,
 			createdAt: new Date().toISOString(),
 		};
 		this.sites.push(site);
@@ -35,7 +39,45 @@ class MemoryStorage implements StorageAdapter {
 	}
 
 	async getSiteByApiKey(apiKey: string): Promise<SiteRecord | null> {
-		return this.sites.find((s) => s.apiKey === apiKey) || null;
+		const found = await this.getSiteByKey(apiKey);
+		return found?.keyType === "secret" ? found.site : null;
+	}
+
+	async getSiteByKey(key: string) {
+		const site = this.sites.find((s) => s.apiKey === key || s.publicKey === key);
+		if (!site) return null;
+		if (site.apiKey === key) return { site, keyType: "secret" as const };
+		return { site, keyType: "public" as const };
+	}
+
+	async getSiteByDomain(domain: string): Promise<SiteRecord | null> {
+		return this.sites.find((s) => s.domain === domain) || null;
+	}
+
+	async markVerified(id: string): Promise<void> {
+		const site = this.sites.find((s) => s.id === id);
+		if (site) {
+			site.verifiedAt = new Date().toISOString();
+			site.reclaimToken = null;
+		}
+	}
+
+	async rotateReclaimToken(id: string): Promise<string> {
+		const token = `rc_${crypto.randomUUID().replace(/-/g, "")}`;
+		const site = this.sites.find((s) => s.id === id);
+		if (site) site.reclaimToken = token;
+		return token;
+	}
+
+	async reclaimSite(id: string): Promise<SiteRecord> {
+		const site = this.sites.find((s) => s.id === id);
+		if (!site) throw new Error("not found");
+		site.apiKey = `key_${crypto.randomUUID().replace(/-/g, "")}`;
+		site.publicKey = `pk_${crypto.randomUUID().replace(/-/g, "")}`;
+		site.verificationToken = `vf_${crypto.randomUUID().replace(/-/g, "")}`;
+		site.reclaimToken = null;
+		site.verifiedAt = new Date().toISOString();
+		return site;
 	}
 
 	async upsertPage(
@@ -119,12 +161,34 @@ function createTestApp(storage: MemoryStorage) {
 
 	app.get("/api/health", (c) => c.json({ status: "ok" }));
 	app.route("/api/sites", sites);
-	app.use("/api/register", apiKeyAuth());
+	app.use("/api/register", apiKeyAuth("write"));
+	app.use("/api/register", requireVerified());
 	app.route("/api/register", register);
-	app.use("/api/suggest", apiKeyAuth());
+	app.use("/api/suggest", apiKeyAuth("read"));
+	app.use("/api/suggest", requireVerified());
 	app.route("/api/suggest", suggest);
 
 	return app;
+}
+
+async function createVerifiedSite(
+	app: ReturnType<typeof createTestApp>,
+	storage: MemoryStorage,
+	domain: string,
+) {
+	const res = await app.request("/api/sites", {
+		method: "POST",
+		headers: { "Content-Type": "application/json" },
+		body: JSON.stringify({ domain }),
+	});
+	const body = await res.json();
+	await storage.markVerified(body.id);
+	return body as {
+		id: string;
+		apiKey: string;
+		publicKey: string;
+		domain: string;
+	};
 }
 
 describe("API routes", () => {
@@ -158,6 +222,9 @@ describe("API routes", () => {
 			expect(body.domain).toBe("test.example.com");
 			expect(body.id).toBeDefined();
 			expect(body.apiKey).toMatch(/^key_/);
+			expect(body.publicKey).toMatch(/^pk_/);
+			expect(body.verified).toBe(false);
+			expect(body.verificationToken).toMatch(/^vf_/);
 		});
 
 		it("should reject duplicate domains", async () => {
@@ -204,15 +271,8 @@ describe("API routes", () => {
 		let siteId: string;
 
 		beforeEach(async () => {
-			// Suppress sitemap crawl fetch
 			vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("Not Found", { status: 404 }));
-
-			const res = await app.request("/api/sites", {
-				method: "POST",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ domain: "test.example.com" }),
-			});
-			const body = await res.json();
+			const body = await createVerifiedSite(app, storage, "test.example.com");
 			apiKey = body.apiKey;
 			siteId = body.id;
 		});
@@ -295,6 +355,44 @@ describe("API routes", () => {
 			expect(storage.pages).toHaveLength(1);
 			expect(storage.pages[0].title).toBe("New Title");
 		});
+
+		it("should reject URLs that are not on the registered domain", async () => {
+			const res = await app.request("/api/register", {
+				method: "POST",
+				headers: {
+					"Content-Type": "application/json",
+					"x-api-key": apiKey,
+				},
+				body: JSON.stringify({ url: "https://evil-example.com/phish", title: "Nope" }),
+			});
+			expect(res.status).toBe(400);
+			expect(storage.pages).toHaveLength(0);
+		});
+
+		it("should allow subdomains of the registered domain", async () => {
+			const res = await app.request("/api/register", {
+				method: "POST",
+				headers: {
+					"Content-Type": "application/json",
+					"x-api-key": apiKey,
+				},
+				body: JSON.stringify({ url: "https://docs.test.example.com/auth", title: "Docs" }),
+			});
+			expect(res.status).toBe(200);
+		});
+
+		it("should reject the public key on write routes", async () => {
+			const publicKey = storage.sites[0].publicKey;
+			const res = await app.request("/api/register", {
+				method: "POST",
+				headers: {
+					"Content-Type": "application/json",
+					"x-api-key": publicKey,
+				},
+				body: JSON.stringify({ url: "https://test.example.com/docs/auth" }),
+			});
+			expect(res.status).toBe(403);
+		});
 	});
 
 	describe("POST /api/suggest (auth required)", () => {
@@ -302,13 +400,7 @@ describe("API routes", () => {
 
 		beforeEach(async () => {
 			vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("Not Found", { status: 404 }));
-
-			const res = await app.request("/api/sites", {
-				method: "POST",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ domain: "test.example.com" }),
-			});
-			const body = await res.json();
+			const body = await createVerifiedSite(app, storage, "test.example.com");
 			apiKey = body.apiKey;
 
 			// Seed some pages
@@ -436,18 +528,80 @@ describe("API routes", () => {
 				"https://test.example.com/docs/v2/auth",
 			);
 		});
+
+		it("should accept the public key when Origin matches the site", async () => {
+			const publicKey = storage.sites[0].publicKey;
+			const res = await app.request("/api/suggest", {
+				method: "POST",
+				headers: {
+					"Content-Type": "application/json",
+					"x-api-key": publicKey,
+					Origin: "https://docs.test.example.com",
+				},
+				body: JSON.stringify({ url: "https://test.example.com/docs/v2/auth" }),
+			});
+			expect(res.status).toBe(200);
+		});
+
+		it("should reject the public key without a matching Origin", async () => {
+			const publicKey = storage.sites[0].publicKey;
+			const res = await app.request("/api/suggest", {
+				method: "POST",
+				headers: {
+					"Content-Type": "application/json",
+					"x-api-key": publicKey,
+				},
+				body: JSON.stringify({ url: "https://test.example.com/docs/v2/auth" }),
+			});
+			expect(res.status).toBe(403);
+		});
+	});
+
+	describe("domain verification", () => {
+		it("should refuse to serve unverified sites", async () => {
+			vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("Not Found", { status: 404 }));
+			const res = await app.request("/api/sites", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ domain: "new.example.com" }),
+			});
+			const { apiKey } = await res.json();
+			const suggestRes = await app.request("/api/suggest", {
+				method: "POST",
+				headers: {
+					"Content-Type": "application/json",
+					"x-api-key": apiKey,
+				},
+				body: JSON.stringify({ url: "https://new.example.com/missing" }),
+			});
+			expect(suggestRes.status).toBe(403);
+		});
+
+		it("should verify via the well-known file", async () => {
+			const created = await app.request("/api/sites", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ domain: "owned.example.com" }),
+			});
+			const site = await created.json();
+			vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+				const url = String(input);
+				if (url.includes("/.well-known/agent-404.txt")) {
+					return new Response(site.verificationToken, { status: 200 });
+				}
+				return new Response("no", { status: 404 });
+			});
+			const verify = await app.request(`/api/sites/${site.id}/verify`, { method: "POST" });
+			expect(verify.status).toBe(200);
+			expect(storage.sites[0].verifiedAt).toBeTruthy();
+		});
 	});
 
 	describe("GET /api/sites/:id/stats", () => {
 		it("should return site stats", async () => {
 			vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("Not Found", { status: 404 }));
 
-			const createRes = await app.request("/api/sites", {
-				method: "POST",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ domain: "stats.example.com" }),
-			});
-			const { id, apiKey } = await createRes.json();
+			const { id, apiKey } = await createVerifiedSite(app, storage, "stats.example.com");
 
 			// Register a page
 			await app.request("/api/register", {

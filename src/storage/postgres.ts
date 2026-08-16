@@ -24,11 +24,13 @@ export class PostgresStorage implements StorageAdapter {
 	async createSite(domain: string): Promise<SiteRecord> {
 		const id = crypto.randomUUID();
 		const apiKey = `key_${crypto.randomUUID().replace(/-/g, "")}`;
+		const publicKey = `pk_${crypto.randomUUID().replace(/-/g, "")}`;
+		const verificationToken = `vf_${crypto.randomUUID().replace(/-/g, "")}`;
 
 		const { rows } = await this.sql`
-			INSERT INTO sites (id, domain, api_key)
-			VALUES (${id}, ${domain}, ${apiKey})
-			RETURNING id, domain, api_key, created_at
+			INSERT INTO sites (id, domain, api_key, public_key, verification_token)
+			VALUES (${id}, ${domain}, ${apiKey}, ${publicKey}, ${verificationToken})
+			RETURNING *
 		`;
 
 		return this.mapSiteRow(rows[0]);
@@ -40,9 +42,51 @@ export class PostgresStorage implements StorageAdapter {
 	}
 
 	async getSiteByApiKey(apiKey: string): Promise<SiteRecord | null> {
-		const { rows } =
-			await this.sql`SELECT * FROM sites WHERE api_key = ${apiKey}`;
+		const found = await this.getSiteByKey(apiKey);
+		return found?.keyType === "secret" ? found.site : null;
+	}
+
+	async getSiteByKey(key: string): Promise<{ site: SiteRecord; keyType: "secret" | "public" } | null> {
+		const { rows } = await this.sql`
+			SELECT * FROM sites WHERE api_key = ${key} OR public_key = ${key}
+		`;
+		if (!rows[0]) return null;
+		const site = this.mapSiteRow(rows[0]);
+		if (site.apiKey === key) return { site, keyType: "secret" };
+		if (site.publicKey === key) return { site, keyType: "public" };
+		return null;
+	}
+
+	async getSiteByDomain(domain: string): Promise<SiteRecord | null> {
+		const { rows } = await this.sql`SELECT * FROM sites WHERE domain = ${domain}`;
 		return rows[0] ? this.mapSiteRow(rows[0]) : null;
+	}
+
+	async markVerified(id: string): Promise<void> {
+		await this.sql`UPDATE sites SET verified_at = NOW(), reclaim_token = NULL WHERE id = ${id}`;
+	}
+
+	async rotateReclaimToken(id: string): Promise<string> {
+		const token = `rc_${crypto.randomUUID().replace(/-/g, "")}`;
+		await this.sql`UPDATE sites SET reclaim_token = ${token} WHERE id = ${id}`;
+		return token;
+	}
+
+	async reclaimSite(id: string): Promise<SiteRecord> {
+		const apiKey = `key_${crypto.randomUUID().replace(/-/g, "")}`;
+		const publicKey = `pk_${crypto.randomUUID().replace(/-/g, "")}`;
+		const verificationToken = `vf_${crypto.randomUUID().replace(/-/g, "")}`;
+		const { rows } = await this.sql`
+			UPDATE sites
+			SET api_key = ${apiKey},
+				public_key = ${publicKey},
+				verification_token = ${verificationToken},
+				reclaim_token = NULL,
+				verified_at = NOW()
+			WHERE id = ${id}
+			RETURNING *
+		`;
+		return this.mapSiteRow(rows[0]);
 	}
 
 	private validateEmbedding(embedding: number[]): string | null {
@@ -209,6 +253,10 @@ export class PostgresStorage implements StorageAdapter {
 			id: row.id as string,
 			domain: row.domain as string,
 			apiKey: row.api_key as string,
+			publicKey: (row.public_key as string) || "",
+			verifiedAt: row.verified_at ? String(row.verified_at) : null,
+			verificationToken: (row.verification_token as string) || "",
+			reclaimToken: (row.reclaim_token as string) || null,
 			createdAt: String(row.created_at),
 		};
 	}

@@ -630,7 +630,7 @@ export const landingPageHtml = `<!DOCTYPE html>
         }
 
         const site = await res.json();
-        showSnippet(domain, site.id, site.apiKey);
+        showSnippet(site);
       } catch {
         alert('Network error — please try again');
       } finally {
@@ -640,21 +640,28 @@ export const landingPageHtml = `<!DOCTYPE html>
       }
     }
 
-    function showSnippet(domain, siteId, apiKey) {
+    function showSnippet(site) {
       document.getElementById('register-form').style.display = 'none';
       const result = document.getElementById('snippet-result');
       result.style.display = 'block';
 
       const pre = document.getElementById('snippet-pre');
+      const v = site.verification || {};
+      const txt = v.dnsTxt || {};
+      const wk = v.wellKnown || {};
       pre.innerHTML =
         '<span class="tag">&lt;script</span>\\n' +
-        '  <span class="attr">src</span>=<span class="str">"https://agent404.dev/agent-404.min.js"</span>\\n' +
-        '  <span class="attr">data-site-id</span>=<span class="str">"' + siteId + '"</span>\\n' +
-        '  <span class="attr">data-api-key</span>=<span class="str">"' + apiKey + '"</span>\\n' +
+        '  <span class="attr">src</span>=<span class="str">"https://www.agent404.dev/agent-404.min.js"</span>\\n' +
+        '  <span class="attr">data-site-id</span>=<span class="str">"' + site.id + '"</span>\\n' +
+        '  <span class="attr">data-public-key</span>=<span class="str">"' + site.publicKey + '"</span>\\n' +
         '  <span class="attr">defer</span>\\n' +
-        '<span class="tag">&gt;&lt;/script&gt;</span>';
+        '<span class="tag">&gt;&lt;/script&gt;</span>\\n\\n' +
+        '<span class="tag"># prove ownership, then POST /api/sites/' + site.id + '/verify</span>\\n' +
+        '<span class="tag"># DNS TXT ' + (txt.name || '') + ' = ' + (txt.value || site.verificationToken) + '</span>\\n' +
+        '<span class="tag"># or ' + (wk.url || '') + '</span>\\n' +
+        '<span class="tag"># secret write key (server only): ' + site.apiKey + '</span>';
 
-      document.getElementById('registered-domain').textContent = domain;
+      document.getElementById('registered-domain').textContent = site.domain;
 
       // Add copy button to the generated snippet
       const block = document.getElementById('get-started-block');

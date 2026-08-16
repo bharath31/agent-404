@@ -15,12 +15,16 @@ One script tag. That's it.
 
 ```html
 <script
-  src="https://agent404.dev/agent-404.min.js"
+  src="https://www.agent404.dev/agent-404.min.js"
   data-site-id="your-site-id"
-  data-api-key="your-api-key"
+  data-public-key="your-public-key"
   defer
 ></script>
 ```
+
+The public key is **read-only** (`/api/suggest`). Keep the secret write key off the page — it is the only credential that can call `/api/register` and `/api/analyze`. Existing installs that still send `data-api-key` continue to work for suggestions (the old key is treated as the secret key).
+
+Use `https://www.agent404.dev` (not the apex). Apex 307-redirects break CORS preflight.
 
 ## How it works
 
@@ -65,28 +69,42 @@ The script-tag approach needs a 404 page that renders HTML and executes JS. For 
 ### Register a site
 
 ```bash
-curl -X POST https://agent404.dev/api/sites \
+curl -X POST https://www.agent404.dev/api/sites \
   -H "Content-Type: application/json" \
   -d '{"domain": "example.com"}'
 ```
 
-Returns `siteId` and `apiKey`. The sitemap is crawled automatically on registration.
-
-### Beacon a page (client script does this automatically)
+Returns `id`, `apiKey` (secret, server-side), `publicKey` (safe for HTML), and a `verificationToken`. The site **does not serve suggestions** until you prove domain ownership:
 
 ```bash
-curl -X POST https://agent404.dev/api/register \
+# DNS TXT _agent404.example.com = <verificationToken>
+# or https://example.com/.well-known/agent-404.txt containing the token
+
+curl -X POST https://www.agent404.dev/api/sites/<id>/verify
+```
+
+If someone else registered your domain, `POST /api/sites/reclaim` then `POST /api/sites/reclaim/complete` after proving ownership. Existing sites were grandfathered as verified.
+
+Sitemap crawl runs after verification, not at create time.
+
+### Beacon a page (secret key only)
+
+```bash
+curl -X POST https://www.agent404.dev/api/register \
   -H "Content-Type: application/json" \
-  -H "x-api-key: your-api-key" \
+  -H "x-api-key: your-secret-key" \
   -d '{"url": "https://example.com/docs/auth", "title": "Auth Guide", "headings": ["OAuth", "API Keys"]}'
 ```
+
+URLs whose host is not the registered domain (or a subdomain) are rejected.
 
 ### Get suggestions for a dead URL
 
 ```bash
-curl -X POST https://agent404.dev/api/suggest \
+curl -X POST https://www.agent404.dev/api/suggest \
   -H "Content-Type: application/json" \
-  -H "x-api-key: your-api-key" \
+  -H "Origin: https://example.com" \
+  -H "x-api-key: your-public-key" \
   -d '{"url": "https://example.com/docs/v2/auth"}'
 ```
 

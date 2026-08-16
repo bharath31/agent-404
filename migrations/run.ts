@@ -50,7 +50,7 @@ async function runFile(filename: string) {
 }
 
 async function run() {
-	const migrations = ["0001_init.sql", "0002_pgvector.sql"];
+	const migrations = ["0001_init.sql", "0002_pgvector.sql", "0003_dashboard.sql", "0004_trust.sql"];
 	for (const file of migrations) {
 		console.log(`\nRunning migration: ${file}`);
 		await runFile(file);

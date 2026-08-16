@@ -3,19 +3,23 @@
 	if (!script) return;
 
 	const siteId = script.getAttribute("data-site-id");
-	const apiKey = script.getAttribute("data-api-key");
+	const publicKey =
+		script.getAttribute("data-public-key") || script.getAttribute("data-api-key");
+	const secretKey = script.getAttribute("data-api-key");
 	const selector404 = script.getAttribute("data-404-selector");
 	const apiBase = new URL(script.src).origin;
 
-	if (!siteId || !apiKey) {
-		console.warn("[agent-404] Missing data-site-id or data-api-key");
+	if (!siteId || !publicKey) {
+		console.warn("[agent-404] Missing data-site-id or data-public-key");
 		return;
 	}
 
-	const headers = {
-		"Content-Type": "application/json",
-		"x-api-key": apiKey,
-	};
+	function jsonHeaders(key: string) {
+		return {
+			"Content-Type": "application/json",
+			"x-api-key": key,
+		};
+	}
 
 	function is404Page(): boolean {
 		// 1. CSS selector match
@@ -45,9 +49,13 @@
 		});
 
 		// sendBeacon can't set custom headers, so we use fetch with keepalive
+		if (!secretKey || secretKey.startsWith("pk_")) {
+			return;
+		}
+
 		fetch(apiBase + "/api/register", {
 			method: "POST",
-			headers,
+			headers: jsonHeaders(secretKey),
 			body: data,
 			keepalive: true,
 		}).catch(() => {});
@@ -57,7 +65,7 @@
 		try {
 			const resp = await fetch(apiBase + "/api/suggest", {
 				method: "POST",
-				headers,
+				headers: jsonHeaders(publicKey),
 				body: JSON.stringify({ url: location.href }),
 			});
 

@@ -4,6 +4,11 @@ export interface StorageAdapter {
 	createSite(domain: string): Promise<SiteRecord>;
 	getSite(id: string): Promise<SiteRecord | null>;
 	getSiteByApiKey(apiKey: string): Promise<SiteRecord | null>;
+	getSiteByKey(key: string): Promise<{ site: SiteRecord; keyType: "secret" | "public" } | null>;
+	getSiteByDomain(domain: string): Promise<SiteRecord | null>;
+	markVerified(id: string): Promise<void>;
+	rotateReclaimToken(id: string): Promise<string>;
+	reclaimSite(id: string): Promise<SiteRecord>;
 
 	upsertPage(
 		siteId: string,
