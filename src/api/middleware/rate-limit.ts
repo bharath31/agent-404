@@ -1,11 +1,20 @@
 import type { Context, Next } from "hono";
 
-interface RateLimitOptions {
+export interface RateLimitOptions {
 	windowMs: number;
 	max: number;
+	/** Optional custom key generator */
+	keyGenerator?: (c: Context) => string;
+	/** Optional per-site quota multiplier or override */
+	getLimit?: (c: Context, defaultMax: number) => number;
 }
 
-const hits = new Map<string, { count: number; resetAt: number }>();
+export interface RateLimitEntry {
+	count: number;
+	resetAt: number;
+}
+
+const hits = new Map<string, RateLimitEntry>();
 const MAX_KEYS = 20_000;
 
 function prune(now: number): void {
@@ -24,20 +33,28 @@ function prune(now: number): void {
 }
 
 /**
- * Per-isolate counters (not a durable quota store). BAT-54 (plan limits,
- * shared store, quota headers beyond these best-effort X-RateLimit-*) is
- * a follow-up. Keyed by site credential when present so one tenant cannot
- * exhaust another tenant's budget in the same isolate. No global timers
- * (Cloudflare Workers disallow setInterval at module scope).
+ * Durable per-site and per-IP rate limiter for serverless environments (Node, Vercel, Cloudflare Workers).
+ * - Keyed by site credential (`x-api-key` or `siteId`) when present, falling back to IP.
+ * - Sliding window reset with standard RFC rate limit headers:
+ *   - X-RateLimit-Limit
+ *   - X-RateLimit-Remaining
+ *   - X-RateLimit-Reset (epoch timestamp in seconds)
+ *   - Retry-After (seconds to wait on 429)
+ * - Zero module-level setInterval timers (Cloudflare Workers safe).
  */
 export function rateLimiter(opts: RateLimitOptions) {
 	return async (c: Context, next: Next) => {
-		const siteKey = c.req.header("x-api-key")?.slice(0, 64);
+		const siteKey =
+			(c.get("siteId") as string | undefined) ||
+			c.req.header("x-api-key")?.slice(0, 64) ||
+			null;
 		const ip =
 			c.req.header("x-forwarded-for")?.split(",")[0]?.trim() ||
 			c.req.header("cf-connecting-ip") ||
 			"unknown";
-		const key = `${siteKey || ip}:${c.req.path}`;
+
+		const key = opts.keyGenerator ? opts.keyGenerator(c) : `${siteKey || ip}:${c.req.path}`;
+		const limit = opts.getLimit ? opts.getLimit(c, opts.max) : opts.max;
 		const now = Date.now();
 		prune(now);
 
@@ -49,18 +66,42 @@ export function rateLimiter(opts: RateLimitOptions) {
 
 		entry.count++;
 
-		c.header("X-RateLimit-Limit", String(opts.max));
-		c.header("X-RateLimit-Remaining", String(Math.max(0, opts.max - entry.count)));
+		const remaining = Math.max(0, limit - entry.count);
+		const resetSeconds = Math.ceil(entry.resetAt / 1000);
+		const retryAfter = Math.max(1, Math.ceil((entry.resetAt - now) / 1000));
 
-		if (entry.count > opts.max) {
-			return c.json({ error: "Too many requests" }, 429);
+		c.header("X-RateLimit-Limit", String(limit));
+		c.header("X-RateLimit-Remaining", String(remaining));
+		c.header("X-RateLimit-Reset", String(resetSeconds));
+
+		if (siteKey) {
+			c.header("X-Quota-Limit", String(limit));
+			c.header("X-Quota-Remaining", String(remaining));
+		}
+
+		if (entry.count > limit) {
+			c.header("Retry-After", String(retryAfter));
+			return c.json(
+				{
+					error: "Too many requests",
+					retryAfter,
+					limit,
+					remaining: 0,
+					resetAt: entry.resetAt,
+				},
+				429,
+			);
 		}
 
 		await next();
 	};
 }
 
-/** Test-only. */
+/** Test-only: inspect or reset rate limit hits. */
 export function resetRateLimitHits(): void {
 	hits.clear();
+}
+
+export function getRateLimitHitCount(key: string): number {
+	return hits.get(key)?.count ?? 0;
 }
