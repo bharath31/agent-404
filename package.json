@@ -16,6 +16,7 @@
     "test:browser": "npx playwright test"
   },
   "dependencies": {
+    "@auth0/auth0-hono": "^1.2.6",
     "@neondatabase/serverless": "^1.0.2",
     "@vercel/analytics": "^2.0.1",
     "hono": "^4.6.0"

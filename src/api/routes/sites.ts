@@ -1,50 +1,109 @@
 import { Hono } from "hono";
 import type { PostgresStorage } from "../../storage/postgres.js";
 import { crawlSitemap } from "../../engine/sitemap.js";
+import { normalizeDomain } from "../domain.js";
 
-type Env = { Variables: { storage: PostgresStorage; siteId: string } };
+type Env = { Variables: { storage: PostgresStorage; siteId: string; ownerSub: string } };
 
 const sites = new Hono<Env>();
 
-// Register a new site
+function publicSite(site: { id: string; domain: string; apiKey: string; createdAt: string }) {
+	return {
+		id: site.id,
+		domain: site.domain,
+		apiKey: site.apiKey,
+		createdAt: site.createdAt,
+	};
+}
+
+// Register a new site (Auth0 session required — ownerSub set by middleware)
 sites.post("/", async (c) => {
-	const body = await c.req.json<{ domain: string }>();
+	const body = await c.req.json<{ domain: string }>().catch(() => ({ domain: "" }));
 	if (!body.domain) {
 		return c.json({ error: "domain is required" }, 400);
 	}
 
-	const domain = body.domain.replace(/^https?:\/\//, "").replace(/\/+$/, "");
-
-	// Validate domain format
-	const domainRegex = /^(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$/;
-	if (!domainRegex.test(domain) || domain.length > 253) {
+	const domain = normalizeDomain(body.domain);
+	if (!domain) {
 		return c.json({ error: "Invalid domain format" }, 400);
 	}
 
 	const storage = c.get("storage");
+	const ownerSub = c.get("ownerSub");
 
-	try {
-		const site = await storage.createSite(domain);
-
-		// Trigger sitemap crawl (best-effort, don't block response)
-		crawlSitemap(domain, site.id, storage).catch(() => {});
-
+	const existing = await storage.getSiteByDomain(domain);
+	if (existing) {
+		if (existing.ownerSub === ownerSub) {
+			return c.json(publicSite(existing), 200);
+		}
+		if (!existing.ownerSub) {
+			return c.json(
+				{
+					error: "This site is already indexed. Enter the API key from your script tag to link it.",
+					code: "unowned",
+					domain,
+				},
+				409,
+			);
+		}
 		return c.json(
 			{
-				id: site.id,
-				domain: site.domain,
-				apiKey: site.apiKey,
-				createdAt: site.createdAt,
+				error: "This domain is linked to another account. Sign in with the email that created it.",
+				code: "owned_by_other",
 			},
-			201,
+			409,
 		);
+	}
+
+	try {
+		const site = await storage.createSite(domain, ownerSub);
+		crawlSitemap(domain, site.id, storage).catch(() => {});
+		return c.json(publicSite(site), 201);
 	} catch (err: any) {
 		if (err?.message?.includes("unique") || err?.message?.includes("duplicate")) {
-			return c.json({ error: "Domain already registered" }, 409);
+			const raced = await storage.getSiteByDomain(domain);
+			if (raced?.ownerSub === ownerSub) {
+				return c.json(publicSite(raced), 200);
+			}
+			if (raced && !raced.ownerSub) {
+				return c.json(
+					{
+						error: "This site is already indexed. Enter the API key from your script tag to link it.",
+						code: "unowned",
+						domain,
+					},
+					409,
+				);
+			}
+			return c.json(
+				{
+					error: "This domain is linked to another account. Sign in with the email that created it.",
+					code: "owned_by_other",
+				},
+				409,
+			);
 		}
 		console.error("Site registration error:", err.message);
 		return c.json({ error: "Internal server error" }, 500);
 	}
+});
+
+sites.post("/claim", async (c) => {
+	const body = await c.req.json<{ domain: string; apiKey: string }>().catch(() => ({
+		domain: "",
+		apiKey: "",
+	}));
+	const domain = body.domain ? normalizeDomain(body.domain) : null;
+	const apiKey = typeof body.apiKey === "string" ? body.apiKey.trim() : "";
+	if (!domain || !apiKey) {
+		return c.json({ error: "domain and apiKey are required" }, 400);
+	}
+
+	const site = await c.get("storage").claimSite(domain, apiKey, c.get("ownerSub"));
+	if (!site) {
+		return c.json({ error: "Could not link this site. Check the API key." }, 401);
+	}
+	return c.json(publicSite(site), 200);
 });
 
 // Get site stats
@@ -54,6 +113,9 @@ sites.get("/:id/stats", async (c) => {
 
 	const site = await storage.getSite(id);
 	if (!site) {
+		return c.json({ error: "Site not found" }, 404);
+	}
+	if (site.ownerSub && site.ownerSub !== c.get("ownerSub")) {
 		return c.json({ error: "Site not found" }, 404);
 	}
 

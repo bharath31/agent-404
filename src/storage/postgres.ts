@@ -4,6 +4,15 @@ import type { StorageAdapter } from "./interface.js";
 
 type Sql = NeonQueryFunction<false, true>;
 
+function timingSafeEqual(a: string, b: string): boolean {
+	if (a.length !== b.length) return false;
+	let result = 0;
+	for (let i = 0; i < a.length; i++) {
+		result |= a.charCodeAt(i) ^ b.charCodeAt(i);
+	}
+	return result === 0;
+}
+
 export class PostgresStorage implements StorageAdapter {
 	private sql: Sql;
 
@@ -21,14 +30,14 @@ export class PostgresStorage implements StorageAdapter {
 		return this.sql;
 	}
 
-	async createSite(domain: string): Promise<SiteRecord> {
+	async createSite(domain: string, ownerSub: string): Promise<SiteRecord> {
 		const id = crypto.randomUUID();
 		const apiKey = `key_${crypto.randomUUID().replace(/-/g, "")}`;
 
 		const { rows } = await this.sql`
-			INSERT INTO sites (id, domain, api_key)
-			VALUES (${id}, ${domain}, ${apiKey})
-			RETURNING id, domain, api_key, created_at
+			INSERT INTO sites (id, domain, api_key, owner_sub)
+			VALUES (${id}, ${domain}, ${apiKey}, ${ownerSub})
+			RETURNING id, domain, api_key, created_at, owner_sub
 		`;
 
 		return this.mapSiteRow(rows[0]);
@@ -42,6 +51,31 @@ export class PostgresStorage implements StorageAdapter {
 	async getSiteByApiKey(apiKey: string): Promise<SiteRecord | null> {
 		const { rows } =
 			await this.sql`SELECT * FROM sites WHERE api_key = ${apiKey}`;
+		return rows[0] ? this.mapSiteRow(rows[0]) : null;
+	}
+
+	async getSiteByDomain(domain: string): Promise<SiteRecord | null> {
+		const { rows } = await this.sql`SELECT * FROM sites WHERE domain = ${domain}`;
+		return rows[0] ? this.mapSiteRow(rows[0]) : null;
+	}
+
+	async listSitesByOwner(ownerSub: string): Promise<SiteRecord[]> {
+		const { rows } = await this.sql`
+			SELECT * FROM sites WHERE owner_sub = ${ownerSub} ORDER BY created_at DESC
+		`;
+		return rows.map((row) => this.mapSiteRow(row));
+	}
+
+	async claimSite(domain: string, apiKey: string, ownerSub: string): Promise<SiteRecord | null> {
+		const site = await this.getSiteByDomain(domain);
+		if (!site || site.ownerSub) return null;
+		if (!timingSafeEqual(site.apiKey, apiKey)) return null;
+
+		const { rows } = await this.sql`
+			UPDATE sites SET owner_sub = ${ownerSub}
+			WHERE domain = ${domain} AND owner_sub IS NULL AND api_key = ${apiKey}
+			RETURNING id, domain, api_key, created_at, owner_sub
+		`;
 		return rows[0] ? this.mapSiteRow(rows[0]) : null;
 	}
 
@@ -253,6 +287,7 @@ export class PostgresStorage implements StorageAdapter {
 			domain: row.domain as string,
 			apiKey: row.api_key as string,
 			createdAt: String(row.created_at),
+			ownerSub: (row.owner_sub as string) || null,
 		};
 	}
 

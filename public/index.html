@@ -431,6 +431,7 @@
       <div class="links">
         <a href="https://github.com/bharath31/agent-404">GitHub</a>
         <a href="#get-started">Get started</a>
+        <a href="/auth/login?return_to=/dashboard">Sign in</a>
         <a href="/api/health">API Status</a>
       </div>
     </nav>
@@ -474,7 +475,8 @@
             onmouseover="this.style.background='var(--accent-dim)'" onmouseout="this.style.background='var(--accent)'"
           >Generate</button>
         </div>
-        <p style="margin-top:0.5rem;font-size:0.75rem;color:var(--text-secondary)">Enter your domain to get a ready-to-paste script tag</p>
+        <p style="margin-top:0.5rem;font-size:0.75rem;color:var(--text-secondary)">Enter your domain. We email a one-time code — no password.</p>
+        <p id="register-error" hidden style="margin-top:0.5rem;font-size:0.8rem;color:var(--red)"></p>
       </div>
       <div id="snippet-result" style="display:none">
         <pre id="snippet-pre"></pre>
@@ -617,68 +619,29 @@
     // Start after a short delay
     setTimeout(runDemo, 600);
 
-    // Domain registration
+    // Domain registration — Auth0 passwordless email OTP, then dashboard
     const domainInput = document.getElementById('domain-input');
+    const errorEl = document.getElementById('register-error');
     domainInput.addEventListener('keydown', e => { if (e.key === 'Enter') registerSite(); });
+
+    function showError(msg) {
+      errorEl.textContent = msg;
+      errorEl.hidden = !msg;
+    }
+
+    function loginUrl(domain) {
+      const returnTo = domain
+        ? '/dashboard?register=' + encodeURIComponent(domain)
+        : '/dashboard';
+      return '/auth/login?return_to=' + encodeURIComponent(returnTo);
+    }
 
     async function registerSite() {
       let domain = domainInput.value.trim();
       if (!domain) { domainInput.focus(); return; }
       domain = domain.replace(/^https?:\/\//, '').replace(/\/+$/, '');
-
-      const btn = document.getElementById('register-btn');
-      const origText = btn.textContent;
-      btn.textContent = 'Generating...';
-      btn.disabled = true;
-      btn.style.opacity = '0.7';
-
-      try {
-        const res = await fetch('/api/sites', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ domain })
-        });
-
-        if (!res.ok) {
-          const err = await res.json();
-          if (res.status === 409) {
-            alert('This domain is already registered. Contact support if you need your credentials.');
-          } else {
-            alert(err.error || 'Something went wrong');
-          }
-          return;
-        }
-
-        const site = await res.json();
-        showSnippet(domain, site.id, site.apiKey);
-      } catch {
-        alert('Network error — please try again');
-      } finally {
-        btn.textContent = origText;
-        btn.disabled = false;
-        btn.style.opacity = '1';
-      }
-    }
-
-    function showSnippet(domain, siteId, apiKey) {
-      document.getElementById('register-form').style.display = 'none';
-      const result = document.getElementById('snippet-result');
-      result.style.display = 'block';
-
-      const pre = document.getElementById('snippet-pre');
-      pre.innerHTML =
-        '<span class="tag">&lt;script</span>\n' +
-        '  <span class="attr">src</span>=<span class="str">"https://agent404.dev/agent-404.min.js"</span>\n' +
-        '  <span class="attr">data-site-id</span>=<span class="str">"' + siteId + '"</span>\n' +
-        '  <span class="attr">data-api-key</span>=<span class="str">"' + apiKey + '"</span>\n' +
-        '  <span class="attr">defer</span>\n' +
-        '<span class="tag">&gt;&lt;/script&gt;</span>';
-
-      document.getElementById('registered-domain').textContent = domain;
-
-      // Add copy button to the generated snippet
-      const block = document.getElementById('get-started-block');
-      addCopyBtn(block);
+      showError('');
+      window.location.href = loginUrl(domain);
     }
   </script>
   <script

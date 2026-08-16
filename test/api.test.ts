@@ -6,6 +6,7 @@ import { register } from "../src/api/routes/register.js";
 import { suggest } from "../src/api/routes/suggest.js";
 import { install } from "../src/api/routes/install.js";
 import { apiKeyAuth } from "../src/api/middleware/auth.js";
+import { requireOwnerApi } from "../src/auth/owner.js";
 import type { StorageAdapter } from "../src/storage/interface.js";
 import type { PostgresStorage } from "../src/storage/postgres.js";
 import type { SiteRecord, PageRecord } from "../src/types.js";
@@ -17,7 +18,7 @@ class MemoryStorage implements StorageAdapter {
 	suggestionLogs: { siteId: string; deadUrl: string; suggestedUrls: string[] }[] = [];
 	private nextPageId = 1;
 
-	async createSite(domain: string): Promise<SiteRecord> {
+	async createSite(domain: string, ownerSub: string): Promise<SiteRecord> {
 		if (this.sites.find((s) => s.domain === domain)) {
 			throw new Error("unique constraint violation: duplicate domain");
 		}
@@ -26,6 +27,7 @@ class MemoryStorage implements StorageAdapter {
 			domain,
 			apiKey: `key_${crypto.randomUUID().replace(/-/g, "")}`,
 			createdAt: new Date().toISOString(),
+			ownerSub,
 		};
 		this.sites.push(site);
 		return site;
@@ -37,6 +39,21 @@ class MemoryStorage implements StorageAdapter {
 
 	async getSiteByApiKey(apiKey: string): Promise<SiteRecord | null> {
 		return this.sites.find((s) => s.apiKey === apiKey) || null;
+	}
+
+	async getSiteByDomain(domain: string): Promise<SiteRecord | null> {
+		return this.sites.find((s) => s.domain === domain) || null;
+	}
+
+	async listSitesByOwner(ownerSub: string): Promise<SiteRecord[]> {
+		return this.sites.filter((s) => s.ownerSub === ownerSub);
+	}
+
+	async claimSite(domain: string, apiKey: string, ownerSub: string): Promise<SiteRecord | null> {
+		const site = this.sites.find((s) => s.domain === domain);
+		if (!site || site.ownerSub || site.apiKey !== apiKey) return null;
+		site.ownerSub = ownerSub;
+		return site;
 	}
 
 	async upsertPage(
@@ -142,9 +159,9 @@ class MemoryStorage implements StorageAdapter {
 	}
 }
 
-function createTestApp(storage: MemoryStorage) {
+function createTestApp(storage: MemoryStorage, ownerSub: string | null = "auth0|test-user") {
 	const app = new Hono<{
-		Variables: { storage: PostgresStorage; siteId: string };
+		Variables: { storage: PostgresStorage; siteId: string; ownerSub: string };
 	}>();
 
 	app.use("*", cors({ origin: "*" }));
@@ -154,6 +171,29 @@ function createTestApp(storage: MemoryStorage) {
 		c.set("storage", storage as unknown as PostgresStorage);
 		await next();
 	});
+
+	if (ownerSub) {
+		app.use("/api/sites", async (c, next) => {
+			c.set("ownerSub", ownerSub);
+			await next();
+		});
+		app.use("/api/sites/*", async (c, next) => {
+			c.set("ownerSub", ownerSub);
+			await next();
+		});
+	} else {
+		const stub = { getSession: async () => undefined };
+		app.use("/api/sites", async (c, next) => {
+			c.set("auth0Client", stub as never);
+			await next();
+		});
+		app.use("/api/sites/*", async (c, next) => {
+			c.set("auth0Client", stub as never);
+			await next();
+		});
+	}
+	app.use("/api/sites", requireOwnerApi());
+	app.use("/api/sites/*", requireOwnerApi());
 
 	app.get("/api/health", (c) => c.json({ status: "ok" }));
 	app.route("/api/sites", sites);
@@ -186,6 +226,17 @@ describe("API routes", () => {
 	});
 
 	describe("POST /api/sites", () => {
+		it("should reject unauthenticated registration", async () => {
+			const storage = new MemoryStorage();
+			const anon = createTestApp(storage, null);
+			const res = await anon.request("/api/sites", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ domain: "test.example.com" }),
+			});
+			expect(res.status).toBe(401);
+		});
+
 		it("should register a new site", async () => {
 			const res = await app.request("/api/sites", {
 				method: "POST",
@@ -200,7 +251,7 @@ describe("API routes", () => {
 			expect(body.apiKey).toMatch(/^key_/);
 		});
 
-		it("should reject duplicate domains", async () => {
+		it("should return the existing site for the same owner", async () => {
 			await app.request("/api/sites", {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
@@ -213,7 +264,66 @@ describe("API routes", () => {
 				body: JSON.stringify({ domain: "test.example.com" }),
 			});
 
+			expect(res.status).toBe(200);
+			const body = await res.json();
+			expect(body.apiKey).toMatch(/^key_/);
+			expect(body.domain).toBe("test.example.com");
+		});
+
+		it("should not leak another owner's api key", async () => {
+			await app.request("/api/sites", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ domain: "taken.example.com" }),
+			});
+
+			const other = createTestApp(storage, "auth0|other-user");
+			const res = await other.request("/api/sites", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ domain: "taken.example.com" }),
+			});
+
 			expect(res.status).toBe(409);
+			const body = await res.json();
+			expect(body.code).toBe("owned_by_other");
+			expect(body.apiKey).toBeUndefined();
+		});
+
+		it("should claim a legacy unowned site with the api key", async () => {
+			storage.sites.push({
+				id: crypto.randomUUID(),
+				domain: "legacy.example.com",
+				apiKey: "key_legacyclaimtoken",
+				createdAt: new Date().toISOString(),
+				ownerSub: null,
+			});
+
+			const conflict = await app.request("/api/sites", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ domain: "legacy.example.com" }),
+			});
+			expect(conflict.status).toBe(409);
+			const conflictBody = await conflict.json();
+			expect(conflictBody.code).toBe("unowned");
+			expect(conflictBody.apiKey).toBeUndefined();
+
+			const fail = await app.request("/api/sites/claim", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ domain: "legacy.example.com", apiKey: "key_wrong" }),
+			});
+			expect(fail.status).toBe(401);
+
+			const ok = await app.request("/api/sites/claim", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ domain: "legacy.example.com", apiKey: "key_legacyclaimtoken" }),
+			});
+			expect(ok.status).toBe(200);
+			const body = await ok.json();
+			expect(body.apiKey).toBe("key_legacyclaimtoken");
 		});
 
 		it("should require domain field", async () => {

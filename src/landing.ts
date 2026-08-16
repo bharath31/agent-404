@@ -1,6 +1,13 @@
 import { CANONICAL_SCRIPT_URL } from "./config.js";
 
-export const landingPageHtml = `<!DOCTYPE html>
+export function landingPageHtml(opts: { signedIn?: boolean } = {}): string {
+	const signedIn = Boolean(opts.signedIn);
+	const navAuth = signedIn
+		? `<a href="/dashboard">Dashboard</a>
+        <a href="/auth/logout">Log out</a>`
+		: `<a href="/auth/login?return_to=/dashboard">Sign in</a>`;
+
+	return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -422,6 +429,7 @@ export const landingPageHtml = `<!DOCTYPE html>
       <div class="links">
         <a href="/demo">Live Demo</a>
         <a href="https://github.com/bharath31/agent-404">GitHub</a>
+        ${navAuth}
       </div>
     </nav>
 
@@ -464,7 +472,18 @@ export const landingPageHtml = `<!DOCTYPE html>
             onmouseover="this.style.background='var(--accent-dim)'" onmouseout="this.style.background='var(--accent)'"
           >Generate</button>
         </div>
-        <p style="margin-top:0.5rem;font-size:0.75rem;color:var(--text-secondary)">Enter your domain to get a ready-to-paste script tag</p>
+        <p style="margin-top:0.5rem;font-size:0.75rem;color:var(--text-secondary)">Enter your domain. We email a one-time code — no password.</p>
+        <p id="register-error" class="form-error" hidden style="margin-top:0.5rem;font-size:0.8rem;color:var(--red)"></p>
+        <div id="claim-panel" hidden style="margin-top:0.75rem">
+          <p style="font-size:0.8rem;color:var(--text-secondary);margin-bottom:0.4rem">Paste the API key from your existing script tag to link this domain.</p>
+          <div style="display:flex;gap:0.5rem">
+            <input type="text" id="claim-key-input" placeholder="key_…" autocomplete="off"
+              style="flex:1;padding:0.6rem 0.8rem;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--mono);font-size:0.85rem;outline:none">
+            <button type="button" id="claim-btn"
+              style="padding:0.6rem 1.25rem;background:var(--accent);color:white;border:none;border-radius:8px;font-size:0.85rem;font-weight:600;cursor:pointer;white-space:nowrap"
+            >Link site</button>
+          </div>
+        </div>
       </div>
       <div id="snippet-result" style="display:none">
         <pre id="snippet-pre"></pre>
@@ -512,7 +531,7 @@ export const landingPageHtml = `<!DOCTYPE html>
       <h2>Stop losing agents to dead links</h2>
       <p>Add one script tag. Your 404 pages start working for you.<br>Fully open source — self-host with one click or use the hosted version.</p>
       <div class="btn-group">
-        <a href="https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fbharath31%2Fagent-404&env=DATABASE_URL,EMBEDDING_API_KEY,CRON_SECRET&envDescription=DATABASE_URL%3A%20Neon%20Postgres%20connection%20string.%20EMBEDDING_API_KEY%3A%20For%20semantic%20embeddings%20(optional).%20CRON_SECRET%3A%20Bearer%20token%20for%20cron.&project-name=agent-404&repository-name=agent-404" class="btn btn-vercel">
+        <a href="https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fbharath31%2Fagent-404&env=DATABASE_URL,EMBEDDING_API_KEY,CRON_SECRET,AUTH0_DOMAIN,AUTH0_CLIENT_ID,AUTH0_CLIENT_SECRET,AUTH0_SESSION_ENCRYPTION_KEY,BASE_URL&envDescription=DATABASE_URL%3A%20Neon%20Postgres.%20Auth0%20passwordless%20email%20OTP%20required%20for%20the%20dashboard.&project-name=agent-404&repository-name=agent-404" class="btn btn-vercel">
           <svg width="16" height="16" viewBox="0 0 76 65" fill="currentColor"><path d="M37.5274 0L75.0548 65H0L37.5274 0Z"/></svg>
           Deploy to Vercel
         </a>
@@ -599,14 +618,37 @@ export const landingPageHtml = `<!DOCTYPE html>
     // Start after a short delay
     setTimeout(runDemo, 600);
 
-    // Domain registration
+    // Domain registration — passwordless email OTP via Auth0, then dashboard
+    const signedIn = ${signedIn};
     const domainInput = document.getElementById('domain-input');
+    const errorEl = document.getElementById('register-error');
+    const claimPanel = document.getElementById('claim-panel');
     domainInput.addEventListener('keydown', e => { if (e.key === 'Enter') registerSite(); });
+    document.getElementById('claim-btn').addEventListener('click', claimSite);
+
+    function showError(msg) {
+      errorEl.textContent = msg;
+      errorEl.hidden = !msg;
+    }
+
+    function loginUrl(domain) {
+      const returnTo = domain
+        ? '/dashboard?register=' + encodeURIComponent(domain)
+        : '/dashboard';
+      return '/auth/login?return_to=' + encodeURIComponent(returnTo);
+    }
 
     async function registerSite() {
       let domain = domainInput.value.trim();
       if (!domain) { domainInput.focus(); return; }
       domain = domain.replace(/^https?:\\/\\//, '').replace(/\\/+\$/, '');
+      showError('');
+      claimPanel.hidden = true;
+
+      if (!signedIn) {
+        window.location.href = loginUrl(domain);
+        return;
+      }
 
       const btn = document.getElementById('register-btn');
       const origText = btn.textContent;
@@ -617,24 +659,31 @@ export const landingPageHtml = `<!DOCTYPE html>
       try {
         const res = await fetch('/api/sites', {
           method: 'POST',
+          credentials: 'same-origin',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ domain })
         });
 
-        if (!res.ok) {
-          const err = await res.json();
-          if (res.status === 409) {
-            alert('This domain is already registered. Contact support if you need your credentials.');
-          } else {
-            alert(err.error || 'Something went wrong');
-          }
+        if (res.status === 401) {
+          window.location.href = loginUrl(domain);
           return;
         }
 
-        const site = await res.json();
-        showSnippet(domain, site.id, site.apiKey);
+        if (res.status === 201 || res.status === 200) {
+          window.location.href = '/dashboard';
+          return;
+        }
+
+        const err = await res.json().catch(() => ({}));
+        if (res.status === 409 && err.code === 'unowned') {
+          claimPanel.hidden = false;
+          claimPanel.dataset.domain = err.domain || domain;
+          showError(err.error || 'Link this site with your API key.');
+          return;
+        }
+        showError(err.error || 'Something went wrong');
       } catch {
-        alert('Network error — please try again');
+        showError('Network error — please try again');
       } finally {
         btn.textContent = origText;
         btn.disabled = false;
@@ -642,25 +691,22 @@ export const landingPageHtml = `<!DOCTYPE html>
       }
     }
 
-    function showSnippet(domain, siteId, apiKey) {
-      document.getElementById('register-form').style.display = 'none';
-      const result = document.getElementById('snippet-result');
-      result.style.display = 'block';
-
-      const pre = document.getElementById('snippet-pre');
-      pre.innerHTML =
-        '<span class="tag">&lt;script</span>\\n' +
-        '  <span class="attr">src</span>=<span class="str">"${CANONICAL_SCRIPT_URL}"</span>\\n' +
-        '  <span class="attr">data-site-id</span>=<span class="str">"' + siteId + '"</span>\\n' +
-        '  <span class="attr">data-api-key</span>=<span class="str">"' + apiKey + '"</span>\\n' +
-        '  <span class="attr">defer</span>\\n' +
-        '<span class="tag">&gt;&lt;/script&gt;</span>';
-
-      document.getElementById('registered-domain').textContent = domain;
-
-      // Add copy button to the generated snippet
-      const block = document.getElementById('get-started-block');
-      addCopyBtn(block);
+    async function claimSite() {
+      const domain = claimPanel.dataset.domain || domainInput.value.trim();
+      const apiKey = document.getElementById('claim-key-input').value.trim();
+      showError('');
+      const res = await fetch('/api/sites/claim', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ domain, apiKey })
+      });
+      if (res.ok) {
+        window.location.href = '/dashboard';
+        return;
+      }
+      const err = await res.json().catch(() => ({}));
+      showError(err.error || 'Could not link this site.');
     }
   </script>
   <script
@@ -672,3 +718,4 @@ export const landingPageHtml = `<!DOCTYPE html>
 </body>
 </html>
 `;
+}

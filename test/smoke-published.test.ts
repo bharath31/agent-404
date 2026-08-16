@@ -23,11 +23,20 @@ test.describe("published snippet smoke", () => {
 	let closeServer: () => void;
 
 	test.beforeAll(async () => {
+		const siteHeaders: Record<string, string> = { "Content-Type": "application/json" };
+		if (process.env.E2E_COOKIE) {
+			siteHeaders.Cookie = process.env.E2E_COOKIE;
+		}
 		const siteRes = await fetch(`${CANONICAL_ORIGIN}/api/sites`, {
 			method: "POST",
-			headers: { "Content-Type": "application/json" },
+			headers: siteHeaders,
 			body: JSON.stringify({ domain: TEST_DOMAIN }),
 		});
+		if (siteRes.status === 401 || siteRes.status === 503) {
+			throw new Error(
+				"POST /api/sites requires an Auth0 passwordless email session. Set E2E_COOKIE to a logged-in appSession cookie.",
+			);
+		}
 		expect(siteRes.ok).toBe(true);
 		const siteBody = await siteRes.json();
 		siteId = siteBody.id;
