@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import type { PostgresStorage } from "../../storage/postgres.js";
 import { findSuggestions } from "../../engine/matcher.js";
 import { generateDeadUrlEmbedding } from "../../engine/embeddings.js";
+import { buildJsonLd, buildLinkHeader } from "../../../adapters/core.js";
 
 type Env = { Variables: { storage: PostgresStorage; siteId: string } };
 
@@ -48,29 +49,17 @@ suggest.post("/", async (c) => {
 			.catch(() => {});
 	}
 
+	const jsonLd = buildJsonLd(suggestions);
+	c.header("Vary", "Accept");
+	if (suggestions.length > 0) {
+		c.header("Link", buildLinkHeader(suggestions));
+	}
+
 	return c.json({
 		deadUrl: body.url,
 		suggestions,
-		jsonLd: buildJsonLd(suggestions),
+		jsonLd,
 	});
 });
-
-function buildJsonLd(suggestions: { url: string; title: string; matchType: string }[]) {
-	return {
-		"@context": "https://schema.org",
-		"@type": "WebPage",
-		name: "Page Not Found",
-		mainEntity: {
-			"@type": "ItemList",
-			itemListElement: suggestions.map((s, i) => ({
-				"@type": "ListItem",
-				position: i + 1,
-				url: s.url,
-				name: s.title || s.url,
-				description: s.matchType,
-			})),
-		},
-	};
-}
 
 export { suggest };
