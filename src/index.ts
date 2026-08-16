@@ -1015,11 +1015,34 @@ app.get("/dashboard", async (c) => {
 	);
 });
 
-// Cron: re-crawl sitemaps + prune stale pages
-app.get("/api/cron", async (c) => {
+/** Shared bearer-token check for cron + admin metrics — never expose either unauthenticated. */
+function isCronAuthorized(c: {
+	req: { header: (name: string) => string | undefined };
+	env?: Bindings;
+}): boolean {
 	const authHeader = c.req.header("authorization");
 	const cronSecret = c.env?.CRON_SECRET || process.env.CRON_SECRET;
-	if (authHeader !== `Bearer ${cronSecret}`) {
+	return authHeader === `Bearer ${cronSecret}`;
+}
+
+// BAT-62: read-only "are we on track for 1,000 live installs" metric.
+// Protected the same way as /api/cron (CRON_SECRET bearer token) — this is
+// operator-facing, not a public dashboard endpoint.
+app.get("/api/admin/metrics", async (c) => {
+	if (!isCronAuthorized(c)) {
+		return c.json({ error: "Unauthorized" }, 401);
+	}
+	const storage = c.get("storage");
+	const [liveInstalls, totalSites] = await Promise.all([
+		storage.getLiveInstallCount(),
+		storage.getTotalSiteCount(),
+	]);
+	return c.json({ liveInstalls, totalSites, goal: 1000 });
+});
+
+// Cron: re-crawl sitemaps + prune stale pages
+app.get("/api/cron", async (c) => {
+	if (!isCronAuthorized(c)) {
 		return c.json({ error: "Unauthorized" }, 401);
 	}
 
@@ -1103,6 +1126,14 @@ app.get("/api/cron", async (c) => {
 		if (stoppedForBudget) break;
 	}
 
+	// BAT-62: computed once per cron run (not per shard site) so the north-star
+	// number — live installs against the 1,000-instance goal — is durable in
+	// logs even without hitting /api/admin/metrics.
+	const [liveInstalls, totalSites] = await Promise.all([
+		storage.getLiveInstallCount(),
+		storage.getTotalSiteCount(),
+	]);
+
 	console.log(
 		JSON.stringify({
 			msg: "cron_shard",
@@ -1111,6 +1142,9 @@ app.get("/api/cron", async (c) => {
 			stoppedForBudget,
 			elapsedMs: Date.now() - started,
 			platform: process.env.VERCEL ? "vercel-daily" : "hourly-capable",
+			liveInstalls,
+			totalSites,
+			goalTarget: 1000,
 		}),
 	);
 
@@ -1120,6 +1154,9 @@ app.get("/api/cron", async (c) => {
 		remainingBacklog: Math.max(0, remainingAtStart - results.length),
 		stoppedForBudget,
 		results,
+		liveInstalls,
+		totalSites,
+		goalTarget: 1000,
 	});
 });
 

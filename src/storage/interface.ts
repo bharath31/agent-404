@@ -40,4 +40,14 @@ export interface StorageAdapter {
 	getStats(siteId: string): Promise<SiteStats>;
 	getSuggestionLogs(siteId: string, limit: number): Promise<SuggestionLog[]>;
 	getMatchQualityStats(siteId: string): Promise<MatchQualityStats>;
+
+	/**
+	 * BAT-62: count of sites that are actually working — indexed a page AND
+	 * served a suggestion in the last 7 days — not just registered. See
+	 * `src/lib/live-installs.ts` for the full definition. Excludes CI/test
+	 * domains (`isTestDomain`).
+	 */
+	getLiveInstallCount(): Promise<number>;
+	/** Raw count of every `sites` row, unfiltered — registrations, not installs. */
+	getTotalSiteCount(): Promise<number>;
 }

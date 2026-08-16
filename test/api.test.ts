@@ -9,12 +9,14 @@ import { install } from "../src/api/routes/install.js";
 import type { StorageAdapter } from "../src/storage/interface.js";
 import type { PostgresStorage } from "../src/storage/postgres.js";
 import type { SiteRecord, PageRecord } from "../src/types.js";
+import { countLiveInstalls, LIVE_INSTALL_WINDOW_DAYS } from "../src/lib/live-installs.js";
 
 // In-memory storage for testing — no database needed
 class MemoryStorage implements StorageAdapter {
 	sites: SiteRecord[] = [];
 	pages: PageRecord[] = [];
-	suggestionLogs: { siteId: string; deadUrl: string; suggestedUrls: string[] }[] = [];
+	suggestionLogs: { siteId: string; deadUrl: string; suggestedUrls: string[]; createdAt: string }[] =
+		[];
 	private nextPageId = 1;
 
 	async createSite(domain: string): Promise<SiteRecord> {
@@ -161,7 +163,7 @@ class MemoryStorage implements StorageAdapter {
 	}
 
 	async recordSuggestionServed(siteId: string, deadUrl: string, suggestedUrls: string[]): Promise<void> {
-		this.suggestionLogs.push({ siteId, deadUrl, suggestedUrls });
+		this.suggestionLogs.push({ siteId, deadUrl, suggestedUrls, createdAt: new Date().toISOString() });
 	}
 
 	async getStats(siteId: string) {
@@ -188,6 +190,24 @@ class MemoryStorage implements StorageAdapter {
 			last30d: 0,
 			matchTypeDistribution: { moved: 0, similar: 0, related: 0 },
 		};
+	}
+
+	async getLiveInstallCount(): Promise<number> {
+		const cutoff = Date.now() - LIVE_INSTALL_WINDOW_DAYS * 24 * 60 * 60 * 1000;
+		const summaries = this.sites.map((s) => ({
+			domain: s.domain,
+			hasRecentPage: this.pages.some(
+				(p) => p.siteId === s.id && new Date(p.lastSeen).getTime() > cutoff,
+			),
+			hasRecentSuggestion: this.suggestionLogs.some(
+				(l) => l.siteId === s.id && new Date(l.createdAt).getTime() > cutoff,
+			),
+		}));
+		return countLiveInstalls(summaries);
+	}
+
+	async getTotalSiteCount(): Promise<number> {
+		return this.sites.length;
 	}
 }
 
@@ -945,6 +965,96 @@ describe("API routes", () => {
 		it("should reject missing API key", async () => {
 			const res = await app.request("/api/install/status");
 			expect(res.status).toBe(401);
+		});
+	});
+
+	// BAT-62: verified installs, not registrations. Exercises the storage
+	// method end-to-end through the real HTTP routes (register + suggest),
+	// on top of the pure-definition unit tests in test/live-installs.test.ts.
+	describe("getLiveInstallCount / getTotalSiteCount (BAT-62)", () => {
+		it("does not count a bare registration with no indexed pages or suggestions", async () => {
+			await app.request("/api/sites", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ domain: "abandoned-signup.com" }),
+			});
+
+			expect(await storage.getTotalSiteCount()).toBe(1);
+			expect(await storage.getLiveInstallCount()).toBe(0);
+		});
+
+		it("counts a site once it has both an indexed page and a served suggestion", async () => {
+			vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("Not Found", { status: 404 }));
+			const { apiKey } = await createVerifiedSite(app, storage, "real-customer.com");
+
+			await app.request("/api/register", {
+				method: "POST",
+				headers: { "Content-Type": "application/json", "x-api-key": apiKey },
+				body: JSON.stringify({ url: "https://real-customer.com/docs", title: "Docs" }),
+			});
+			await app.request("/api/suggest", {
+				method: "POST",
+				headers: { "Content-Type": "application/json", "x-api-key": apiKey },
+				body: JSON.stringify({ url: "https://real-customer.com/doc" }),
+			});
+			await new Promise((r) => setTimeout(r, 50)); // suggestion logging is fire-and-forget
+
+			expect(await storage.getTotalSiteCount()).toBe(1);
+			expect(await storage.getLiveInstallCount()).toBe(1);
+		});
+
+		it("excludes CI smoke/example.com test domains even when fully active", async () => {
+			const created = await app.request("/api/sites", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ domain: `smoke-${Date.now()}.example.com` }),
+			});
+			const { apiKey } = await created.json();
+
+			await app.request("/api/register", {
+				method: "POST",
+				headers: { "Content-Type": "application/json", "x-api-key": apiKey },
+				body: JSON.stringify({ url: "https://smoke.example.com/page" }),
+			});
+			await app.request("/api/suggest", {
+				method: "POST",
+				headers: { "Content-Type": "application/json", "x-api-key": apiKey },
+				body: JSON.stringify({ url: "https://smoke.example.com/pag" }),
+			});
+			await new Promise((r) => setTimeout(r, 50));
+
+			expect(await storage.getTotalSiteCount()).toBe(1);
+			expect(await storage.getLiveInstallCount()).toBe(0);
+		});
+
+		it("counts real installs alongside excluded test domains and non-working registrations", async () => {
+			vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("Not Found", { status: 404 }));
+			const { apiKey } = await createVerifiedSite(app, storage, "working-customer.com");
+			await app.request("/api/register", {
+				method: "POST",
+				headers: { "Content-Type": "application/json", "x-api-key": apiKey },
+				body: JSON.stringify({ url: "https://working-customer.com/docs", title: "Docs" }),
+			});
+			await app.request("/api/suggest", {
+				method: "POST",
+				headers: { "Content-Type": "application/json", "x-api-key": apiKey },
+				body: JSON.stringify({ url: "https://working-customer.com/doc" }),
+			});
+
+			await app.request("/api/sites", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ domain: "silent-registration.com" }),
+			});
+			await app.request("/api/sites", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ domain: `smoke-${Date.now()}.example.com` }),
+			});
+			await new Promise((r) => setTimeout(r, 50));
+
+			expect(await storage.getTotalSiteCount()).toBe(3);
+			expect(await storage.getLiveInstallCount()).toBe(1);
 		});
 	});
 });

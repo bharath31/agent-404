@@ -443,6 +443,34 @@ export class PostgresStorage implements StorageAdapter {
 		};
 	}
 
+	/**
+	 * BAT-62. Mirrors isLiveInstall() in lib/live-installs.ts — a site
+	 * counts only if it indexed a page AND served a suggestion in the
+	 * last 7 days, excluding CI/test domains. Keep this WHERE clause in
+	 * sync with that definition if either changes.
+	 */
+	async getLiveInstallCount(): Promise<number> {
+		const { rows } = await this.sql`
+			SELECT COUNT(*) AS count FROM sites s
+			WHERE s.domain NOT ILIKE '%.example.com'
+				AND s.domain NOT ILIKE 'smoke-%'
+				AND EXISTS (
+					SELECT 1 FROM pages p
+					WHERE p.site_id = s.id AND p.last_seen > NOW() - INTERVAL '7 days'
+				)
+				AND EXISTS (
+					SELECT 1 FROM suggestion_logs sl
+					WHERE sl.site_id = s.id AND sl.created_at > NOW() - INTERVAL '7 days'
+				)
+		`;
+		return Number(rows[0]?.count ?? 0);
+	}
+
+	async getTotalSiteCount(): Promise<number> {
+		const { rows } = await this.sql`SELECT COUNT(*) AS count FROM sites`;
+		return Number(rows[0]?.count ?? 0);
+	}
+
 	private mapSiteRow(row: Record<string, unknown>): SiteRecord {
 		return {
 			id: row.id as string,
