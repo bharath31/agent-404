@@ -25,4 +25,12 @@ describe("resolveApiBase", () => {
 	it("falls back when data-api-base is invalid", () => {
 		expect(resolveApiBase(script({ "data-api-base": "not a url" }))).toBe(DEFAULT_API_BASE);
 	});
+
+	it("bakes the canonical origin into the published bundle", async () => {
+		const { readFileSync } = await import("node:fs");
+		const { join } = await import("node:path");
+		const min = readFileSync(join(import.meta.dirname, "..", "public", "agent-404.min.js"), "utf-8");
+		expect(min).toContain(CANONICAL_ORIGIN);
+		expect(min).not.toContain("__AGENT404_API_BASE__");
+	});
 });

@@ -35,7 +35,7 @@ test.describe("published snippet smoke", () => {
 
 		const server = await startServer(siteId, apiKey, {
 			scriptSrc: CANONICAL_SCRIPT_URL,
-			apiBase: CANONICAL_ORIGIN,
+			omitDataApiBase: true,
 		});
 		pageOrigin = server.pageOrigin;
 		closeServer = server.close;
