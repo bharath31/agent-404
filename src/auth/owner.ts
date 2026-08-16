@@ -45,8 +45,14 @@ export function requireOwnerApi() {
 		if (!sub) {
 			if (c.req.method === "POST" && (c.req.path === "/api/sites" || c.req.path === "/api/sites/")) {
 				try {
-					const cloned = c.req.raw.clone();
-					const body = (await cloned.json()) as { domain?: string };
+					// c.req.json() caches on the HonoRequest instance, so the
+					// route handler's own later c.req.json() call reuses this
+					// parse for free — no extra stream read. Do NOT switch this
+					// to c.req.raw.clone(): cloning the raw Request and reading
+					// both the clone and the original body separately hung
+					// indefinitely on Vercel's Node.js runtime (every real
+					// POST /api/sites request timed out with zero response).
+					const body = (await c.req.json()) as { domain?: string };
 					const domain = typeof body?.domain === "string" ? normalizeDomain(body.domain) : null;
 					if (domain && isDisposableSmokeDomain(domain)) {
 						c.set("ownerSub", "ci:disposable-smoke");

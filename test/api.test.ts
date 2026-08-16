@@ -346,6 +346,19 @@ describe("API routes", () => {
 			expect(res.status).toBe(401);
 		});
 
+		it("should reject unauthenticated registration promptly, not hang (regression: requireOwnerApi used c.req.raw.clone() to peek the body for the smoke-domain bypass, which hung indefinitely on Vercel's Node.js runtime — every real POST /api/sites timed out with zero response; fixed by using c.req.json(), which Hono caches, instead of cloning the raw Request)", async () => {
+			const storage = new MemoryStorage();
+			const anon = createTestApp(storage, null);
+			const start = Date.now();
+			const res = await anon.request("/api/sites", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ domain: "bharath.sh" }),
+			});
+			expect(res.status).toBe(401);
+			expect(Date.now() - start).toBeLessThan(1000);
+		});
+
 		it("should allow unauthenticated registration for disposable CI smoke domains", async () => {
 			const storage = new MemoryStorage();
 			const anon = createTestApp(storage, null);
