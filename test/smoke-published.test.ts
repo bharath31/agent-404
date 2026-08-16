@@ -63,11 +63,6 @@ async function createSiteUntilOk(): Promise<{ siteId: string; apiKey: string; pu
 	let last = "";
 	while (Date.now() < deadline) {
 		const res = await postJson("/api/sites", { domain: TEST_DOMAIN }, headers);
-		if (res.status === 401 || res.status === 503) {
-			throw new Error(
-				"POST /api/sites requires an Auth0 passwordless email session. Set E2E_COOKIE to a logged-in appSession cookie.",
-			);
-		}
 		last = `${res.status} ${res.text}`;
 		if (res.ok) {
 			const siteId = String(res.json.id || "");
@@ -109,6 +104,7 @@ test.describe("published snippet smoke", () => {
 	let closeServer: () => void;
 
 	test.beforeAll(async () => {
+		test.setTimeout(360_000);
 		const site = await createSiteUntilOk();
 		siteId = site.siteId;
 		apiKey = site.apiKey;

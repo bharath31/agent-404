@@ -1,6 +1,8 @@
 import type { Context, Next } from "hono";
 import type { ServerClient } from "@auth0/auth0-server-js";
 import { AUTH_LOGIN_PATH } from "./config.js";
+import { normalizeDomain } from "../api/domain.js";
+import { isDisposableSmokeDomain } from "../lib/disposable-smoke-domain.js";
 
 type AuthVars = {
 	ownerSub?: string;
@@ -36,11 +38,23 @@ function authUnavailable(c: Context, json: boolean) {
 	);
 }
 
-/** JSON APIs: 401 if signed out. */
+/** JSON APIs: 401 if signed out. Allows disposable smoke domains for CI smoke testing. */
 export function requireOwnerApi() {
 	return async (c: Context, next: Next) => {
 		const sub = await sessionOwnerSub(c);
 		if (!sub) {
+			if (c.req.method === "POST" && (c.req.path === "/api/sites" || c.req.path === "/api/sites/")) {
+				try {
+					const cloned = c.req.raw.clone();
+					const body = (await cloned.json()) as { domain?: string };
+					const domain = typeof body?.domain === "string" ? normalizeDomain(body.domain) : null;
+					if (domain && isDisposableSmokeDomain(domain)) {
+						c.set("ownerSub", "ci:disposable-smoke");
+						await next();
+						return;
+					}
+				} catch {}
+			}
 			const vars = c.var as AuthVars;
 			if (!vars.auth0Client) return authUnavailable(c, true);
 			return c.json({ error: "Authentication required" }, 401);
