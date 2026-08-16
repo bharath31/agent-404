@@ -5,16 +5,17 @@ import { resolveApiBase } from "./resolve-api-base.js";
 	if (!script) return;
 
 	const siteId = script.getAttribute("data-site-id");
-	const publicKey =
+	const rawPublicKey =
 		script.getAttribute("data-public-key") || script.getAttribute("data-api-key");
 	const secretKey = script.getAttribute("data-api-key");
 	const selector404 = script.getAttribute("data-404-selector");
 	const apiBase = resolveApiBase(script);
 
-	if (!siteId || !publicKey) {
+	if (!siteId || !rawPublicKey) {
 		console.warn("[agent-404] Missing data-site-id or data-public-key");
 		return;
 	}
+	const publicKey = rawPublicKey;
 
 	if (secretKey && !secretKey.startsWith("pk_")) {
 		console.warn(
