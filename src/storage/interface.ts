@@ -1,14 +1,16 @@
 import type { PageRecord, SiteRecord, SiteStats, SuggestionLog, MatchQualityStats } from "../types.js";
 
 export interface StorageAdapter {
-	createSite(domain: string): Promise<SiteRecord>;
+	createSite(domain: string, ownerSub: string): Promise<SiteRecord>;
 	getSite(id: string): Promise<SiteRecord | null>;
 	getSiteByApiKey(apiKey: string): Promise<SiteRecord | null>;
 	getSiteByKey(key: string): Promise<{ site: SiteRecord; keyType: "secret" | "public" } | null>;
 	getSiteByDomain(domain: string): Promise<SiteRecord | null>;
 	markVerified(id: string): Promise<void>;
 	rotateReclaimToken(id: string): Promise<string>;
-	reclaimSite(id: string): Promise<SiteRecord>;
+	reclaimSite(id: string, ownerSub: string): Promise<SiteRecord>;
+	listSitesByOwner(ownerSub: string): Promise<SiteRecord[]>;
+	claimSite(domain: string, apiKey: string, ownerSub: string): Promise<SiteRecord | null>;
 
 	upsertPage(
 		siteId: string,

@@ -54,10 +54,20 @@ async function postJson(
 }
 
 async function createSiteUntilOk(): Promise<{ siteId: string; apiKey: string; publicKey: string }> {
+	const headers: Record<string, string> = {};
+	if (process.env.E2E_COOKIE) {
+		headers.Cookie = process.env.E2E_COOKIE;
+	}
+
 	const deadline = Date.now() + 180_000;
 	let last = "";
 	while (Date.now() < deadline) {
-		const res = await postJson("/api/sites", { domain: TEST_DOMAIN });
+		const res = await postJson("/api/sites", { domain: TEST_DOMAIN }, headers);
+		if (res.status === 401 || res.status === 503) {
+			throw new Error(
+				"POST /api/sites requires an Auth0 passwordless email session. Set E2E_COOKIE to a logged-in appSession cookie.",
+			);
+		}
 		last = `${res.status} ${res.text}`;
 		if (res.ok) {
 			const siteId = String(res.json.id || "");

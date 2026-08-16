@@ -4,9 +4,18 @@ import type { StorageAdapter } from "./interface.js";
 
 type Sql = NeonQueryFunction<false, true>;
 
+function timingSafeEqual(a: string, b: string): boolean {
+	if (a.length !== b.length) return false;
+	let result = 0;
+	for (let i = 0; i < a.length; i++) {
+		result |= a.charCodeAt(i) ^ b.charCodeAt(i);
+	}
+	return result === 0;
+}
+
 /**
  * Production deploys the Hono app without running `npm run db:migrate`.
- * Theme 5/6 INSERTs fail with 500 until 0004/0005 exist. Apply those
+ * Theme 5/6 INSERTs fail with 500 until 0004/0005/0006 exist. Apply those
  * ADD COLUMN IF NOT EXISTS statements once per isolate; fall back if DDL
  * is denied.
  */
@@ -15,6 +24,7 @@ let schemaReady: Promise<SchemaFlags> | null = null;
 type SchemaFlags = {
 	trustColumns: boolean;
 	writeContentHash: boolean;
+	ownerColumn: boolean;
 };
 
 function missingColumn(err: unknown): boolean {
@@ -23,7 +33,7 @@ function missingColumn(err: unknown): boolean {
 }
 
 async function applyPendingSchema(sql: Sql): Promise<SchemaFlags> {
-	const flags: SchemaFlags = { trustColumns: true, writeContentHash: true };
+	const flags: SchemaFlags = { trustColumns: true, writeContentHash: true, ownerColumn: true };
 	try {
 		await sql.query(`ALTER TABLE sites ADD COLUMN IF NOT EXISTS public_key TEXT`);
 		await sql.query(`ALTER TABLE sites ADD COLUMN IF NOT EXISTS verified_at TIMESTAMP`);
@@ -59,6 +69,13 @@ async function applyPendingSchema(sql: Sql): Promise<SchemaFlags> {
 		console.error("Scale schema ensure failed:", (err as Error)?.message || err);
 		flags.writeContentHash = false;
 	}
+	try {
+		await sql.query(`ALTER TABLE sites ADD COLUMN IF NOT EXISTS owner_sub TEXT`);
+		await sql.query(`CREATE INDEX IF NOT EXISTS idx_sites_owner_sub ON sites (owner_sub)`);
+	} catch (err) {
+		console.error("Owner schema ensure failed:", (err as Error)?.message || err);
+		flags.ownerColumn = false;
+	}
 	return flags;
 }
 
@@ -93,18 +110,18 @@ export class PostgresStorage implements StorageAdapter {
 		return ensureSchema(this.sql);
 	}
 
-	async createSite(domain: string): Promise<SiteRecord> {
+	async createSite(domain: string, ownerSub: string): Promise<SiteRecord> {
 		const flags = await this.flags();
 		const id = crypto.randomUUID();
 		const apiKey = `key_${crypto.randomUUID().replace(/-/g, "")}`;
 		const publicKey = `pk_${crypto.randomUUID().replace(/-/g, "")}`;
 		const verificationToken = `vf_${crypto.randomUUID().replace(/-/g, "")}`;
 
-		if (flags.trustColumns) {
+		if (flags.trustColumns && flags.ownerColumn) {
 			try {
 				const { rows } = await this.sql`
-					INSERT INTO sites (id, domain, api_key, public_key, verification_token)
-					VALUES (${id}, ${domain}, ${apiKey}, ${publicKey}, ${verificationToken})
+					INSERT INTO sites (id, domain, api_key, public_key, verification_token, owner_sub)
+					VALUES (${id}, ${domain}, ${apiKey}, ${publicKey}, ${verificationToken}, ${ownerSub})
 					RETURNING *
 				`;
 				return this.mapSiteRow(rows[0]);
@@ -113,10 +130,21 @@ export class PostgresStorage implements StorageAdapter {
 			}
 		}
 
+		if (flags.ownerColumn) {
+			const { rows } = await this.sql`
+				INSERT INTO sites (id, domain, api_key, owner_sub)
+				VALUES (${id}, ${domain}, ${apiKey}, ${ownerSub})
+				RETURNING id, domain, api_key, created_at, owner_sub
+			`;
+			return this.mapSiteRow(rows[0]);
+		}
+
+		// owner_sub itself is missing (DDL denied) — the caller's ownership is
+		// simply lost for this isolate rather than throwing 500 on every signup.
 		const { rows } = await this.sql`
 			INSERT INTO sites (id, domain, api_key)
 			VALUES (${id}, ${domain}, ${apiKey})
-			RETURNING *
+			RETURNING id, domain, api_key, created_at
 		`;
 		return this.mapSiteRow(rows[0]);
 	}
@@ -158,6 +186,26 @@ export class PostgresStorage implements StorageAdapter {
 		return rows[0] ? this.mapSiteRow(rows[0]) : null;
 	}
 
+	async listSitesByOwner(ownerSub: string): Promise<SiteRecord[]> {
+		const { rows } = await this.sql`
+			SELECT * FROM sites WHERE owner_sub = ${ownerSub} ORDER BY created_at DESC
+		`;
+		return rows.map((row) => this.mapSiteRow(row));
+	}
+
+	async claimSite(domain: string, apiKey: string, ownerSub: string): Promise<SiteRecord | null> {
+		const site = await this.getSiteByDomain(domain);
+		if (!site || site.ownerSub) return null;
+		if (!timingSafeEqual(site.apiKey, apiKey)) return null;
+
+		const { rows } = await this.sql`
+			UPDATE sites SET owner_sub = ${ownerSub}
+			WHERE domain = ${domain} AND owner_sub IS NULL AND api_key = ${apiKey}
+			RETURNING *
+		`;
+		return rows[0] ? this.mapSiteRow(rows[0]) : null;
+	}
+
 	async markVerified(id: string): Promise<void> {
 		await this.flags();
 		await this.sql`UPDATE sites SET verified_at = NOW(), reclaim_token = NULL, reclaim_requested_at = NULL WHERE id = ${id}`;
@@ -172,7 +220,7 @@ export class PostgresStorage implements StorageAdapter {
 		return token;
 	}
 
-	async reclaimSite(id: string): Promise<SiteRecord> {
+	async reclaimSite(id: string, ownerSub: string): Promise<SiteRecord> {
 		const apiKey = `key_${crypto.randomUUID().replace(/-/g, "")}`;
 		const publicKey = `pk_${crypto.randomUUID().replace(/-/g, "")}`;
 		const verificationToken = `vf_${crypto.randomUUID().replace(/-/g, "")}`;
@@ -185,7 +233,8 @@ export class PostgresStorage implements StorageAdapter {
 				verification_token = ${verificationToken},
 				reclaim_token = NULL,
 				reclaim_requested_at = NULL,
-				verified_at = NOW()
+				verified_at = NOW(),
+				owner_sub = ${ownerSub}
 			WHERE id = ${id}
 			RETURNING *
 		`;
@@ -454,6 +503,7 @@ export class PostgresStorage implements StorageAdapter {
 			reclaimToken: (row.reclaim_token as string) || null,
 			reclaimRequestedAt: row.reclaim_requested_at ? String(row.reclaim_requested_at) : null,
 			createdAt: String(row.created_at),
+			ownerSub: (row.owner_sub as string) || null,
 		};
 	}
 

@@ -1,22 +1,20 @@
 import { Hono } from "hono";
 import type { PostgresStorage } from "../../storage/postgres.js";
 import { crawlSitemap } from "../../engine/sitemap.js";
-import { proveDomainOwnership, verificationTxtName, wellKnownUrl } from "../../engine/domain-verify.js";
+import { normalizeDomain } from "../domain.js";
+import {
+	proveDomainOwnership,
+	verificationTxtName,
+	wellKnownUrl,
+} from "../../engine/domain-verify.js";
 import { isDisposableSmokeDomain } from "../../lib/disposable-smoke-domain.js";
 import type { SiteRecord } from "../../types.js";
 
 export const VERIFIED_RECLAIM_GRACE_MS = 24 * 60 * 60 * 1000;
 
-type Env = { Variables: { storage: PostgresStorage; siteId: string; site: SiteRecord } };
+type Env = { Variables: { storage: PostgresStorage; siteId: string; ownerSub: string } };
 
 const sites = new Hono<Env>();
-
-function normalizeDomain(raw: string): string | null {
-	const domain = raw.replace(/^https?:\/\//, "").replace(/\/+$/, "");
-	const domainRegex = /^(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$/;
-	if (!domainRegex.test(domain) || domain.length > 253) return null;
-	return domain.toLowerCase();
-}
 
 function verificationInstructions(domain: string, token: string) {
 	return {
@@ -25,8 +23,22 @@ function verificationInstructions(domain: string, token: string) {
 	};
 }
 
+function publicSite(site: SiteRecord) {
+	return {
+		id: site.id,
+		domain: site.domain,
+		apiKey: site.apiKey,
+		publicKey: site.publicKey,
+		verified: Boolean(site.verifiedAt),
+		verificationToken: site.verificationToken,
+		verification: verificationInstructions(site.domain, site.verificationToken),
+		createdAt: site.createdAt,
+	};
+}
+
+// Register a new site (Auth0 session required — ownerSub set by middleware)
 sites.post("/", async (c) => {
-	const body = await c.req.json<{ domain: string }>();
+	const body = await c.req.json<{ domain: string }>().catch(() => ({ domain: "" }));
 	if (!body.domain) {
 		return c.json({ error: "domain is required" }, 400);
 	}
@@ -37,33 +49,66 @@ sites.post("/", async (c) => {
 	}
 
 	const storage = c.get("storage");
+	const ownerSub = c.get("ownerSub");
+
+	const existing = await storage.getSiteByDomain(domain);
+	if (existing) {
+		if (existing.ownerSub === ownerSub) {
+			return c.json(publicSite(existing), 200);
+		}
+		if (!existing.ownerSub) {
+			return c.json(
+				{
+					error: "This site is already indexed. Enter the API key from your script tag to link it.",
+					code: "unowned",
+					domain,
+				},
+				409,
+			);
+		}
+		return c.json(
+			{
+				error: "This domain is linked to another account. Sign in with the email that created it.",
+				code: "owned_by_other",
+				domain,
+			},
+			409,
+		);
+	}
 
 	try {
-		const site = await storage.createSite(domain);
+		const site = await storage.createSite(domain, ownerSub);
 		if (isDisposableSmokeDomain(domain) && !site.verifiedAt) {
 			await storage.markVerified(site.id);
 			site.verifiedAt = new Date().toISOString();
 		}
-
-		return c.json(
-			{
-				id: site.id,
-				domain: site.domain,
-				apiKey: site.apiKey,
-				publicKey: site.publicKey,
-				verified: Boolean(site.verifiedAt),
-				verificationToken: site.verificationToken,
-				verification: verificationInstructions(site.domain, site.verificationToken),
-				createdAt: site.createdAt,
-			},
-			201,
-		);
+		// Crawl only once ownership is proven — unverified sites must not turn
+		// registration into a free fetch-and-embed against an arbitrary domain.
+		if (site.verifiedAt) {
+			crawlSitemap(domain, site.id, storage).catch(() => {});
+		}
+		return c.json(publicSite(site), 201);
 	} catch (err: any) {
 		if (err?.message?.includes("unique") || err?.message?.includes("duplicate")) {
+			const raced = await storage.getSiteByDomain(domain);
+			if (raced && raced.ownerSub === ownerSub) {
+				return c.json(publicSite(raced), 200);
+			}
+			if (raced && !raced.ownerSub) {
+				return c.json(
+					{
+						error: "This site is already indexed. Enter the API key from your script tag to link it.",
+						code: "unowned",
+						domain,
+					},
+					409,
+				);
+			}
 			return c.json(
 				{
-					error: "Domain already registered",
-					hint: "If you own this domain, POST /api/sites/reclaim then prove ownership to take it over.",
+					error: "This domain is linked to another account. Sign in with the email that created it.",
+					code: "owned_by_other",
+					domain,
 				},
 				409,
 			);
@@ -73,11 +118,30 @@ sites.post("/", async (c) => {
 	}
 });
 
+// Link a legacy unowned site to the signed-in owner via its existing API key
+sites.post("/claim", async (c) => {
+	const body = await c.req.json<{ domain: string; apiKey: string }>().catch(() => ({
+		domain: "",
+		apiKey: "",
+	}));
+	const domain = body.domain ? normalizeDomain(body.domain) : null;
+	const apiKey = typeof body.apiKey === "string" ? body.apiKey.trim() : "";
+	if (!domain || !apiKey) {
+		return c.json({ error: "domain and apiKey are required" }, 400);
+	}
+
+	const site = await c.get("storage").claimSite(domain, apiKey, c.get("ownerSub"));
+	if (!site) {
+		return c.json({ error: "Could not link this site. Check the API key." }, 401);
+	}
+	return c.json(publicSite(site), 200);
+});
+
 sites.post("/:id/verify", async (c) => {
 	const id = c.req.param("id");
 	const storage = c.get("storage");
 	const site = await storage.getSite(id);
-	if (!site) {
+	if (!site || site.ownerSub !== c.get("ownerSub")) {
 		return c.json({ error: "Site not found" }, 404);
 	}
 	if (site.verifiedAt) {
@@ -180,7 +244,7 @@ sites.post("/reclaim/complete", async (c) => {
 		);
 	}
 
-	const updated = await storage.reclaimSite(site.id);
+	const updated = await storage.reclaimSite(site.id, c.get("ownerSub"));
 	crawlSitemap(updated.domain, updated.id, storage).catch(() => {});
 	return c.json({
 		ok: true,
@@ -198,6 +262,9 @@ sites.get("/:id/stats", async (c) => {
 
 	const site = await storage.getSite(id);
 	if (!site) {
+		return c.json({ error: "Site not found" }, 404);
+	}
+	if (site.ownerSub !== c.get("ownerSub")) {
 		return c.json({ error: "Site not found" }, 404);
 	}
 
