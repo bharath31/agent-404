@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import type { PostgresStorage } from "../../storage/postgres.js";
 import { registerPage } from "../../engine/indexer.js";
 import { urlBelongsToSite } from "../../lib/site-host.js";
+import { recordFollowOnFetch } from "../../lib/recovery-tracker.js";
 import type { SiteRecord } from "../../types.js";
 
 type Env = { Variables: { storage: PostgresStorage; siteId: string; site: SiteRecord } };
@@ -60,6 +61,9 @@ register.post("/", async (c) => {
 		headings: JSON.stringify(body.headings || []),
 		contentHash: body.contentHash || null,
 	});
+
+	// Record follow-on fetch correlation for 404 recovery tracking (BAT-61)
+	recordFollowOnFetch(siteId, body.url);
 
 	return c.json({ ok: true, skipped: result.skipped });
 });

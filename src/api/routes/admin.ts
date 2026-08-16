@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import type { PostgresStorage } from "../../storage/postgres.js";
 import { getCronSecret } from "../../config.js";
 import { getFunnelMetrics } from "../../lib/funnel-telemetry.js";
+import { getRecoveryRateStats } from "../../lib/recovery-tracker.js";
 
 type Env = {
 	Bindings: { CRON_SECRET?: string };
@@ -41,6 +42,16 @@ admin.get("/funnel", async (c) => {
 	}
 	const metrics = getFunnelMetrics();
 	return c.json(metrics);
+});
+
+// BAT-61: Agent recovery rate metrics
+admin.get("/recovery-metrics", async (c) => {
+	if (!isCronAuthorized(c)) {
+		return c.json({ error: "Unauthorized" }, 401);
+	}
+	const siteId = c.req.query("siteId");
+	const stats = getRecoveryRateStats(siteId);
+	return c.json(stats);
 });
 
 export { admin };
