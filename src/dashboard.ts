@@ -90,6 +90,12 @@ tr:last-child td { border-bottom: none; }
 <body>
 <h1>${escapeHtml(data.domain)}</h1>
 <p class="subtitle">agent-404 dashboard</p>
+<div class="warning" role="status">
+  <strong>Use <code>data-public-key</code> in HTML</strong>
+  The secret write key must not appear in page source. Browser calls to
+  <code>/api/register</code> with a secret key and an <code>Origin</code> header are rejected.
+  After domain verification, pages are indexed from your sitemap (and the daily cron).
+</div>
 
 ${
 	data.pageCount === 0

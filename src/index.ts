@@ -4,7 +4,7 @@ import { PostgresStorage } from "./storage/postgres.js";
 import { sites } from "./api/routes/sites.js";
 import { register } from "./api/routes/register.js";
 import { suggest } from "./api/routes/suggest.js";
-import { apiKeyAuth } from "./api/middleware/auth.js";
+import { apiKeyAuth, requireVerified, type KeyType } from "./api/middleware/auth.js";
 import { rateLimiter } from "./api/middleware/rate-limit.js";
 import { crawlSitemap } from "./engine/sitemap.js";
 import { pruneStalePages } from "./engine/indexer.js";
@@ -13,8 +13,10 @@ import { landingPageHtml } from "./landing.js";
 import { demoPageHtml } from "./demo.js";
 import { analyze } from "./api/routes/analyze.js";
 import { dashboardHtml } from "./dashboard.js";
+import { isBlockedInternalHost } from "./lib/ssrf-guard.js";
 import { invalidateSuggestCache } from "./engine/suggest-cache.js";
 import { install } from "./api/routes/install.js";
+import type { SiteRecord } from "./types.js";
 
 export type Bindings = {
 	DATABASE_URL: string;
@@ -24,7 +26,7 @@ export type Bindings = {
 
 type Env = {
 	Bindings: Bindings;
-	Variables: { storage: PostgresStorage; siteId: string };
+	Variables: { storage: PostgresStorage; siteId: string; site?: SiteRecord; keyType?: KeyType };
 };
 
 const app = new Hono<Env>();
@@ -57,6 +59,7 @@ app.use("*", async (c, next) => {
 
 // Rate limiting
 app.use("/api/sites", rateLimiter({ windowMs: 60_000, max: 10 }));
+app.use("/api/sites/*", rateLimiter({ windowMs: 60_000, max: 10 }));
 app.use("/api/register", rateLimiter({ windowMs: 60_000, max: 60 }));
 app.use("/api/suggest", rateLimiter({ windowMs: 60_000, max: 60 }));
 app.use("/api/analyze", rateLimiter({ windowMs: 300_000, max: 2 }));
@@ -82,17 +85,8 @@ app.get("/api/demo/sitemap", async (c) => {
 		return c.json({ error: "Invalid domain" }, 400);
 	}
 
-	// Block private/internal hosts
-	const blocked = [
-		"localhost", "127.", "0.0.0.0", "10.",
-		"172.16.", "172.17.", "172.18.", "172.19.",
-		"172.20.", "172.21.", "172.22.", "172.23.",
-		"172.24.", "172.25.", "172.26.", "172.27.",
-		"172.28.", "172.29.", "172.30.", "172.31.",
-		"192.168.", "169.254.", "[::1]", "[fc", "[fd",
-	];
-	const lower = domain.toLowerCase();
-	if (blocked.some((b) => lower === b || lower.startsWith(b))) {
+	// Block private/internal hosts (same list as ownership-proof fetches).
+	if (isBlockedInternalHost(domain)) {
 		return c.json({ error: "Invalid domain" }, 400);
 	}
 
@@ -973,13 +967,16 @@ app.get("/api/health", (c) => c.json({ status: "ok" }));
 app.route("/api/sites", sites);
 
 // Protected routes (require x-api-key)
-app.use("/api/register", apiKeyAuth());
+app.use("/api/register", apiKeyAuth("write"));
+app.use("/api/register", requireVerified());
 app.route("/api/register", register);
 
-app.use("/api/suggest", apiKeyAuth());
+app.use("/api/suggest", apiKeyAuth("read"));
+app.use("/api/suggest", requireVerified());
 app.route("/api/suggest", suggest);
 
-app.use("/api/analyze", apiKeyAuth());
+app.use("/api/analyze", apiKeyAuth("write"));
+app.use("/api/analyze", requireVerified());
 app.route("/api/analyze", analyze);
 
 app.use("/api/install/*", apiKeyAuth());

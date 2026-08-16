@@ -5,19 +5,30 @@ import { resolveApiBase } from "./resolve-api-base.js";
 	if (!script) return;
 
 	const siteId = script.getAttribute("data-site-id");
-	const apiKey = script.getAttribute("data-api-key");
+	const publicKey =
+		script.getAttribute("data-public-key") || script.getAttribute("data-api-key");
+	const secretKey = script.getAttribute("data-api-key");
 	const selector404 = script.getAttribute("data-404-selector");
 	const apiBase = resolveApiBase(script);
 
-	if (!siteId || !apiKey) {
-		console.warn("[agent-404] Missing data-site-id or data-api-key");
+	if (!siteId || !publicKey) {
+		console.warn("[agent-404] Missing data-site-id or data-public-key");
 		return;
 	}
 
-	const headers = {
-		"Content-Type": "application/json",
-		"x-api-key": apiKey,
-	};
+	if (secretKey && !secretKey.startsWith("pk_")) {
+		console.warn(
+			"[agent-404] data-api-key is a write secret and must not be in HTML. " +
+				"Switch to data-public-key; live-page indexing uses sitemap crawl after verification.",
+		);
+	}
+
+	function jsonHeaders(key: string) {
+		return {
+			"Content-Type": "application/json",
+			"x-api-key": key,
+		};
+	}
 
 	function is404Page(): boolean {
 		// 1. CSS selector match
@@ -66,9 +77,13 @@ import { resolveApiBase } from "./resolve-api-base.js";
 			// ignore quota / private mode
 		}
 
+		if (!secretKey || secretKey.startsWith("pk_")) {
+			return;
+		}
+
 		fetch(apiBase + "/api/register", {
 			method: "POST",
-			headers,
+			headers: jsonHeaders(secretKey),
 			body: JSON.stringify({ ...payload, contentHash }),
 			keepalive: true,
 		})
@@ -101,7 +116,7 @@ import { resolveApiBase } from "./resolve-api-base.js";
 		try {
 			const resp = await fetch(apiBase + "/api/suggest", {
 				method: "POST",
-				headers,
+				headers: jsonHeaders(publicKey),
 				body: JSON.stringify({ url: location.href }),
 			});
 

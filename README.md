@@ -40,10 +40,14 @@ Reaches humans and agents that execute JavaScript. It does **not** reach GPTBot 
 <script
   src="https://www.agent404.dev/agent-404.min.js"
   data-site-id="your-site-id"
-  data-api-key="your-api-key"
+  data-public-key="your-public-key"
   defer
 ></script>
 ```
+
+The public key is **read-only** (`/api/suggest`). Keep the secret write key off the page — it is the only credential that can call `/api/register` and `/api/analyze`. **Indexing for new installs is sitemap-driven:** after you prove ownership, we crawl `sitemap.xml` (and re-crawl daily). The script tag with `data-public-key` only serves 404 suggestions; it does not beacon writes. Existing installs that still send `data-api-key` continue to work for suggestions (the old key is treated as the secret key). Browser requests that send a secret key plus an `Origin` header are rejected so the secret cannot be used from page HTML.
+
+`Origin` on `/api/suggest` stops other sites' **browser** JavaScript from using your public key. Non-browser clients can set `Origin` freely — it is not a substitute for keeping the secret key off the page.
 
 Use `https://www.agent404.dev` (not the apex). `agent404.dev` 307-redirects to `www`, and a CORS preflight that receives a redirect is a hard failure — the script will not register pages or render suggestions.
 
@@ -52,7 +56,8 @@ Self-hosters can override the API origin with `data-api-base="https://your-origi
 ## How it works
 
 1. **At the HTTP layer** — middleware rewrites a 404 **before** the body is sent: suggestion list, `schema.org/ItemList` JSON-LD, and `Link` headers. Crawlers that never run JS still see them. `Accept: application/json` returns the same payload as `/api/suggest` with status 404.
-2. **In the browser (optional)** — the script tag beacons live pages into the index and injects suggestions for humans / JS-capable agents.
+2. **Index** — after domain verification, a sitemap crawl (and the daily cron) registers pages. Do not put the secret key in HTML.
+3. **In the browser (optional)** — the script tag injects suggestions for humans / JS-capable agents.
 
 Sibling: [agent404-server](https://github.com/kormco/agent404-server) by [@kormco](https://github.com/kormco) for webserver-layer interception.
 
@@ -93,32 +98,46 @@ curl -X POST https://www.agent404.dev/api/sites \
   -d '{"domain": "example.com"}'
 ```
 
-Returns `siteId` and `apiKey`. The sitemap is crawled automatically on registration.
+Returns `id`, `apiKey` (secret, server-side), `publicKey` (safe for HTML), and a `verificationToken`. The site **does not serve suggestions** until you prove domain ownership:
+
+```bash
+# DNS TXT _agent404.example.com = <verificationToken>
+# or https://example.com/.well-known/agent-404.txt containing the token
+
+curl -X POST https://www.agent404.dev/api/sites/<id>/verify
+```
+
+If someone else registered your domain, `POST /api/sites/reclaim` then `POST /api/sites/reclaim/complete` after proving ownership. **Unverified** (squatted-before-proof) domains complete immediately. **Already-verified** sites have a 24-hour cooling-off period and require `{ "confirm": true }` so a brief DNS hijack cannot silently rotate live keys. Rows that existed before this migration were grandfathered as verified — reclaim is the path for a real owner; this is not an automatic re-check.
+
+Sitemap crawl runs after verification, not at create time.
 
 ### Verify the install
 
 ```bash
 curl https://www.agent404.dev/api/install/status \
-  -H "x-api-key: your-api-key"
+  -H "x-api-key: your-secret-key"
 ```
 
 `installVerified` is true only after at least one page has been indexed. An empty index is a failure, not a quiet success.
 
-### Beacon a page (client script does this automatically)
+### Beacon a page (secret key only)
 
 ```bash
 curl -X POST https://www.agent404.dev/api/register \
   -H "Content-Type: application/json" \
-  -H "x-api-key: your-api-key" \
+  -H "x-api-key: your-secret-key" \
   -d '{"url": "https://example.com/docs/auth", "title": "Auth Guide", "headings": ["OAuth", "API Keys"]}'
 ```
+
+URLs whose host is not the registered domain (or a subdomain) are rejected.
 
 ### Get suggestions for a dead URL
 
 ```bash
 curl -X POST https://www.agent404.dev/api/suggest \
   -H "Content-Type: application/json" \
-  -H "x-api-key: your-api-key" \
+  -H "Origin: https://example.com" \
+  -H "x-api-key: your-public-key" \
   -d '{"url": "https://example.com/docs/v2/auth"}'
 ```
 
