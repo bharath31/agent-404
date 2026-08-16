@@ -2,6 +2,11 @@ export interface SiteRecord {
 	id: string;
 	domain: string;
 	apiKey: string;
+	publicKey: string;
+	verifiedAt: string | null;
+	verificationToken: string;
+	reclaimToken: string | null;
+	reclaimRequestedAt: string | null;
 	createdAt: string;
 	ownerSub: string | null;
 }

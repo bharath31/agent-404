@@ -54,6 +54,7 @@ async function run() {
 		"0001_init.sql",
 		"0002_pgvector.sql",
 		"0003_dashboard.sql",
+		"0004_trust.sql",
 		"0005_scale.sql",
 		"0006_site_owner.sql",
 	];

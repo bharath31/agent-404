@@ -7,5 +7,5 @@ export function normalizeDomain(raw: string): string | null {
 	if (!domain || domain.length > 253 || !DOMAIN_REGEX.test(domain)) {
 		return null;
 	}
-	return domain;
+	return domain.toLowerCase();
 }
