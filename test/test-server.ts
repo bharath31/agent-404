@@ -22,6 +22,8 @@ export interface TestServerOptions {
 	scriptSrc?: string;
 	/** Override API origin. Default: local in-process API on scriptHost. */
 	apiBase?: string;
+	/** Omit data-api-base so the published script uses its baked-in origin. */
+	omitDataApiBase?: boolean;
 }
 
 function injectScript(
@@ -182,7 +184,7 @@ export function startServer(
 
 			const port = (server.address() as { port: number }).port;
 			const localApi = `http://${scriptHost}:${port}`;
-			const apiOrigin = opts.apiBase ?? localApi;
+			const apiOrigin = opts.omitDataApiBase ? "" : (opts.apiBase ?? localApi);
 			const scriptSrc = opts.scriptSrc ?? `http://${scriptHost}:${port}/agent-404.min.js`;
 
 			if (LIVE_PATHS.has(url)) {
