@@ -125,7 +125,7 @@ app.use("/api/*", async (c, next) => {
 	}
 	await next();
 });
-app.use("/dashboard*", async (c, next) => {
+app.use("/dashboard/*", async (c, next) => {
 	const dbUrl = getDatabaseUrl(c.env as Record<string, unknown>);
 	if (dbUrl) {
 		c.set("storage", new PostgresStorage(dbUrl));
