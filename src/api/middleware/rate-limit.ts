@@ -6,23 +6,40 @@ interface RateLimitOptions {
 }
 
 const hits = new Map<string, { count: number; resetAt: number }>();
+const MAX_KEYS = 20_000;
 
-// Clean up expired entries periodically
-setInterval(() => {
-	const now = Date.now();
+function prune(now: number): void {
+	if (hits.size < MAX_KEYS / 2) return;
 	for (const [key, entry] of hits) {
 		if (now > entry.resetAt) hits.delete(key);
 	}
-}, 60_000);
+	if (hits.size > MAX_KEYS) {
+		const extra = hits.size - MAX_KEYS;
+		let i = 0;
+		for (const key of hits.keys()) {
+			hits.delete(key);
+			if (++i >= extra) break;
+		}
+	}
+}
 
+/**
+ * Per-isolate counters (not a durable quota store). BAT-54 (plan limits,
+ * shared store, quota headers beyond these best-effort X-RateLimit-*) is
+ * a follow-up. Keyed by site credential when present so one tenant cannot
+ * exhaust another tenant's budget in the same isolate. No global timers
+ * (Cloudflare Workers disallow setInterval at module scope).
+ */
 export function rateLimiter(opts: RateLimitOptions) {
 	return async (c: Context, next: Next) => {
+		const siteKey = c.req.header("x-api-key")?.slice(0, 64);
 		const ip =
 			c.req.header("x-forwarded-for")?.split(",")[0]?.trim() ||
 			c.req.header("cf-connecting-ip") ||
 			"unknown";
-		const key = `${ip}:${c.req.path}`;
+		const key = `${siteKey || ip}:${c.req.path}`;
 		const now = Date.now();
+		prune(now);
 
 		let entry = hits.get(key);
 		if (!entry || now > entry.resetAt) {
@@ -41,4 +58,9 @@ export function rateLimiter(opts: RateLimitOptions) {
 
 		await next();
 	};
+}
+
+/** Test-only. */
+export function resetRateLimitHits(): void {
+	hits.clear();
 }

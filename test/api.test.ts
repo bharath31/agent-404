@@ -51,6 +51,7 @@ class MemoryStorage implements StorageAdapter {
 			existing.headings = page.headings;
 			existing.lastSeen = new Date().toISOString();
 			if (embedding) existing.embedding = embedding;
+			if ("contentHash" in page) existing.contentHash = page.contentHash ?? existing.contentHash;
 		} else {
 			this.pages.push({
 				id: this.nextPageId++,
@@ -61,6 +62,7 @@ class MemoryStorage implements StorageAdapter {
 				headings: page.headings,
 				lastSeen: new Date().toISOString(),
 				embedding: embedding || undefined,
+				contentHash: page.contentHash ?? null,
 			});
 		}
 	}
@@ -75,8 +77,24 @@ class MemoryStorage implements StorageAdapter {
 		}
 	}
 
-	async getPages(siteId: string): Promise<PageRecord[]> {
-		return this.pages.filter((p) => p.siteId === siteId);
+	async getPages(siteId: string, opts?: { limit?: number; pathHint?: string }): Promise<PageRecord[]> {
+		let rows = this.pages.filter((p) => p.siteId === siteId);
+		if (opts?.pathHint) {
+			const hint = opts.pathHint.toLowerCase();
+			rows = rows.filter(
+				(p) => p.url.toLowerCase().includes(hint) || p.title.toLowerCase().includes(hint),
+			);
+		}
+		return rows.slice(0, opts?.limit ?? 500);
+	}
+
+	async getPageContentHash(siteId: string, url: string): Promise<string | null> {
+		return this.pages.find((p) => p.siteId === siteId && p.url === url)?.contentHash ?? null;
+	}
+
+	async touchPage(siteId: string, url: string): Promise<void> {
+		const page = this.pages.find((p) => p.siteId === siteId && p.url === url);
+		if (page) page.lastSeen = new Date().toISOString();
 	}
 
 	async searchByEmbedding(siteId: string, _embedding: number[], limit: number): Promise<PageRecord[]> {
@@ -278,7 +296,7 @@ describe("API routes", () => {
 			});
 
 			expect(res.status).toBe(200);
-			expect(await res.json()).toEqual({ ok: true });
+			expect(await res.json()).toEqual({ ok: true, skipped: false });
 			expect(storage.pages).toHaveLength(1);
 			expect(storage.pages[0].url).toBe("https://test.example.com/docs/auth");
 			expect(storage.pages[0].title).toBe("Auth Guide");
@@ -316,6 +334,29 @@ describe("API routes", () => {
 
 			expect(storage.pages).toHaveLength(1);
 			expect(storage.pages[0].title).toBe("New Title");
+		});
+
+		it("skips rewrite when contentHash is unchanged", async () => {
+			const send = (title: string) =>
+				app.request("/api/register", {
+					method: "POST",
+					headers: {
+						"Content-Type": "application/json",
+						"x-api-key": apiKey,
+					},
+					body: JSON.stringify({
+						url: "https://test.example.com/docs/auth",
+						title,
+						contentHash: "abc123unchanged",
+					}),
+				});
+
+			const first = await send("Auth");
+			expect((await first.json()).skipped).toBe(false);
+			const second = await send("Auth ignored");
+			expect((await second.json()).skipped).toBe(true);
+			expect(storage.pages).toHaveLength(1);
+			expect(storage.pages[0].title).toBe("Auth");
 		});
 	});
 

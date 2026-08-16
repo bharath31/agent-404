@@ -7,15 +7,21 @@ export interface StorageAdapter {
 
 	upsertPage(
 		siteId: string,
-		page: Pick<PageRecord, "url" | "title" | "description" | "headings">,
+		page: Pick<PageRecord, "url" | "title" | "description" | "headings"> & {
+			contentHash?: string | null;
+		},
 		embedding?: number[] | null,
 	): Promise<void>;
 	upsertPages(
 		siteId: string,
-		pages: Pick<PageRecord, "url" | "title" | "description" | "headings">[],
+		pages: (Pick<PageRecord, "url" | "title" | "description" | "headings"> & {
+			contentHash?: string | null;
+		})[],
 		embeddings?: (number[] | null)[],
 	): Promise<void>;
-	getPages(siteId: string): Promise<PageRecord[]>;
+	getPages(siteId: string, opts?: { limit?: number; pathHint?: string }): Promise<PageRecord[]>;
+	getPageContentHash(siteId: string, url: string): Promise<string | null>;
+	touchPage(siteId: string, url: string): Promise<void>;
 	searchByEmbedding(siteId: string, embedding: number[], limit: number): Promise<PageRecord[]>;
 	deleteStalePagesOlderThan(siteId: string, cutoff: string): Promise<number>;
 

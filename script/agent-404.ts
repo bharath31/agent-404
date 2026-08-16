@@ -36,7 +36,11 @@ import { resolveApiBase } from "./resolve-api-base.js";
 	}
 
 	function beaconPage(): void {
-		const data = JSON.stringify({
+		void beaconPageAsync();
+	}
+
+	async function beaconPageAsync(): Promise<void> {
+		const payload = {
 			url: location.href,
 			title: document.title,
 			description:
@@ -44,23 +48,53 @@ import { resolveApiBase } from "./resolve-api-base.js";
 			headings: Array.from(document.querySelectorAll("h1, h2, h3"), (el) =>
 				(el.textContent || "").trim(),
 			).slice(0, 20),
-		});
+		};
 
-		// sendBeacon can't set custom headers, so we use fetch with keepalive
+		const contentHash = await sha256Hex(
+			`${payload.url}\n${payload.title}\n${payload.description}\n${payload.headings.join("\n")}`,
+		);
+		const storageKey = `agent404:${siteId}:${location.pathname}`;
+		try {
+			const prev = localStorage.getItem(storageKey);
+			if (prev) {
+				const parsed = JSON.parse(prev) as { hash: string; at: number };
+				if (parsed.hash === contentHash && Date.now() - parsed.at < 7 * 24 * 60 * 60 * 1000) {
+					return;
+				}
+			}
+		} catch {
+			// ignore quota / private mode
+		}
+
 		fetch(apiBase + "/api/register", {
 			method: "POST",
 			headers,
-			body: data,
+			body: JSON.stringify({ ...payload, contentHash }),
 			keepalive: true,
 		})
 			.then((resp) => {
 				if (!resp.ok) {
 					warnOwner("Page beacon failed", resp.status);
+					return;
+				}
+				try {
+					localStorage.setItem(storageKey, JSON.stringify({ hash: contentHash, at: Date.now() }));
+				} catch {
+					// ignore
 				}
 			})
 			.catch((err) => {
 				warnOwner("Page beacon failed", undefined, err);
 			});
+	}
+
+	async function sha256Hex(value: string): Promise<string> {
+		const bytes = new TextEncoder().encode(value);
+		const digest = await crypto.subtle.digest("SHA-256", bytes);
+		return [...new Uint8Array(digest)]
+			.map((b) => b.toString(16).padStart(2, "0"))
+			.join("")
+			.slice(0, 32);
 	}
 
 	async function handleNotFound(): Promise<void> {
