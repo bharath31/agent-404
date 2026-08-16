@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import type { PostgresStorage } from "../../storage/postgres.js";
+import { getCronSecret } from "../../config.js";
 
 type Env = {
 	Bindings: { CRON_SECRET?: string };
@@ -13,7 +14,7 @@ export function isCronAuthorized(c: {
 	env?: { CRON_SECRET?: string };
 }): boolean {
 	const authHeader = c.req.header("authorization");
-	const cronSecret = c.env?.CRON_SECRET || process.env.CRON_SECRET;
+	const cronSecret = getCronSecret(c.env as Record<string, unknown>);
 	return Boolean(cronSecret && authHeader === `Bearer ${cronSecret}`);
 }
 
