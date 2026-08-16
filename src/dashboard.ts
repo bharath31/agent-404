@@ -74,16 +74,16 @@ tr:last-child td { border-bottom: none; }
 .dot-related { background: var(--orange); }
 .empty { color: var(--text-secondary); padding: 2rem; text-align: center; }
 .warning {
-  background: #431407;
-  border: 1px solid #c2410c;
-  color: #fed7aa;
+  background: color-mix(in srgb, var(--orange) 18%, #0a0a0a);
+  border: 1px solid var(--orange);
+  color: var(--text-secondary);
   border-radius: 8px;
   padding: 1rem 1.25rem;
   margin-bottom: 1.5rem;
   font-size: 0.9rem;
   line-height: 1.5;
 }
-.warning strong { display: block; margin-bottom: 0.25rem; color: #fdba74; }
+.warning strong { display: block; margin-bottom: 0.25rem; color: var(--orange); }
 .warning code { font-size: 0.85em; }
 </style>
 </head>
