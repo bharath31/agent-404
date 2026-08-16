@@ -1,6 +1,10 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to Claude Code (claude.ai/code) and AI coding agents when working with code in this repository.
+
+## ⚠️ Critical Workflow Rule: Git Worktrees
+
+**Any new change or task must ALWAYS be started from a new Git worktree pulled off the latest `main` branch (`git fetch origin main && git worktree add ../agent-404-<feature> origin/main -b feat/<feature>`). Never modify existing branches or shared working directories directly.** See `AGENTS.md` for full instructions.
 
 ## What This Project Is
 

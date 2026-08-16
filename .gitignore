@@ -3,4 +3,6 @@ dist/
 .vercel/
 *.log
 test-results/
+.screenshots/
 .env*
+node_modules
