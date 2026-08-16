@@ -1,10 +1,12 @@
+import { CANONICAL_SCRIPT_URL } from "./config.js";
+
 export const landingPageHtml = `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>agent-404 — Agent-friendly 404 pages</title>
-  <meta name="description" content="Make your 404 pages useful for AI agents. One script tag. Structured suggestions. Zero config.">
+  <meta name="description" content="Serve agent-friendly 404s at the HTTP layer. Ranked suggestions in the response body, JSON-LD, and Link headers — no JavaScript required.">
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='20' fill='%233b82f6'/%3E%3Ctext x='50' y='58' font-family='system-ui,sans-serif' font-size='48' font-weight='800' fill='white' text-anchor='middle' dominant-baseline='middle'%3E404%3C/text%3E%3C/svg%3E">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -426,7 +428,7 @@ export const landingPageHtml = `<!DOCTYPE html>
     <div class="hero">
       <div class="badge">open source &middot; MIT licensed</div>
       <h1>Turn dead links into<br><span class="highlight">smart redirects for AI agents</span></h1>
-      <p>AI agents hit a broken link and give up. Add one script tag and your 404 pages start suggesting the right page — in a format agents already understand.</p>
+      <p>AI crawlers do not run JavaScript. Put ranked suggestions in the 404 response — HTML, JSON-LD, and Link headers — so ClaudeBot and GPTBot can recover. The script tag is the zero-config option for browsers.</p>
     </div>
 
     <div class="demo">
@@ -651,7 +653,7 @@ export const landingPageHtml = `<!DOCTYPE html>
       const wk = v.wellKnown || {};
       pre.innerHTML =
         '<span class="tag">&lt;script</span>\\n' +
-        '  <span class="attr">src</span>=<span class="str">"https://www.agent404.dev/agent-404.min.js"</span>\\n' +
+        '  <span class="attr">src</span>=<span class="str">"${CANONICAL_SCRIPT_URL}"</span>\\n' +
         '  <span class="attr">data-site-id</span>=<span class="str">"' + site.id + '"</span>\\n' +
         '  <span class="attr">data-public-key</span>=<span class="str">"' + site.publicKey + '"</span>\\n' +
         '  <span class="attr">defer</span>\\n' +
@@ -670,7 +672,7 @@ export const landingPageHtml = `<!DOCTYPE html>
     }
   </script>
   <script
-    src="https://agent404.dev/agent-404.min.js"
+    src="${CANONICAL_SCRIPT_URL}"
     data-site-id="a0beb545-91af-4ea4-8de5-f37c5e0118df"
     data-api-key="key_e644afe7a33f4b13b8e21446abe70ccb"
     defer

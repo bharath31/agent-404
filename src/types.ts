@@ -19,6 +19,7 @@ export interface PageRecord {
 	headings: string; // JSON array of strings
 	lastSeen: string;
 	embedding?: number[] | null;
+	contentHash?: string | null;
 }
 
 export interface Suggestion {
@@ -32,6 +33,7 @@ export interface Suggestion {
 export interface SiteStats {
 	pageCount: number;
 	suggestionsServed: number;
+	lastBeaconAt: string | null;
 }
 
 export interface AnalysisReport {
@@ -61,6 +63,7 @@ export interface DashboardData {
 	domain: string;
 	pageCount: number;
 	suggestionsServed: number;
+	lastBeaconAt: string | null;
 	recentLogs: SuggestionLog[];
 	matchQuality: MatchQualityStats;
 }

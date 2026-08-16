@@ -97,6 +97,17 @@ tr:last-child td { border-bottom: none; }
   After domain verification, pages are indexed from your sitemap (and the daily cron).
 </div>
 
+${
+	data.pageCount === 0
+		? `<div class="warning" role="alert">
+  <strong>No beacons received</strong>
+  This site has not indexed any pages yet. The install is not working — an empty page count is not a quiet success.
+  Confirm the snippet uses <code>https://www.agent404.dev</code> (not the apex; redirects break CORS preflight),
+  then open a live page and check the browser console for <code>[agent-404]</code> warnings.
+  You can also call <code>GET /api/install/status</code> with your API key.
+</div>`
+		: ""
+}
 <div class="stats">
   <div class="stat-card"><div class="label">Indexed Pages</div><div class="value">${data.pageCount}</div></div>
   <div class="stat-card"><div class="label">Suggestions Served</div><div class="value">${data.suggestionsServed}</div></div>

@@ -1,3 +1,5 @@
+import { resolveApiBase } from "./resolve-api-base.js";
+
 (function () {
 	const script = document.currentScript as HTMLScriptElement | null;
 	if (!script) return;
@@ -7,7 +9,7 @@
 		script.getAttribute("data-public-key") || script.getAttribute("data-api-key");
 	const secretKey = script.getAttribute("data-api-key");
 	const selector404 = script.getAttribute("data-404-selector");
-	const apiBase = new URL(script.src).origin;
+	const apiBase = resolveApiBase(script);
 
 	if (!siteId || !publicKey) {
 		console.warn("[agent-404] Missing data-site-id or data-public-key");
@@ -45,7 +47,11 @@
 	}
 
 	function beaconPage(): void {
-		const data = JSON.stringify({
+		void beaconPageAsync();
+	}
+
+	async function beaconPageAsync(): Promise<void> {
+		const payload = {
 			url: location.href,
 			title: document.title,
 			description:
@@ -53,10 +59,24 @@
 			headings: Array.from(document.querySelectorAll("h1, h2, h3"), (el) =>
 				(el.textContent || "").trim(),
 			).slice(0, 20),
-		});
+		};
 
-		// Secret keys must not live in HTML. New installs index via sitemap after
-		// verification. Legacy `data-api-key` still beacons from the page.
+		const contentHash = await sha256Hex(
+			`${payload.url}\n${payload.title}\n${payload.description}\n${payload.headings.join("\n")}`,
+		);
+		const storageKey = `agent404:${siteId}:${location.pathname}`;
+		try {
+			const prev = localStorage.getItem(storageKey);
+			if (prev) {
+				const parsed = JSON.parse(prev) as { hash: string; at: number };
+				if (parsed.hash === contentHash && Date.now() - parsed.at < 7 * 24 * 60 * 60 * 1000) {
+					return;
+				}
+			}
+		} catch {
+			// ignore quota / private mode
+		}
+
 		if (!secretKey || secretKey.startsWith("pk_")) {
 			return;
 		}
@@ -64,9 +84,32 @@
 		fetch(apiBase + "/api/register", {
 			method: "POST",
 			headers: jsonHeaders(secretKey),
-			body: data,
+			body: JSON.stringify({ ...payload, contentHash }),
 			keepalive: true,
-		}).catch(() => {});
+		})
+			.then((resp) => {
+				if (!resp.ok) {
+					warnOwner("Page beacon failed", resp.status);
+					return;
+				}
+				try {
+					localStorage.setItem(storageKey, JSON.stringify({ hash: contentHash, at: Date.now() }));
+				} catch {
+					// ignore
+				}
+			})
+			.catch((err) => {
+				warnOwner("Page beacon failed", undefined, err);
+			});
+	}
+
+	async function sha256Hex(value: string): Promise<string> {
+		const bytes = new TextEncoder().encode(value);
+		const digest = await crypto.subtle.digest("SHA-256", bytes);
+		return [...new Uint8Array(digest)]
+			.map((b) => b.toString(16).padStart(2, "0"))
+			.join("")
+			.slice(0, 32);
 	}
 
 	async function handleNotFound(): Promise<void> {
@@ -77,7 +120,10 @@
 				body: JSON.stringify({ url: location.href }),
 			});
 
-			if (!resp.ok) return;
+			if (!resp.ok) {
+				warnOwner("Suggestion request failed", resp.status);
+				return;
+			}
 
 			const result = await resp.json() as {
 				suggestions: Array<{
@@ -94,9 +140,20 @@
 
 			injectSuggestions(result.suggestions);
 			injectJsonLd(result.jsonLd);
-		} catch {
-			// Silently fail — don't break the host page
+		} catch (err) {
+			// Don't break the host page — surface the failure to the owner.
+			warnOwner("Suggestion request failed", undefined, err);
 		}
+	}
+
+	function warnOwner(operation: string, status?: number, err?: unknown): void {
+		const statusBit = status ? ` (HTTP ${status})` : "";
+		console.warn(
+			`[agent-404] ${operation}${statusBit}. The host page is unaffected. ` +
+				"If this is a CORS error, use https://www.agent404.dev (not the apex) — " +
+				"redirects break preflight. Verify with GET /api/install/status or the dashboard.",
+			err ?? "",
+		);
 	}
 
 	function injectSuggestions(

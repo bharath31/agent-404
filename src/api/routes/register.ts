@@ -21,6 +21,7 @@ register.post("/", async (c) => {
 		title?: string;
 		description?: string;
 		headings?: string[];
+		contentHash?: string;
 	}>();
 
 	if (!body.url || typeof body.url !== "string") {
@@ -48,14 +49,19 @@ register.post("/", async (c) => {
 		return c.json({ error: "too many headings" }, 400);
 	}
 
-	await registerPage(storage, siteId, {
+	if (body.contentHash && body.contentHash.length > 128) {
+		return c.json({ error: "contentHash too long" }, 400);
+	}
+
+	const result = await registerPage(storage, siteId, {
 		url: body.url,
 		title: body.title || "",
 		description: body.description || "",
 		headings: JSON.stringify(body.headings || []),
+		contentHash: body.contentHash || null,
 	});
 
-	return c.json({ ok: true });
+	return c.json({ ok: true, skipped: result.skipped });
 });
 
 export { register };

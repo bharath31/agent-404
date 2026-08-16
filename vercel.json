@@ -4,5 +4,13 @@
   ],
   "crons": [
     { "path": "/api/cron", "schedule": "0 3 * * *" }
+  ],
+  "headers": [
+    {
+      "source": "/agent-404.min.js",
+      "headers": [
+        { "key": "Cache-Control", "value": "public, max-age=300" }
+      ]
+    }
   ]
 }

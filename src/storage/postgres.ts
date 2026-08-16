@@ -105,20 +105,24 @@ export class PostgresStorage implements StorageAdapter {
 
 	async upsertPage(
 		siteId: string,
-		page: Pick<PageRecord, "url" | "title" | "description" | "headings">,
+		page: Pick<PageRecord, "url" | "title" | "description" | "headings"> & {
+			contentHash?: string | null;
+		},
 		embedding?: number[] | null,
 	): Promise<void> {
 		const embeddingStr = embedding ? this.validateEmbedding(embedding) : null;
+		const hash = page.contentHash ?? null;
 
 		if (embeddingStr) {
 			await this.sql.query(
-				`INSERT INTO pages (site_id, url, title, description, headings, embedding)
-				VALUES ($1, $2, $3, $4, $5, $6::vector)
+				`INSERT INTO pages (site_id, url, title, description, headings, embedding, content_hash)
+				VALUES ($1, $2, $3, $4, $5, $6::vector, $7)
 				ON CONFLICT (site_id, url) DO UPDATE SET
 					title = EXCLUDED.title,
 					description = EXCLUDED.description,
 					headings = EXCLUDED.headings,
 					embedding = COALESCE(EXCLUDED.embedding, pages.embedding),
+					content_hash = COALESCE(EXCLUDED.content_hash, pages.content_hash),
 					last_seen = NOW()`,
 				[
 					siteId,
@@ -127,18 +131,21 @@ export class PostgresStorage implements StorageAdapter {
 					page.description,
 					page.headings,
 					embeddingStr,
+					hash,
 				],
 			);
 		} else {
-			await this.sql`
-				INSERT INTO pages (site_id, url, title, description, headings)
-				VALUES (${siteId}, ${page.url}, ${page.title}, ${page.description}, ${page.headings})
+			await this.sql.query(
+				`INSERT INTO pages (site_id, url, title, description, headings, content_hash)
+				VALUES ($1, $2, $3, $4, $5, $6)
 				ON CONFLICT (site_id, url) DO UPDATE SET
 					title = EXCLUDED.title,
 					description = EXCLUDED.description,
 					headings = EXCLUDED.headings,
-					last_seen = NOW()
-			`;
+					content_hash = COALESCE(EXCLUDED.content_hash, pages.content_hash),
+					last_seen = NOW()`,
+				[siteId, page.url, page.title, page.description, page.headings, hash],
+			);
 		}
 	}
 
@@ -170,10 +177,41 @@ export class PostgresStorage implements StorageAdapter {
 		return rows.map(this.mapPageRow);
 	}
 
-	async getPages(siteId: string): Promise<PageRecord[]> {
-		const { rows } =
-			await this.sql`SELECT * FROM pages WHERE site_id = ${siteId}`;
+	async getPages(
+		siteId: string,
+		opts?: { limit?: number; pathHint?: string },
+	): Promise<PageRecord[]> {
+		const limit = Math.min(Math.max(opts?.limit ?? 500, 1), 500);
+		const hint = opts?.pathHint?.replace(/[%_]/g, "") || null;
+		if (hint) {
+			const like = `%${hint}%`;
+			const { rows } = await this.sql.query(
+				`SELECT * FROM pages
+				WHERE site_id = $1 AND (url ILIKE $2 OR title ILIKE $2)
+				ORDER BY last_seen DESC
+				LIMIT $3`,
+				[siteId, like, limit],
+			);
+			return rows.map(this.mapPageRow);
+		}
+		const { rows } = await this.sql.query(
+			`SELECT * FROM pages WHERE site_id = $1 ORDER BY last_seen DESC LIMIT $2`,
+			[siteId, limit],
+		);
 		return rows.map(this.mapPageRow);
+	}
+
+	async getPageContentHash(siteId: string, url: string): Promise<string | null> {
+		const { rows } = await this.sql`
+			SELECT content_hash FROM pages WHERE site_id = ${siteId} AND url = ${url}
+		`;
+		return (rows[0]?.content_hash as string) || null;
+	}
+
+	async touchPage(siteId: string, url: string): Promise<void> {
+		await this.sql`
+			UPDATE pages SET last_seen = NOW() WHERE site_id = ${siteId} AND url = ${url}
+		`;
 	}
 
 	async deleteStalePagesOlderThan(
@@ -205,9 +243,14 @@ export class PostgresStorage implements StorageAdapter {
 		const suggestions =
 			await this.sql`SELECT COUNT(*) as count FROM suggestion_logs WHERE site_id = ${siteId}`;
 
+		const lastSeen = await this.sql`
+			SELECT MAX(last_seen) as last_seen FROM pages WHERE site_id = ${siteId}
+		`;
+
 		return {
 			pageCount: Number(pages.rows[0]?.count ?? 0),
 			suggestionsServed: Number(suggestions.rows[0]?.count ?? 0),
+			lastBeaconAt: lastSeen.rows[0]?.last_seen ? String(lastSeen.rows[0].last_seen) : null,
 		};
 	}
 
@@ -277,6 +320,7 @@ export class PostgresStorage implements StorageAdapter {
 			description: row.description as string,
 			headings: row.headings as string,
 			lastSeen: String(row.last_seen),
+			contentHash: (row.content_hash as string) || null,
 		};
 	}
 }
