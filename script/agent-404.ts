@@ -14,6 +14,13 @@
 		return;
 	}
 
+	if (secretKey && !secretKey.startsWith("pk_")) {
+		console.warn(
+			"[agent-404] data-api-key is a write secret and must not be in HTML. " +
+				"Switch to data-public-key; live-page indexing uses sitemap crawl after verification.",
+		);
+	}
+
 	function jsonHeaders(key: string) {
 		return {
 			"Content-Type": "application/json",

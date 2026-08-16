@@ -6,6 +6,7 @@ export interface SiteRecord {
 	verifiedAt: string | null;
 	verificationToken: string;
 	reclaimToken: string | null;
+	reclaimRequestedAt: string | null;
 	createdAt: string;
 }
 

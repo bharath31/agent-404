@@ -13,6 +13,9 @@ import { landingPageHtml } from "./landing.js";
 import { demoPageHtml } from "./demo.js";
 import { analyze } from "./api/routes/analyze.js";
 import { dashboardHtml } from "./dashboard.js";
+import { isBlockedInternalHost } from "./lib/ssrf-guard.js";
+import type { SiteRecord } from "./types.js";
+import type { KeyType } from "./api/middleware/auth.js";
 
 export type Bindings = {
 	DATABASE_URL: string;
@@ -22,7 +25,7 @@ export type Bindings = {
 
 type Env = {
 	Bindings: Bindings;
-	Variables: { storage: PostgresStorage; siteId: string; site?: import("./types.js").SiteRecord; keyType?: "secret" | "public" };
+	Variables: { storage: PostgresStorage; siteId: string; site?: SiteRecord; keyType?: KeyType };
 };
 
 const app = new Hono<Env>();
@@ -80,17 +83,8 @@ app.get("/api/demo/sitemap", async (c) => {
 		return c.json({ error: "Invalid domain" }, 400);
 	}
 
-	// Block private/internal hosts
-	const blocked = [
-		"localhost", "127.", "0.0.0.0", "10.",
-		"172.16.", "172.17.", "172.18.", "172.19.",
-		"172.20.", "172.21.", "172.22.", "172.23.",
-		"172.24.", "172.25.", "172.26.", "172.27.",
-		"172.28.", "172.29.", "172.30.", "172.31.",
-		"192.168.", "169.254.", "[::1]", "[fc", "[fd",
-	];
-	const lower = domain.toLowerCase();
-	if (blocked.some((b) => lower === b || lower.startsWith(b))) {
+	// Block private/internal hosts (same list as ownership-proof fetches).
+	if (isBlockedInternalHost(domain)) {
 		return c.json({ error: "Invalid domain" }, 400);
 	}
 

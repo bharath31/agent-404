@@ -4,6 +4,8 @@ import { crawlSitemap } from "../../engine/sitemap.js";
 import { proveDomainOwnership, verificationTxtName, wellKnownUrl } from "../../engine/domain-verify.js";
 import type { SiteRecord } from "../../types.js";
 
+export const VERIFIED_RECLAIM_GRACE_MS = 24 * 60 * 60 * 1000;
+
 type Env = { Variables: { storage: PostgresStorage; siteId: string; site: SiteRecord } };
 
 const sites = new Hono<Env>();
@@ -107,18 +109,23 @@ sites.post("/reclaim", async (c) => {
 	}
 
 	const token = await storage.rotateReclaimToken(site.id);
+	const coolingOff = Boolean(site.verifiedAt);
 	return c.json({
 		ok: true,
 		domain,
 		siteId: site.id,
 		reclaimToken: token,
 		verification: verificationInstructions(domain, token),
-		next: "Prove ownership, then POST /api/sites/reclaim/complete with { domain }",
+		verifiedSite: coolingOff,
+		coolingOffHours: coolingOff ? 24 : 0,
+		next: coolingOff
+			? "Prove ownership, wait 24h, then POST /api/sites/reclaim/complete with { domain, confirm: true }"
+			: "Prove ownership, then POST /api/sites/reclaim/complete with { domain }",
 	});
 });
 
 sites.post("/reclaim/complete", async (c) => {
-	const body = await c.req.json<{ domain: string }>();
+	const body = await c.req.json<{ domain: string; confirm?: boolean | string }>();
 	const domain = body.domain ? normalizeDomain(body.domain) : null;
 	if (!domain) {
 		return c.json({ error: "Invalid domain format" }, 400);
@@ -132,6 +139,29 @@ sites.post("/reclaim/complete", async (c) => {
 
 	if (!site.reclaimToken) {
 		return c.json({ error: "No reclaim in progress. POST /api/sites/reclaim first." }, 400);
+	}
+
+	if (site.verifiedAt) {
+		const started = site.reclaimRequestedAt ? Date.parse(site.reclaimRequestedAt) : 0;
+		const waitMs = VERIFIED_RECLAIM_GRACE_MS - (Date.now() - started);
+		if (!started || waitMs > 0) {
+			return c.json(
+				{
+					error: "Verified sites have a 24h cooling-off period before keys rotate.",
+					retryAfterSeconds: Math.max(1, Math.ceil((waitMs || VERIFIED_RECLAIM_GRACE_MS) / 1000)),
+					hint: "Unverified domains can complete immediately after proof.",
+				},
+				400,
+			);
+		}
+		if (body.confirm !== true && body.confirm !== "replace-verified-site") {
+			return c.json(
+				{
+					error: "Pass confirm: true to rotate keys on an already-verified site.",
+				},
+				400,
+			);
+		}
 	}
 
 	const ok = await proveDomainOwnership(domain, site.reclaimToken);

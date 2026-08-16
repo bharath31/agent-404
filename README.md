@@ -85,7 +85,7 @@ Returns `id`, `apiKey` (secret, server-side), `publicKey` (safe for HTML), and a
 curl -X POST https://www.agent404.dev/api/sites/<id>/verify
 ```
 
-If someone else registered your domain, `POST /api/sites/reclaim` then `POST /api/sites/reclaim/complete` after proving ownership. Existing sites were grandfathered as verified.
+If someone else registered your domain, `POST /api/sites/reclaim` then `POST /api/sites/reclaim/complete` after proving ownership. **Unverified** (squatted-before-proof) domains complete immediately. **Already-verified** sites have a 24-hour cooling-off period and require `{ "confirm": true }` so a brief DNS hijack cannot silently rotate live keys. Rows that existed before this migration were grandfathered as verified — reclaim is the path for a real owner; this is not an automatic re-check.
 
 Sitemap crawl runs after verification, not at create time.
 

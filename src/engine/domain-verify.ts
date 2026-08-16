@@ -1,3 +1,9 @@
+import {
+	isBlockedInternalHost,
+	isPrivateOrReservedIp,
+	ipsFromDnsJson,
+} from "../lib/ssrf-guard.js";
+
 const TXT_NAME_PREFIX = "_agent404.";
 const WELL_KNOWN_MAX_BYTES = 4096;
 
@@ -73,6 +79,25 @@ async function fetchDns(url: string): Promise<Response | null> {
 	}
 }
 
+async function domainResolvesPublic(domain: string): Promise<boolean> {
+	if (isBlockedInternalHost(domain)) return false;
+	const ips: string[] = [];
+	for (const type of ["A", "AAAA"] as const) {
+		const resp = await fetchDns(
+			`https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(domain)}&type=${type}`,
+		);
+		if (!resp?.ok) continue;
+		try {
+			const json = (await resp.json()) as { Answer?: Array<{ data?: string }> };
+			ips.push(...ipsFromDnsJson(json));
+		} catch {
+			continue;
+		}
+	}
+	if (ips.length === 0) return false;
+	return ips.every((ip) => !isPrivateOrReservedIp(ip));
+}
+
 /**
  * Prove control of `domain` via DNS TXT `_agent404.<domain>` or
  * `https://<domain>/.well-known/agent-404.txt` containing the token.
@@ -81,10 +106,12 @@ export async function proveDomainOwnership(domain: string, token: string): Promi
 	if (!token) return false;
 	const expected = token.trim();
 
-	const file = await fetchWellKnown(wellKnownUrl(domain));
-	if (file?.status === 200) {
-		const body = await readBodyCapped(file, WELL_KNOWN_MAX_BYTES);
-		if (body && tokenMatches(body, expected)) return true;
+	if (await domainResolvesPublic(domain)) {
+		const file = await fetchWellKnown(wellKnownUrl(domain));
+		if (file?.status === 200) {
+			const body = await readBodyCapped(file, WELL_KNOWN_MAX_BYTES);
+			if (body && tokenMatches(body, expected)) return true;
+		}
 	}
 
 	const dnsName = verificationTxtName(domain);

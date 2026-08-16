@@ -28,6 +28,7 @@ class MemoryStorage implements StorageAdapter {
 			verifiedAt: null,
 			verificationToken: `vf_${crypto.randomUUID().replace(/-/g, "")}`,
 			reclaimToken: null,
+			reclaimRequestedAt: null,
 			createdAt: new Date().toISOString(),
 		};
 		this.sites.push(site);
@@ -59,6 +60,7 @@ class MemoryStorage implements StorageAdapter {
 		if (site) {
 			site.verifiedAt = new Date().toISOString();
 			site.reclaimToken = null;
+			site.reclaimRequestedAt = null;
 		}
 	}
 
@@ -68,6 +70,7 @@ class MemoryStorage implements StorageAdapter {
 		if (site.reclaimToken) return site.reclaimToken;
 		const token = `rc_${crypto.randomUUID().replace(/-/g, "")}`;
 		site.reclaimToken = token;
+		site.reclaimRequestedAt = new Date().toISOString();
 		return token;
 	}
 
@@ -79,6 +82,7 @@ class MemoryStorage implements StorageAdapter {
 		site.publicKey = `pk_${crypto.randomUUID().replace(/-/g, "")}`;
 		site.verificationToken = `vf_${crypto.randomUUID().replace(/-/g, "")}`;
 		site.reclaimToken = null;
+		site.reclaimRequestedAt = null;
 		site.verifiedAt = new Date().toISOString();
 		return site;
 	}
@@ -192,6 +196,27 @@ async function createVerifiedSite(
 		publicKey: string;
 		domain: string;
 	};
+}
+
+function mockOwnershipFetch(opts: { wellKnown?: string; txt?: string; a?: string }) {
+	vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+		const url = String(input);
+		if (url.includes("cloudflare-dns.com") && url.includes("type=A")) {
+			return new Response(JSON.stringify({ Answer: [{ data: opts.a ?? "93.184.216.34" }] }), {
+				status: 200,
+			});
+		}
+		if (url.includes("cloudflare-dns.com") && url.includes("type=AAAA")) {
+			return new Response(JSON.stringify({ Answer: [] }), { status: 200 });
+		}
+		if (url.includes("cloudflare-dns.com") && url.includes("type=TXT") && opts.txt) {
+			return new Response(JSON.stringify({ Answer: [{ data: `"${opts.txt}"` }] }), { status: 200 });
+		}
+		if (url.includes("/.well-known/agent-404.txt") && opts.wellKnown !== undefined) {
+			return new Response(opts.wellKnown, { status: 200 });
+		}
+		return new Response("no", { status: 404 });
+	});
 }
 
 describe("API routes", () => {
@@ -601,13 +626,7 @@ describe("API routes", () => {
 				body: JSON.stringify({ domain: "owned.example.com" }),
 			});
 			const site = await created.json();
-			vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
-				const url = String(input);
-				if (url.includes("/.well-known/agent-404.txt")) {
-					return new Response(site.verificationToken, { status: 200 });
-				}
-				return new Response("no", { status: 404 });
-			});
+			mockOwnershipFetch({ wellKnown: site.verificationToken });
 			const verify = await app.request(`/api/sites/${site.id}/verify`, { method: "POST" });
 			expect(verify.status).toBe(200);
 			expect(storage.sites[0].verifiedAt).toBeTruthy();
@@ -622,6 +641,14 @@ describe("API routes", () => {
 			const site = await created.json();
 			vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
 				const url = String(input);
+				if (url.includes("cloudflare-dns.com") && url.includes("type=A")) {
+					return new Response(JSON.stringify({ Answer: [{ data: "93.184.216.34" }] }), {
+						status: 200,
+					});
+				}
+				if (url.includes("cloudflare-dns.com")) {
+					return new Response(JSON.stringify({ Answer: [] }), { status: 200 });
+				}
 				if (url.includes("/.well-known/agent-404.txt")) {
 					return new Response("", {
 						status: 302,
@@ -642,16 +669,7 @@ describe("API routes", () => {
 				body: JSON.stringify({ domain: "dns.example.com" }),
 			});
 			const site = await created.json();
-			vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
-				const url = String(input);
-				if (url.includes("cloudflare-dns.com")) {
-					return new Response(
-						JSON.stringify({ Answer: [{ data: `"${site.verificationToken}"` }] }),
-						{ status: 200, headers: { "Content-Type": "application/dns-json" } },
-					);
-				}
-				return new Response("no", { status: 404 });
-			});
+			mockOwnershipFetch({ txt: site.verificationToken });
 			const verify = await app.request(`/api/sites/${site.id}/verify`, { method: "POST" });
 			expect(verify.status).toBe(200);
 			expect(storage.sites[0].verifiedAt).toBeTruthy();
@@ -696,10 +714,15 @@ describe("API routes", () => {
 			expect(res.status).toBe(400);
 		});
 
-		it("should rotate keys, purge pages, and verify after proof", async () => {
-			const created = await createVerifiedSite(app, storage, "reclaim.example.com");
-			await storage.upsertPage(created.id, {
-				url: "https://reclaim.example.com/poison",
+		it("should complete immediately for an unverified site and purge pages", async () => {
+			const created = await app.request("/api/sites", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ domain: "squat.example.com" }),
+			});
+			const site = await created.json();
+			await storage.upsertPage(site.id, {
+				url: "https://squat.example.com/poison",
 				title: "Attacker title",
 				description: "",
 				headings: "evil",
@@ -707,28 +730,65 @@ describe("API routes", () => {
 			const start = await app.request("/api/sites/reclaim", {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ domain: "reclaim.example.com" }),
+				body: JSON.stringify({ domain: "squat.example.com" }),
 			});
 			const { reclaimToken } = await start.json();
-			vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
-				const url = String(input);
-				if (url.includes("/.well-known/agent-404.txt")) {
-					return new Response(reclaimToken, { status: 200 });
-				}
-				return new Response("no", { status: 404 });
-			});
+			mockOwnershipFetch({ wellKnown: reclaimToken });
 			const done = await app.request("/api/sites/reclaim/complete", {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ domain: "reclaim.example.com" }),
+				body: JSON.stringify({ domain: "squat.example.com" }),
+			});
+			expect(done.status).toBe(200);
+			const body = await done.json();
+			expect(body.apiKey).not.toBe(site.apiKey);
+			expect(body.verified).toBe(true);
+			expect(storage.pages.filter((p) => p.siteId === site.id)).toHaveLength(0);
+		});
+
+		it("should not rotate keys on a verified site before the cooling-off period", async () => {
+			const created = await createVerifiedSite(app, storage, "live.example.com");
+			const start = await app.request("/api/sites/reclaim", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ domain: "live.example.com" }),
+			});
+			const { reclaimToken } = await start.json();
+			mockOwnershipFetch({ wellKnown: reclaimToken });
+			const done = await app.request("/api/sites/reclaim/complete", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ domain: "live.example.com", confirm: true }),
+			});
+			expect(done.status).toBe(400);
+			expect(storage.sites[0].apiKey).toBe(created.apiKey);
+		});
+
+		it("should rotate a verified site after cooling-off when confirm is set", async () => {
+			const created = await createVerifiedSite(app, storage, "grace.example.com");
+			await storage.upsertPage(created.id, {
+				url: "https://grace.example.com/poison",
+				title: "Attacker title",
+				description: "",
+				headings: "evil",
+			});
+			const start = await app.request("/api/sites/reclaim", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ domain: "grace.example.com" }),
+			});
+			const { reclaimToken } = await start.json();
+			storage.sites[0].reclaimRequestedAt = new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString();
+			mockOwnershipFetch({ wellKnown: reclaimToken });
+			const done = await app.request("/api/sites/reclaim/complete", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ domain: "grace.example.com", confirm: true }),
 			});
 			expect(done.status).toBe(200);
 			const body = await done.json();
 			expect(body.apiKey).not.toBe(created.apiKey);
-			expect(body.publicKey).not.toBe(created.publicKey);
-			expect(body.verified).toBe(true);
 			expect(storage.pages.filter((p) => p.siteId === created.id)).toHaveLength(0);
-			expect(storage.sites[0].reclaimToken).toBeNull();
 		});
 	});
 

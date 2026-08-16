@@ -63,7 +63,7 @@ export class PostgresStorage implements StorageAdapter {
 	}
 
 	async markVerified(id: string): Promise<void> {
-		await this.sql`UPDATE sites SET verified_at = NOW(), reclaim_token = NULL WHERE id = ${id}`;
+		await this.sql`UPDATE sites SET verified_at = NOW(), reclaim_token = NULL, reclaim_requested_at = NULL WHERE id = ${id}`;
 	}
 
 	async rotateReclaimToken(id: string): Promise<string> {
@@ -71,7 +71,7 @@ export class PostgresStorage implements StorageAdapter {
 		const current = (existing.rows[0]?.reclaim_token as string) || "";
 		if (current) return current;
 		const token = `rc_${crypto.randomUUID().replace(/-/g, "")}`;
-		await this.sql`UPDATE sites SET reclaim_token = ${token} WHERE id = ${id}`;
+		await this.sql`UPDATE sites SET reclaim_token = ${token}, reclaim_requested_at = NOW() WHERE id = ${id}`;
 		return token;
 	}
 
@@ -87,6 +87,7 @@ export class PostgresStorage implements StorageAdapter {
 				public_key = ${publicKey},
 				verification_token = ${verificationToken},
 				reclaim_token = NULL,
+				reclaim_requested_at = NULL,
 				verified_at = NOW()
 			WHERE id = ${id}
 			RETURNING *
@@ -262,6 +263,7 @@ export class PostgresStorage implements StorageAdapter {
 			verifiedAt: row.verified_at ? String(row.verified_at) : null,
 			verificationToken: (row.verification_token as string) || "",
 			reclaimToken: (row.reclaim_token as string) || null,
+			reclaimRequestedAt: row.reclaim_requested_at ? String(row.reclaim_requested_at) : null,
 			createdAt: String(row.created_at),
 		};
 	}
