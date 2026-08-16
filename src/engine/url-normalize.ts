@@ -2,6 +2,8 @@ export function normalizeDeadUrl(url: string): string {
 	try {
 		const parsed = new URL(url);
 		parsed.hash = "";
+		// Query strings are dropped so cache keys stay stable for typical 404s.
+		// Distinct resources that only differ by `?id=` therefore share a key.
 		parsed.search = "";
 		parsed.hostname = parsed.hostname.toLowerCase();
 		parsed.pathname = parsed.pathname.replace(/\/{2,}/g, "/");

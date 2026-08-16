@@ -1,6 +1,7 @@
 import type { PageRecord } from "../types.js";
 import type { StorageAdapter } from "../storage/interface.js";
 import { generatePageEmbedding } from "./embeddings.js";
+import { invalidateSuggestCache } from "./suggest-cache.js";
 
 export async function registerPage(
 	storage: StorageAdapter,
@@ -19,6 +20,7 @@ export async function registerPage(
 
 	const embedding = await generatePageEmbedding(page);
 	await storage.upsertPage(siteId, page, embedding);
+	invalidateSuggestCache(siteId);
 	return { skipped: false };
 }
 

@@ -13,6 +13,7 @@ import { landingPageHtml } from "./landing.js";
 import { demoPageHtml } from "./demo.js";
 import { analyze } from "./api/routes/analyze.js";
 import { dashboardHtml } from "./dashboard.js";
+import { invalidateSuggestCache } from "./engine/suggest-cache.js";
 
 export type Bindings = {
 	DATABASE_URL: string;
@@ -1021,27 +1022,37 @@ app.get("/api/cron", async (c) => {
 
 	const storage = c.get("storage");
 	const sql = storage.getSql();
-	// Vercel Hobby allows only daily crons. Shard by UTC day so a daily
-	// 03:00 run still covers every site over a week; hourly Workers use
-	// last_cron_at to skip already-processed rows the same day.
-	const shard = Math.floor(Date.now() / 86_400_000) % 7;
+	// Vercel Hobby only allows a daily cron (`0 3 * * *`). Cloudflare can run
+	// hourly. Both hit this handler. Do not exclusive-shard by weekday — that
+	// left ~6 weeks between visits at 1,000 sites. Steal the stalest sites
+	// (`last_cron_at`) and stop before the Edge ~25s cap.
+	const CRON_BUDGET_MS = 18_000;
+	const started = Date.now();
+	const { rows: backlogRows } = await sql.query(
+		`SELECT COUNT(*)::int AS n FROM sites
+		 WHERE last_cron_at IS NULL OR last_cron_at < NOW() - INTERVAL '20 hours'`,
+	);
+	const remainingAtStart = Number(backlogRows[0]?.n ?? 0);
 	const { rows } = await sql.query(
 		`SELECT id, domain FROM sites
-		 WHERE abs(hashtext(id::text)) % 7 = $1
-		   AND (last_cron_at IS NULL OR last_cron_at < NOW() - INTERVAL '20 hours')
+		 WHERE last_cron_at IS NULL OR last_cron_at < NOW() - INTERVAL '20 hours'
 		 ORDER BY last_cron_at NULLS FIRST
-		 LIMIT 25`,
-		[shard],
+		 LIMIT 15`,
 	);
 
 	const results = [];
+	let stoppedForBudget = false;
 	for (const row of rows) {
+		if (Date.now() - started > CRON_BUDGET_MS) {
+			stoppedForBudget = true;
+			break;
+		}
 		const siteId = row.id as string;
 		const domain = row.domain as string;
 		const crawled = await crawlSitemap(domain, siteId, storage);
 		const pruned = await pruneStalePages(storage, siteId, 30);
 
-		// Backfill embeddings for pages missing them (bounded + batched)
+		// Backfill embeddings for pages missing them (bounded + batched writes)
 		let backfilled = 0;
 		const BACKFILL_LIMIT = 200;
 		const { rows: nullPages } = await sql.query(
@@ -1054,6 +1065,10 @@ app.get("/api/cron", async (c) => {
 		if (nullPages.length > 0) {
 			const BATCH_SIZE = 100;
 			for (let i = 0; i < nullPages.length; i += BATCH_SIZE) {
+				if (Date.now() - started > CRON_BUDGET_MS) {
+					stoppedForBudget = true;
+					break;
+				}
 				const batch = nullPages.slice(i, i + BATCH_SIZE);
 				const texts = batch.map((p) =>
 					buildEmbeddingText({
@@ -1073,20 +1088,54 @@ app.get("/api/cron", async (c) => {
 						backfilled++;
 					}
 				}
-				for (let k = 0; k < ids.length; k++) {
-					await sql.query(`UPDATE pages SET embedding = $1::vector WHERE id = $2`, [
-						vectors[k],
-						ids[k],
-					]);
+				if (ids.length > 0) {
+					await applyEmbeddingBatch(sql, ids, vectors);
 				}
 			}
 		}
 
 		await sql`UPDATE sites SET last_cron_at = NOW() WHERE id = ${siteId}`;
-		results.push({ domain, crawled, pruned, backfilled, shard });
+		invalidateSuggestCache(siteId);
+		results.push({ domain, crawled, pruned, backfilled });
+		if (stoppedForBudget) break;
 	}
 
-	return c.json({ ok: true, shard, processed: results.length, results });
+	console.log(
+		JSON.stringify({
+			msg: "cron_shard",
+			processed: results.length,
+			remainingBacklog: Math.max(0, remainingAtStart - results.length),
+			stoppedForBudget,
+			elapsedMs: Date.now() - started,
+			platform: process.env.VERCEL ? "vercel-daily" : "hourly-capable",
+		}),
+	);
+
+	return c.json({
+		ok: true,
+		processed: results.length,
+		remainingBacklog: Math.max(0, remainingAtStart - results.length),
+		stoppedForBudget,
+		results,
+	});
 });
+
+async function applyEmbeddingBatch(
+	sql: { query: (text: string, params: unknown[]) => Promise<unknown> },
+	ids: number[],
+	vectors: string[],
+): Promise<void> {
+	const placeholders = ids.map((_, i) => `($${i * 2 + 1}::int, $${i * 2 + 2})`).join(", ");
+	const params: unknown[] = [];
+	for (let i = 0; i < ids.length; i++) {
+		params.push(ids[i], vectors[i]);
+	}
+	await sql.query(
+		`UPDATE pages AS p SET embedding = v.embedding::vector
+		 FROM (VALUES ${placeholders}) AS v(id, embedding)
+		 WHERE p.id = v.id`,
+		params,
+	);
+}
 
 export default app;

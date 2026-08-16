@@ -24,9 +24,11 @@ function prune(now: number): void {
 }
 
 /**
- * Durable-enough quotas for a single isolate: keyed by site credential when
- * present so one tenant cannot exhaust another tenant's budget. No global
- * timers (Cloudflare Workers disallow setInterval at module scope).
+ * Per-isolate counters (not a durable quota store). BAT-54 (plan limits,
+ * shared store, quota headers beyond these best-effort X-RateLimit-*) is
+ * a follow-up. Keyed by site credential when present so one tenant cannot
+ * exhaust another tenant's budget in the same isolate. No global timers
+ * (Cloudflare Workers disallow setInterval at module scope).
  */
 export function rateLimiter(opts: RateLimitOptions) {
 	return async (c: Context, next: Next) => {
@@ -56,4 +58,9 @@ export function rateLimiter(opts: RateLimitOptions) {
 
 		await next();
 	};
+}
+
+/** Test-only. */
+export function resetRateLimitHits(): void {
+	hits.clear();
 }

@@ -70,7 +70,8 @@
 			body: JSON.stringify({ ...payload, contentHash }),
 			keepalive: true,
 		})
-			.then(() => {
+			.then((resp) => {
+				if (!resp.ok) return;
 				try {
 					localStorage.setItem(storageKey, JSON.stringify({ hash: contentHash, at: Date.now() }));
 				} catch {

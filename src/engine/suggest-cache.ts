@@ -1,3 +1,9 @@
+/**
+ * Best-effort, **per-isolate** suggest cache. Vercel Edge and Cloudflare
+ * Workers do not share this Map across PoPs, so hit rate will be well below a
+ * global 60–80% figure. Invalidate on index writes; TTL is a staleness bound
+ * if invalidation is missed.
+ */
 const cache = new Map<string, { expiresAt: number; body: string }>();
 const TTL_MS = 10 * 60 * 1000;
 const MAX = 4_000;
@@ -31,4 +37,9 @@ export function invalidateSuggestCache(siteId: string): void {
 	for (const key of cache.keys()) {
 		if (key.startsWith(`${siteId}:`)) cache.delete(key);
 	}
+}
+
+/** Test-only. */
+export function resetSuggestCache(): void {
+	cache.clear();
 }

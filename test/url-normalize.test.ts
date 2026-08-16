@@ -8,6 +8,13 @@ describe("normalizeDeadUrl", () => {
 		);
 	});
 
+	it("drops query strings so /product?id=1 and /product?id=2 share a cache key", () => {
+		expect(normalizeDeadUrl("https://example.com/product?id=1")).toBe(
+			normalizeDeadUrl("https://example.com/product?id=2"),
+		);
+		expect(normalizeDeadUrl("https://example.com/product?id=1")).toBe("https://example.com/product");
+	});
+
 	it("extracts a lexical path hint", () => {
 		expect(pathHint("https://example.com/docs/v2/authentication")).toBe("authentication");
 	});

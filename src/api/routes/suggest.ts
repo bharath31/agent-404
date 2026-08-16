@@ -25,6 +25,7 @@ suggest.post("/", async (c) => {
 	const deadUrl = normalizeDeadUrl(body.url);
 	const cached = getCachedSuggest(siteId, deadUrl);
 	if (cached) {
+		logSuggestionsServed(storage, siteId, deadUrl, cached);
 		return c.json(cached);
 	}
 
@@ -44,29 +45,37 @@ suggest.post("/", async (c) => {
 
 	const suggestions = findSuggestions(deadUrl, pages, deadUrlEmbedding);
 
-	// Log asynchronously (include scores + match types for dashboard)
-	if (suggestions.length > 0) {
-		const scores = JSON.stringify(suggestions.map((s) => s.score));
-		const matchTypes = JSON.stringify(suggestions.map((s) => s.matchType));
-		storage
-			.recordSuggestionServed(
-				siteId,
-				deadUrl,
-				suggestions.map((s) => s.url),
-				scores,
-				matchTypes,
-			)
-			.catch(() => {});
-	}
-
 	const payload = {
 		deadUrl,
 		suggestions,
 		jsonLd: buildJsonLd(suggestions),
 	};
+	logSuggestionsServed(storage, siteId, deadUrl, payload);
 	setCachedSuggest(siteId, deadUrl, payload);
 	return c.json(payload);
 });
+
+function logSuggestionsServed(
+	storage: PostgresStorage,
+	siteId: string,
+	deadUrl: string,
+	payload: unknown,
+): void {
+	const suggestions = (payload as { suggestions?: Array<{ url: string; score: number; matchType: string }> })
+		.suggestions;
+	if (!suggestions?.length) return;
+	const scores = JSON.stringify(suggestions.map((s) => s.score));
+	const matchTypes = JSON.stringify(suggestions.map((s) => s.matchType));
+	storage
+		.recordSuggestionServed(
+			siteId,
+			deadUrl,
+			suggestions.map((s) => s.url),
+			scores,
+			matchTypes,
+		)
+		.catch(() => {});
+}
 
 function buildJsonLd(suggestions: { url: string; title: string; matchType: string }[]) {
 	return {
