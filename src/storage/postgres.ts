@@ -1,6 +1,7 @@
 import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
 import type { PageRecord, SiteRecord, SiteStats, SuggestionLog, MatchQualityStats } from "../types.js";
 import type { StorageAdapter } from "./interface.js";
+import { getDatabaseUrl } from "../config.js";
 
 type Sql = NeonQueryFunction<false, true>;
 
@@ -17,11 +18,7 @@ export class PostgresStorage implements StorageAdapter {
 	private sql: Sql;
 
 	constructor(databaseUrl?: string) {
-		const url =
-			databaseUrl ||
-			process.env.DATABASE_URL ||
-			process.env.POSTGRES_URL ||
-			"";
+		const url = databaseUrl || getDatabaseUrl();
 		this.sql = neon(url, { fullResults: true });
 	}
 

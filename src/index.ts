@@ -26,6 +26,7 @@ import {
 	readAuth0Config,
 } from "./auth/config.js";
 import { requireOwnerApi, sessionOwnerSub } from "./auth/owner.js";
+import { getDatabaseUrl } from "./config.js";
 import type { SiteRecord } from "./types.js";
 
 export type Bindings = {
@@ -118,14 +119,14 @@ app.use("*", async (c, next) => {
 
 // Attach storage to context for API routes and dashboard
 app.use("/api/*", async (c, next) => {
-	const dbUrl = c.env?.DATABASE_URL || process.env.DATABASE_URL || process.env.POSTGRES_URL;
+	const dbUrl = getDatabaseUrl(c.env as Record<string, unknown>);
 	if (dbUrl) {
 		c.set("storage", new PostgresStorage(dbUrl));
 	}
 	await next();
 });
 app.use("/dashboard*", async (c, next) => {
-	const dbUrl = c.env?.DATABASE_URL || process.env.DATABASE_URL || process.env.POSTGRES_URL;
+	const dbUrl = getDatabaseUrl(c.env as Record<string, unknown>);
 	if (dbUrl) {
 		c.set("storage", new PostgresStorage(dbUrl));
 	}
