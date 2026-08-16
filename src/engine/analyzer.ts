@@ -1,4 +1,5 @@
 import type { AnalysisReport } from "../types.js";
+import { isBlockedInternalHost } from "../lib/ssrf-guard.js";
 
 interface PageInfo {
 	url: string;
@@ -31,25 +32,10 @@ function extractInternalLinks(html: string, domain: string): string[] {
 	return links;
 }
 
-/** SSRF protection: block private/internal IPs */
-const BLOCKED_PREFIXES = [
-	"localhost", "127.", "0.0.0.0", "10.",
-	"172.16.", "172.17.", "172.18.", "172.19.",
-	"172.20.", "172.21.", "172.22.", "172.23.",
-	"172.24.", "172.25.", "172.26.", "172.27.",
-	"172.28.", "172.29.", "172.30.", "172.31.",
-	"192.168.", "169.254.", "[::1]", "[fc", "[fd",
-];
-
-function isBlockedHost(hostname: string): boolean {
-	const lower = hostname.toLowerCase();
-	return BLOCKED_PREFIXES.some((b) => lower === b || lower.startsWith(b));
-}
-
 async function fetchPageHtml(url: string): Promise<string | null> {
 	try {
 		const parsed = new URL(url);
-		if (isBlockedHost(parsed.hostname)) return null;
+		if (isBlockedInternalHost(parsed.hostname)) return null;
 	} catch {
 		return null;
 	}
