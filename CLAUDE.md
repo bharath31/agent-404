@@ -25,7 +25,7 @@ npx vitest run test/matcher.test.ts
 
 ## Architecture
 
-**Dual deployment target**: The same Hono app runs on both Vercel Edge Functions and Cloudflare Workers.
+**Dual deployment target**: The same Hono app runs on both Vercel (Node.js Serverless Functions) and Cloudflare Workers. `api/index.ts` intentionally has no `runtime: "edge"` export — `@auth0/auth0-hono` pulls in `openid-client`/`jose`'s JWE decrypt, which Vercel Edge Functions don't support.
 
 - `src/index.ts` — Hono app with all routes, middleware, and cron handler. This is the central entry point.
 - `api/index.ts` — Vercel adapter (wraps the Hono app via `hono/vercel`)
@@ -33,7 +33,7 @@ npx vitest run test/matcher.test.ts
 - `adapters/` — HTTP-layer 404 recovery for Next/Express/Cloudflare/Netlify (`recover404` in `adapters/core.ts`). The Hono `/api/suggest` route reuses this for `Link` / `Accept` negotiation. Import framework adapters from their files (`adapters/next.ts`, `adapters/express.ts`) rather than the barrel if you need Node-only Express.
 
 **API routes** (`src/api/routes/`):
-- `sites.ts` — POST `/api/sites` to register a domain (returns siteId + apiKey)
+- `sites.ts` — POST `/api/sites` to register a domain (Auth0 passwordless email session; returns siteId + apiKey)
 - `register.ts` — POST `/api/register` to upsert a page (protected by x-api-key)
 - `suggest.ts` — POST `/api/suggest` to get ranked suggestions for a dead URL
 
@@ -63,7 +63,7 @@ Unit tests (`vitest.config.ts`) exclude `e2e.test.ts` and `browser.test.ts`. E2E
 
 ## Environment Variables
 
-Configured in `.env.local` (gitignored). Required: `DATABASE_URL`. Optional: `EMBEDDING_API_KEY`, `EMBEDDING_API_URL`, `EMBEDDING_MODEL`, `CRON_SECRET`.
+Configured in `.env.local` (gitignored). Required: `DATABASE_URL`. Owner dashboard (passwordless email OTP): `AUTH0_DOMAIN`, `AUTH0_CLIENT_ID`, `AUTH0_CLIENT_SECRET`, `AUTH0_SESSION_ENCRYPTION_KEY`, `BASE_URL`. Optional: `EMBEDDING_API_KEY`, `EMBEDDING_API_URL`, `EMBEDDING_MODEL`, `CRON_SECRET`.
 
 ## Roadmap
 

@@ -1,14 +1,16 @@
 import type { PageRecord, SiteRecord, SiteStats, SuggestionLog, MatchQualityStats } from "../types.js";
 
 export interface StorageAdapter {
-	createSite(domain: string): Promise<SiteRecord>;
+	createSite(domain: string, ownerSub: string): Promise<SiteRecord>;
 	getSite(id: string): Promise<SiteRecord | null>;
 	getSiteByApiKey(apiKey: string): Promise<SiteRecord | null>;
 	getSiteByKey(key: string): Promise<{ site: SiteRecord; keyType: "secret" | "public" } | null>;
 	getSiteByDomain(domain: string): Promise<SiteRecord | null>;
 	markVerified(id: string): Promise<void>;
 	rotateReclaimToken(id: string): Promise<string>;
-	reclaimSite(id: string): Promise<SiteRecord>;
+	reclaimSite(id: string, ownerSub: string): Promise<SiteRecord>;
+	listSitesByOwner(ownerSub: string): Promise<SiteRecord[]>;
+	claimSite(domain: string, apiKey: string, ownerSub: string): Promise<SiteRecord | null>;
 
 	upsertPage(
 		siteId: string,
@@ -40,4 +42,14 @@ export interface StorageAdapter {
 	getStats(siteId: string): Promise<SiteStats>;
 	getSuggestionLogs(siteId: string, limit: number): Promise<SuggestionLog[]>;
 	getMatchQualityStats(siteId: string): Promise<MatchQualityStats>;
+
+	/**
+	 * BAT-62: count of sites that are actually working — indexed a page AND
+	 * served a suggestion in the last 7 days — not just registered. See
+	 * `src/lib/live-installs.ts` for the full definition. Excludes CI/test
+	 * domains (`isTestDomain`).
+	 */
+	getLiveInstallCount(): Promise<number>;
+	/** Raw count of every `sites` row, unfiltered — registrations, not installs. */
+	getTotalSiteCount(): Promise<number>;
 }

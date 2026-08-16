@@ -91,11 +91,21 @@ describe("E2E: Full API flow against live server", () => {
 
 	beforeAll(async () => {
 		// Step 1: Register a test site
+		const siteHeaders: Record<string, string> = { "Content-Type": "application/json" };
+		if (process.env.E2E_COOKIE) {
+			siteHeaders.Cookie = process.env.E2E_COOKIE;
+		}
 		const siteRes = await fetch(`${API_BASE}/api/sites`, {
 			method: "POST",
-			headers: { "Content-Type": "application/json" },
+			headers: siteHeaders,
 			body: JSON.stringify({ domain: TEST_DOMAIN }),
 		});
+
+		if (siteRes.status === 401 || siteRes.status === 503) {
+			throw new Error(
+				"POST /api/sites requires an Auth0 passwordless email session. Set E2E_COOKIE to a logged-in appSession cookie.",
+			);
+		}
 
 		expect(siteRes.status).toBe(201);
 		const siteBody = await siteRes.json();

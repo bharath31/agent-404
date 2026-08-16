@@ -8,6 +8,7 @@ export interface SiteRecord {
 	reclaimToken: string | null;
 	reclaimRequestedAt: string | null;
 	createdAt: string;
+	ownerSub: string | null;
 }
 
 export interface PageRecord {
@@ -59,11 +60,22 @@ export interface MatchQualityStats {
 	matchTypeDistribution: { moved: number; similar: number; related: number };
 }
 
-export interface DashboardData {
+export interface DashboardSiteData {
+	id: string;
 	domain: string;
+	apiKey: string;
+	publicKey: string;
 	pageCount: number;
 	suggestionsServed: number;
 	lastBeaconAt: string | null;
 	recentLogs: SuggestionLog[];
 	matchQuality: MatchQualityStats;
+}
+
+export interface DashboardData {
+	email: string | null;
+	sites: DashboardSiteData[];
+	claimDomain: string | null;
+	pendingDomain: string | null;
+	notice: string | null;
 }

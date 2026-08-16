@@ -1,5 +1,8 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
+import type { Context, MiddlewareHandler } from "hono";
+import { auth } from "@auth0/auth0-hono";
+import type { ServerClient } from "@auth0/auth0-server-js";
 import { PostgresStorage } from "./storage/postgres.js";
 import { sites } from "./api/routes/sites.js";
 import { register } from "./api/routes/register.js";
@@ -16,20 +19,78 @@ import { dashboardHtml } from "./dashboard.js";
 import { isBlockedInternalHost } from "./lib/ssrf-guard.js";
 import { invalidateSuggestCache } from "./engine/suggest-cache.js";
 import { install } from "./api/routes/install.js";
-import type { SiteRecord } from "./types.js";
+import {
+	AUTH0_PASSWORDLESS_CONNECTION,
+	AUTH_CALLBACK_PATH,
+	AUTH_LOGIN_PATH,
+	AUTH_LOGOUT_PATH,
+	readAuth0Config,
+} from "./auth/config.js";
+import { requireOwnerApi, requireOwnerPage, sessionOwnerSub } from "./auth/owner.js";
+import { normalizeDomain } from "./api/domain.js";
+import type { DashboardSiteData, SiteRecord } from "./types.js";
 
 export type Bindings = {
 	DATABASE_URL: string;
 	EMBEDDING_API_KEY?: string;
 	CRON_SECRET?: string;
+	AUTH0_DOMAIN?: string;
+	AUTH0_CLIENT_ID?: string;
+	AUTH0_CLIENT_SECRET?: string;
+	AUTH0_SESSION_ENCRYPTION_KEY?: string;
+	APP_BASE_URL?: string;
+	BASE_URL?: string;
 };
 
 type Env = {
 	Bindings: Bindings;
-	Variables: { storage: PostgresStorage; siteId: string; site?: SiteRecord; keyType?: KeyType };
+	Variables: {
+		storage: PostgresStorage;
+		siteId: string;
+		ownerSub: string;
+		auth0Client?: ServerClient<Context>;
+		site?: SiteRecord;
+		keyType?: KeyType;
+	};
 };
 
 const app = new Hono<Env>();
+
+let authMiddleware: MiddlewareHandler | undefined;
+
+function auth0FromRequest(c: Context<Env>) {
+	return readAuth0Config(c.env as unknown as Record<string, string | undefined>);
+}
+
+app.use("*", async (c, next) => {
+	const cfg = auth0FromRequest(c);
+	if (!cfg) {
+		await next();
+		return;
+	}
+	if (!authMiddleware) {
+		authMiddleware = auth({
+			domain: cfg.domain,
+			clientID: cfg.clientID,
+			clientSecret: cfg.clientSecret,
+			baseURL: cfg.baseURL,
+			authRequired: false,
+			idpLogout: true,
+			session: { secret: cfg.sessionSecret },
+			routes: {
+				login: AUTH_LOGIN_PATH,
+				logout: AUTH_LOGOUT_PATH,
+				callback: AUTH_CALLBACK_PATH,
+			},
+			authorizationParams: {
+				response_type: "code",
+				scope: "openid profile email",
+				connection: AUTH0_PASSWORDLESS_CONNECTION,
+			},
+		});
+	}
+	return authMiddleware(c, next);
+});
 
 // Global error handler — never leak internal details
 app.onError((err, c) => {
@@ -66,7 +127,10 @@ app.use("/api/analyze", rateLimiter({ windowMs: 300_000, max: 2 }));
 app.use("/api/install/*", rateLimiter({ windowMs: 60_000, max: 30 }));
 
 // Landing page
-app.get("/", (c) => c.html(landingPageHtml));
+app.get("/", async (c) => {
+	const signedIn = Boolean(await sessionOwnerSub(c));
+	return c.html(landingPageHtml({ signedIn }));
+});
 app.get("/demo", (c) => c.html(demoPageHtml));
 
 // Demo sitemap proxy — fetches & parses a domain's sitemap.xml for the live demo.
@@ -953,8 +1017,13 @@ function demoTitleFromUrl(url: string): string {
 	}
 }
 
-// Attach storage to context for API routes
+// Attach storage to context for API routes and dashboard
 app.use("/api/*", async (c, next) => {
+	const dbUrl = c.env?.DATABASE_URL || process.env.DATABASE_URL || process.env.POSTGRES_URL;
+	c.set("storage", new PostgresStorage(dbUrl));
+	await next();
+});
+app.use("/dashboard", async (c, next) => {
 	const dbUrl = c.env?.DATABASE_URL || process.env.DATABASE_URL || process.env.POSTGRES_URL;
 	c.set("storage", new PostgresStorage(dbUrl));
 	await next();
@@ -963,7 +1032,9 @@ app.use("/api/*", async (c, next) => {
 // Health check
 app.get("/api/health", (c) => c.json({ status: "ok" }));
 
-// Public: register a site (no auth needed)
+// Owner: register / claim a site (Auth0 passwordless email session)
+app.use("/api/sites", requireOwnerApi());
+app.use("/api/sites/*", requireOwnerApi());
 app.route("/api/sites", sites);
 
 // Protected routes (require x-api-key)
@@ -982,44 +1053,107 @@ app.route("/api/analyze", analyze);
 app.use("/api/install/*", apiKeyAuth());
 app.route("/api/install", install);
 
-// Dashboard — server-rendered, authenticated via query param
-app.get("/dashboard", async (c) => {
-	const key = c.req.query("key");
-	if (!key || typeof key !== "string") {
-		return c.text("Missing API key. Use /dashboard?key=YOUR_API_KEY", 401);
+// Dashboard — Auth0 passwordless email session; snippet lives here
+app.get("/dashboard", requireOwnerPage(), async (c) => {
+	const storage = c.get("storage");
+	const ownerSub = c.get("ownerSub");
+	let claimDomain: string | null = null;
+	let pendingDomain: string | null = null;
+	let notice: string | null = null;
+
+	// Read-only: this is a GET handler, so registration itself must happen via
+	// an explicit POST /api/sites (below, in the browser) — never as a side
+	// effect of loading a URL. A top-level GET carries session cookies under
+	// SameSite=Lax, so mutating here would let any page CSRF a signed-in owner
+	// into registering (and crawling) an attacker-chosen domain.
+	const registerRaw = c.req.query("register");
+	if (registerRaw) {
+		const domain = normalizeDomain(registerRaw);
+		if (!domain) {
+			notice = "That domain is not valid.";
+		} else {
+			const existing = await storage.getSiteByDomain(domain);
+			if (!existing) {
+				pendingDomain = domain;
+			} else if (existing.ownerSub === ownerSub) {
+				return c.redirect("/dashboard");
+			} else if (!existing.ownerSub) {
+				claimDomain = domain;
+			} else {
+				notice = "This domain is linked to another account. Sign in with the email that created it.";
+			}
+		}
 	}
 
-	const dbUrl = c.env?.DATABASE_URL || process.env.DATABASE_URL || process.env.POSTGRES_URL;
-	const storage = new PostgresStorage(dbUrl);
+	const owned = await storage.listSitesByOwner(ownerSub);
+	const sitesData: DashboardSiteData[] = await Promise.all(
+		owned.map(async (site) => {
+			const [stats, recentLogs, matchQuality] = await Promise.all([
+				storage.getStats(site.id),
+				storage.getSuggestionLogs(site.id, 20),
+				storage.getMatchQualityStats(site.id),
+			]);
+			return {
+				id: site.id,
+				domain: site.domain,
+				apiKey: site.apiKey,
+				publicKey: site.publicKey,
+				pageCount: stats.pageCount,
+				suggestionsServed: stats.suggestionsServed,
+				lastBeaconAt: stats.lastBeaconAt,
+				recentLogs,
+				matchQuality,
+			};
+		}),
+	);
 
-	const site = await storage.getSiteByApiKey(key);
-	if (!site) {
-		return c.text("Invalid API key", 401);
+	let email: string | null = null;
+	const client = c.get("auth0Client");
+	if (client) {
+		const session = await client.getSession(c);
+		const sessionEmail = session?.user?.email;
+		email = typeof sessionEmail === "string" ? sessionEmail : null;
 	}
-
-	const [stats, recentLogs, matchQuality] = await Promise.all([
-		storage.getStats(site.id),
-		storage.getSuggestionLogs(site.id, 20),
-		storage.getMatchQualityStats(site.id),
-	]);
 
 	return c.html(
 		dashboardHtml({
-			domain: site.domain,
-			pageCount: stats.pageCount,
-			suggestionsServed: stats.suggestionsServed,
-			lastBeaconAt: stats.lastBeaconAt,
-			recentLogs,
-			matchQuality,
+			email,
+			sites: sitesData,
+			claimDomain,
+			pendingDomain,
+			notice,
 		}),
 	);
 });
 
-// Cron: re-crawl sitemaps + prune stale pages
-app.get("/api/cron", async (c) => {
+/** Shared bearer-token check for cron + admin metrics — never expose either unauthenticated. */
+function isCronAuthorized(c: {
+	req: { header: (name: string) => string | undefined };
+	env?: Bindings;
+}): boolean {
 	const authHeader = c.req.header("authorization");
 	const cronSecret = c.env?.CRON_SECRET || process.env.CRON_SECRET;
-	if (authHeader !== `Bearer ${cronSecret}`) {
+	return authHeader === `Bearer ${cronSecret}`;
+}
+
+// BAT-62: read-only "are we on track for 1,000 live installs" metric.
+// Protected the same way as /api/cron (CRON_SECRET bearer token) — this is
+// operator-facing, not a public dashboard endpoint.
+app.get("/api/admin/metrics", async (c) => {
+	if (!isCronAuthorized(c)) {
+		return c.json({ error: "Unauthorized" }, 401);
+	}
+	const storage = c.get("storage");
+	const [liveInstalls, totalSites] = await Promise.all([
+		storage.getLiveInstallCount(),
+		storage.getTotalSiteCount(),
+	]);
+	return c.json({ liveInstalls, totalSites, goal: 1000 });
+});
+
+// Cron: re-crawl sitemaps + prune stale pages
+app.get("/api/cron", async (c) => {
+	if (!isCronAuthorized(c)) {
 		return c.json({ error: "Unauthorized" }, 401);
 	}
 
@@ -1103,6 +1237,14 @@ app.get("/api/cron", async (c) => {
 		if (stoppedForBudget) break;
 	}
 
+	// BAT-62: computed once per cron run (not per shard site) so the north-star
+	// number — live installs against the 1,000-instance goal — is durable in
+	// logs even without hitting /api/admin/metrics.
+	const [liveInstalls, totalSites] = await Promise.all([
+		storage.getLiveInstallCount(),
+		storage.getTotalSiteCount(),
+	]);
+
 	console.log(
 		JSON.stringify({
 			msg: "cron_shard",
@@ -1111,6 +1253,9 @@ app.get("/api/cron", async (c) => {
 			stoppedForBudget,
 			elapsedMs: Date.now() - started,
 			platform: process.env.VERCEL ? "vercel-daily" : "hourly-capable",
+			liveInstalls,
+			totalSites,
+			goalTarget: 1000,
 		}),
 	);
 
@@ -1120,6 +1265,9 @@ app.get("/api/cron", async (c) => {
 		remainingBacklog: Math.max(0, remainingAtStart - results.length),
 		stoppedForBudget,
 		results,
+		liveInstalls,
+		totalSites,
+		goalTarget: 1000,
 	});
 });
 

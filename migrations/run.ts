@@ -56,6 +56,7 @@ async function run() {
 		"0003_dashboard.sql",
 		"0004_trust.sql",
 		"0005_scale.sql",
+		"0006_site_owner.sql",
 	];
 	for (const file of migrations) {
 		console.log(`\nRunning migration: ${file}`);

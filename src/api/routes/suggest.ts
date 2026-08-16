@@ -74,6 +74,36 @@ function suggestJson(
 	return c.json(payload);
 }
 
+/**
+ * BAT-61 ("instrument agent recovery rate") is deliberately NOT implemented
+ * here — deferred, not forced. What we'd want: of suggestions served, what
+ * fraction led to one of the suggested URLs actually being fetched again
+ * within ~60s, segmented by agent type (crawler vs browser-driving agent
+ * vs human).
+ *
+ * There is no clean way to compute that from data this service already
+ * has:
+ *  - `pages.last_seen` (the only "was this URL fetched again" signal) is
+ *    updated by the client script's browser beacon (requires JS execution —
+ *    crawlers like GPTBot/ClaudeBot don't do this) or by sitemap re-crawls
+ *    on a ~20h cron cadence — neither reflects an agent following a
+ *    suggestion. Correlating a `suggestion_logs` row against `pages.last_seen`
+ *    within a short window would mostly measure unrelated cron/beacon
+ *    timing, not recovery, and would silently under-count exactly the
+ *    non-rendering-crawler segment the ticket calls out as most important.
+ *  - There's no request/session identifier linking a served 404 to the
+ *    later request for the URL it suggested, so two different requests
+ *    can't be tied together at all today.
+ *
+ * What's actually needed (tracked as follow-up, not built here): mint a
+ * short-lived `recoveryId` per suggestion in this handler's response, and
+ * give agents/adapters a way to round-trip it on the next request (e.g. a
+ * query param or header on the suggested link, or a confirmation ping the
+ * HTTP-layer adapters send when a previously-suggested URL is requested
+ * again with 200). Only then is "fraction recovered within 60s" a real
+ * measurement instead of a coincidence-counter. Segment by agent type via
+ * User-Agent classification once that pipeline exists.
+ */
 function logSuggestionsServed(
 	storage: PostgresStorage,
 	siteId: string,

@@ -6,18 +6,21 @@ import { register } from "../src/api/routes/register.js";
 import { suggest } from "../src/api/routes/suggest.js";
 import { apiKeyAuth, requireVerified } from "../src/api/middleware/auth.js";
 import { install } from "../src/api/routes/install.js";
+import { requireOwnerApi } from "../src/auth/owner.js";
 import type { StorageAdapter } from "../src/storage/interface.js";
 import type { PostgresStorage } from "../src/storage/postgres.js";
 import type { SiteRecord, PageRecord } from "../src/types.js";
+import { countLiveInstalls, LIVE_INSTALL_WINDOW_DAYS } from "../src/lib/live-installs.js";
 
 // In-memory storage for testing — no database needed
 class MemoryStorage implements StorageAdapter {
 	sites: SiteRecord[] = [];
 	pages: PageRecord[] = [];
-	suggestionLogs: { siteId: string; deadUrl: string; suggestedUrls: string[] }[] = [];
+	suggestionLogs: { siteId: string; deadUrl: string; suggestedUrls: string[]; createdAt: string }[] =
+		[];
 	private nextPageId = 1;
 
-	async createSite(domain: string): Promise<SiteRecord> {
+	async createSite(domain: string, ownerSub: string): Promise<SiteRecord> {
 		if (this.sites.find((s) => s.domain === domain)) {
 			throw new Error("unique constraint violation: duplicate domain");
 		}
@@ -31,6 +34,7 @@ class MemoryStorage implements StorageAdapter {
 			reclaimToken: null,
 			reclaimRequestedAt: null,
 			createdAt: new Date().toISOString(),
+			ownerSub,
 		};
 		this.sites.push(site);
 		return site;
@@ -75,7 +79,7 @@ class MemoryStorage implements StorageAdapter {
 		return token;
 	}
 
-	async reclaimSite(id: string): Promise<SiteRecord> {
+	async reclaimSite(id: string, ownerSub: string): Promise<SiteRecord> {
 		const site = this.sites.find((s) => s.id === id);
 		if (!site) throw new Error("not found");
 		this.pages = this.pages.filter((p) => p.siteId !== id);
@@ -85,6 +89,18 @@ class MemoryStorage implements StorageAdapter {
 		site.reclaimToken = null;
 		site.reclaimRequestedAt = null;
 		site.verifiedAt = new Date().toISOString();
+		site.ownerSub = ownerSub;
+		return site;
+	}
+
+	async listSitesByOwner(ownerSub: string): Promise<SiteRecord[]> {
+		return this.sites.filter((s) => s.ownerSub === ownerSub);
+	}
+
+	async claimSite(domain: string, apiKey: string, ownerSub: string): Promise<SiteRecord | null> {
+		const site = this.sites.find((s) => s.domain === domain);
+		if (!site || site.ownerSub || site.apiKey !== apiKey) return null;
+		site.ownerSub = ownerSub;
 		return site;
 	}
 
@@ -161,7 +177,7 @@ class MemoryStorage implements StorageAdapter {
 	}
 
 	async recordSuggestionServed(siteId: string, deadUrl: string, suggestedUrls: string[]): Promise<void> {
-		this.suggestionLogs.push({ siteId, deadUrl, suggestedUrls });
+		this.suggestionLogs.push({ siteId, deadUrl, suggestedUrls, createdAt: new Date().toISOString() });
 	}
 
 	async getStats(siteId: string) {
@@ -189,11 +205,29 @@ class MemoryStorage implements StorageAdapter {
 			matchTypeDistribution: { moved: 0, similar: 0, related: 0 },
 		};
 	}
+
+	async getLiveInstallCount(): Promise<number> {
+		const cutoff = Date.now() - LIVE_INSTALL_WINDOW_DAYS * 24 * 60 * 60 * 1000;
+		const summaries = this.sites.map((s) => ({
+			domain: s.domain,
+			hasRecentPage: this.pages.some(
+				(p) => p.siteId === s.id && new Date(p.lastSeen).getTime() > cutoff,
+			),
+			hasRecentSuggestion: this.suggestionLogs.some(
+				(l) => l.siteId === s.id && new Date(l.createdAt).getTime() > cutoff,
+			),
+		}));
+		return countLiveInstalls(summaries);
+	}
+
+	async getTotalSiteCount(): Promise<number> {
+		return this.sites.length;
+	}
 }
 
-function createTestApp(storage: MemoryStorage) {
+function createTestApp(storage: MemoryStorage, ownerSub: string | null = "auth0|test-user") {
 	const app = new Hono<{
-		Variables: { storage: PostgresStorage; siteId: string };
+		Variables: { storage: PostgresStorage; siteId: string; ownerSub: string };
 	}>();
 
 	app.use("*", cors({ origin: "*" }));
@@ -203,6 +237,29 @@ function createTestApp(storage: MemoryStorage) {
 		c.set("storage", storage as unknown as PostgresStorage);
 		await next();
 	});
+
+	if (ownerSub) {
+		app.use("/api/sites", async (c, next) => {
+			c.set("ownerSub", ownerSub);
+			await next();
+		});
+		app.use("/api/sites/*", async (c, next) => {
+			c.set("ownerSub", ownerSub);
+			await next();
+		});
+	} else {
+		const stub = { getSession: async () => undefined };
+		app.use("/api/sites", async (c, next) => {
+			c.set("auth0Client", stub as never);
+			await next();
+		});
+		app.use("/api/sites/*", async (c, next) => {
+			c.set("auth0Client", stub as never);
+			await next();
+		});
+	}
+	app.use("/api/sites", requireOwnerApi());
+	app.use("/api/sites/*", requireOwnerApi());
 
 	app.get("/api/health", (c) => c.json({ status: "ok" }));
 	app.route("/api/sites", sites);
@@ -278,6 +335,17 @@ describe("API routes", () => {
 	});
 
 	describe("POST /api/sites", () => {
+		it("should reject unauthenticated registration", async () => {
+			const storage = new MemoryStorage();
+			const anon = createTestApp(storage, null);
+			const res = await anon.request("/api/sites", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ domain: "test.example.com" }),
+			});
+			expect(res.status).toBe(401);
+		});
+
 		it("should register a new site", async () => {
 			const res = await app.request("/api/sites", {
 				method: "POST",
@@ -295,7 +363,7 @@ describe("API routes", () => {
 			expect(body.verificationToken).toMatch(/^vf_/);
 		});
 
-		it("should reject duplicate domains", async () => {
+		it("should return the existing site for the same owner", async () => {
 			await app.request("/api/sites", {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
@@ -308,7 +376,66 @@ describe("API routes", () => {
 				body: JSON.stringify({ domain: "test.example.com" }),
 			});
 
+			expect(res.status).toBe(200);
+			const body = await res.json();
+			expect(body.apiKey).toMatch(/^key_/);
+			expect(body.domain).toBe("test.example.com");
+		});
+
+		it("should not leak another owner's api key", async () => {
+			await app.request("/api/sites", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ domain: "taken.example.com" }),
+			});
+
+			const other = createTestApp(storage, "auth0|other-user");
+			const res = await other.request("/api/sites", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ domain: "taken.example.com" }),
+			});
+
 			expect(res.status).toBe(409);
+			const body = await res.json();
+			expect(body.code).toBe("owned_by_other");
+			expect(body.apiKey).toBeUndefined();
+		});
+
+		it("should claim a legacy unowned site with the api key", async () => {
+			storage.sites.push({
+				id: crypto.randomUUID(),
+				domain: "legacy.example.com",
+				apiKey: "key_legacyclaimtoken",
+				createdAt: new Date().toISOString(),
+				ownerSub: null,
+			});
+
+			const conflict = await app.request("/api/sites", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ domain: "legacy.example.com" }),
+			});
+			expect(conflict.status).toBe(409);
+			const conflictBody = await conflict.json();
+			expect(conflictBody.code).toBe("unowned");
+			expect(conflictBody.apiKey).toBeUndefined();
+
+			const fail = await app.request("/api/sites/claim", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ domain: "legacy.example.com", apiKey: "key_wrong" }),
+			});
+			expect(fail.status).toBe(401);
+
+			const ok = await app.request("/api/sites/claim", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ domain: "legacy.example.com", apiKey: "key_legacyclaimtoken" }),
+			});
+			expect(ok.status).toBe(200);
+			const body = await ok.json();
+			expect(body.apiKey).toBe("key_legacyclaimtoken");
 		});
 
 		it("should require domain field", async () => {
@@ -821,6 +948,35 @@ describe("API routes", () => {
 			expect(storage.pages.filter((p) => p.siteId === site.id)).toHaveLength(0);
 		});
 
+		it("should transfer ownership to the reclaimer", async () => {
+			const created = await app.request("/api/sites", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ domain: "stolen.example.com" }),
+			});
+			const site = await created.json();
+
+			const other = createTestApp(storage, "auth0|reclaimer");
+			const start = await other.request("/api/sites/reclaim", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ domain: "stolen.example.com" }),
+			});
+			const { reclaimToken } = await start.json();
+			mockOwnershipFetch({ wellKnown: reclaimToken });
+			const done = await other.request("/api/sites/reclaim/complete", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ domain: "stolen.example.com" }),
+			});
+			expect(done.status).toBe(200);
+
+			const reclaimerSites = await storage.listSitesByOwner("auth0|reclaimer");
+			expect(reclaimerSites.map((s) => s.id)).toContain(site.id);
+			const originalOwnerSites = await storage.listSitesByOwner("auth0|test-user");
+			expect(originalOwnerSites.map((s) => s.id)).not.toContain(site.id);
+		});
+
 		it("should not rotate keys on a verified site before the cooling-off period", async () => {
 			const created = await createVerifiedSite(app, storage, "live.example.com");
 			const start = await app.request("/api/sites/reclaim", {
@@ -945,6 +1101,96 @@ describe("API routes", () => {
 		it("should reject missing API key", async () => {
 			const res = await app.request("/api/install/status");
 			expect(res.status).toBe(401);
+		});
+	});
+
+	// BAT-62: verified installs, not registrations. Exercises the storage
+	// method end-to-end through the real HTTP routes (register + suggest),
+	// on top of the pure-definition unit tests in test/live-installs.test.ts.
+	describe("getLiveInstallCount / getTotalSiteCount (BAT-62)", () => {
+		it("does not count a bare registration with no indexed pages or suggestions", async () => {
+			await app.request("/api/sites", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ domain: "abandoned-signup.com" }),
+			});
+
+			expect(await storage.getTotalSiteCount()).toBe(1);
+			expect(await storage.getLiveInstallCount()).toBe(0);
+		});
+
+		it("counts a site once it has both an indexed page and a served suggestion", async () => {
+			vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("Not Found", { status: 404 }));
+			const { apiKey } = await createVerifiedSite(app, storage, "real-customer.com");
+
+			await app.request("/api/register", {
+				method: "POST",
+				headers: { "Content-Type": "application/json", "x-api-key": apiKey },
+				body: JSON.stringify({ url: "https://real-customer.com/docs", title: "Docs" }),
+			});
+			await app.request("/api/suggest", {
+				method: "POST",
+				headers: { "Content-Type": "application/json", "x-api-key": apiKey },
+				body: JSON.stringify({ url: "https://real-customer.com/doc" }),
+			});
+			await new Promise((r) => setTimeout(r, 50)); // suggestion logging is fire-and-forget
+
+			expect(await storage.getTotalSiteCount()).toBe(1);
+			expect(await storage.getLiveInstallCount()).toBe(1);
+		});
+
+		it("excludes CI smoke/example.com test domains even when fully active", async () => {
+			const created = await app.request("/api/sites", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ domain: `smoke-${Date.now()}.example.com` }),
+			});
+			const { apiKey } = await created.json();
+
+			await app.request("/api/register", {
+				method: "POST",
+				headers: { "Content-Type": "application/json", "x-api-key": apiKey },
+				body: JSON.stringify({ url: "https://smoke.example.com/page" }),
+			});
+			await app.request("/api/suggest", {
+				method: "POST",
+				headers: { "Content-Type": "application/json", "x-api-key": apiKey },
+				body: JSON.stringify({ url: "https://smoke.example.com/pag" }),
+			});
+			await new Promise((r) => setTimeout(r, 50));
+
+			expect(await storage.getTotalSiteCount()).toBe(1);
+			expect(await storage.getLiveInstallCount()).toBe(0);
+		});
+
+		it("counts real installs alongside excluded test domains and non-working registrations", async () => {
+			vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("Not Found", { status: 404 }));
+			const { apiKey } = await createVerifiedSite(app, storage, "working-customer.com");
+			await app.request("/api/register", {
+				method: "POST",
+				headers: { "Content-Type": "application/json", "x-api-key": apiKey },
+				body: JSON.stringify({ url: "https://working-customer.com/docs", title: "Docs" }),
+			});
+			await app.request("/api/suggest", {
+				method: "POST",
+				headers: { "Content-Type": "application/json", "x-api-key": apiKey },
+				body: JSON.stringify({ url: "https://working-customer.com/doc" }),
+			});
+
+			await app.request("/api/sites", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ domain: "silent-registration.com" }),
+			});
+			await app.request("/api/sites", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ domain: `smoke-${Date.now()}.example.com` }),
+			});
+			await new Promise((r) => setTimeout(r, 50));
+
+			expect(await storage.getTotalSiteCount()).toBe(3);
+			expect(await storage.getLiveInstallCount()).toBe(1);
 		});
 	});
 });

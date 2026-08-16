@@ -10,4 +10,6 @@ directory = "./public"
 
 # Set secrets via: wrangler secret put DATABASE_URL
 # Required: DATABASE_URL, CRON_SECRET
+# Owner dashboard (passwordless email OTP): AUTH0_DOMAIN, AUTH0_CLIENT_ID,
+# AUTH0_CLIENT_SECRET, AUTH0_SESSION_ENCRYPTION_KEY, BASE_URL
 # Optional: EMBEDDING_API_KEY, EMBEDDING_API_URL, EMBEDDING_MODEL
