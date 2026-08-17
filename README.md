@@ -5,17 +5,36 @@
 </p>
 
 <p align="center">
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT License"></a>
+  <a href="https://www.agent404.dev"><img src="https://img.shields.io/badge/hosted_service-agent404.dev-10b981?style=flat&logo=cloudflare&logoColor=white" alt="Hosted Service"></a>
+  <a href="https://www.npmjs.com/package/@agent404/next"><img src="https://img.shields.io/npm/v/@agent404/next?color=blue&label=npm%20@agent404/next" alt="npm package"></a>
   <a href="https://github.com/bharath31/agent-404/actions"><img src="https://img.shields.io/github/actions/workflow/status/bharath31/agent-404/ci.yml?label=tests" alt="Tests"></a>
-  <a href="https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fbharath31%2Fagent-404&env=DATABASE_URL,EMBEDDING_API_KEY,CRON_SECRET,AUTH0_DOMAIN,AUTH0_CLIENT_ID,AUTH0_CLIENT_SECRET,AUTH0_SESSION_ENCRYPTION_KEY,BASE_URL&envDescription=DATABASE_URL%3A%20Neon%20Postgres.%20Auth0%20passwordless%20email%20OTP%20for%20the%20dashboard.&project-name=agent-404&repository-name=agent-404"><img src="https://vercel.com/button" alt="Deploy with Vercel"></a>
-  <a href="https://deploy.workers.cloudflare.com/?url=https://github.com/bharath31/agent-404"><img src="https://deploy.workers.cloudflare.com/button" alt="Deploy to Cloudflare Workers"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT License"></a>
 </p>
 
-**Self-healing 404 pages for AI agents and developers.**
+**Self-healing 404 pages for AI coding assistants, search bots, and developers.**
 
-When you restructure documentation or deprecate an API route, AI coding assistants (Claude Code, Cursor, Copilot), RAG pipelines, and search bots continue to follow outdated URLs baked into their pre-training data. Standard 404 error pages return client-rendered HTML that bots never execute — causing models to hallucinate or give up.
+When you restructure documentation or deprecate an API route, AI coding assistants (Claude Code, Cursor, Copilot), RAG retrieval pipelines, and search indexers (GPTBot, Perplexity) continue to request outdated URLs baked into their pre-training weights. Because headless bots never execute client-rendered JavaScript, standard 404 pages cause models to hallucinate broken code or abandon the task.
 
-**agent-404** intercepts requests at the HTTP middleware layer, instantly returning ranked semantic destination routes in **RFC 5988 `Link` alternate headers**, **`schema.org/ItemList` JSON-LD**, and **JSON payloads** so agents self-correct in a single hop.
+**agent-404** intercepts requests at the HTTP middleware layer, instantly returning ranked semantic destination routes via **RFC 5988 `Link: rel="alternate"` headers**, **`schema.org/ItemList` JSON-LD**, and **JSON payloads** so agents self-correct in a single hop.
+
+> 🚀 **Get Started in 60 Seconds with the Hosted Service on [agent404.dev](https://www.agent404.dev):**
+> Free to start with zero infrastructure to manage. `agent404.dev` handles automated daily sitemap synchronization, vector embeddings, edge caching (<25ms), and live crawler analytics out of the box.
+
+---
+
+## Why Use the Hosted Cloud on [agent404.dev](https://www.agent404.dev)?
+
+While the core engine is open source, running 404 recovery in production requires continuous sitemap parsing, vector embedding pipelines, edge latency optimization, and crawler telemetry.
+
+| Feature | Hosted Cloud (`agent404.dev`) | Self-Hosted Instance |
+|---|---|---|
+| **Setup Time** | **&lt; 60 seconds** (copy 3 lines of middleware) | 45+ minutes (DB, Auth0, cron, keys) |
+| **Sitemap Crawling** | **Automated daily sync &amp; edge index** | Manual cron triggers &amp; SAX parser setup |
+| **Vector Embeddings** | **Managed high-dimensional embeddings** | Requires OpenAI / OpenRouter API keys |
+| **Database &amp; Infra** | **Zero database or vector store to manage** | Provision Neon Postgres + `pgvector` |
+| **Edge Performance** | **Sub-25ms global edge suggestion cache** | Self-managed multi-region routing |
+| **Bot Analytics** | **Live dashboard (ClaudeBot, GPTBot, Perplexity)** | Build custom telemetry logging |
+| **Maintenance** | **Zero ops &middot; automatic upgrades** | Ongoing infrastructure &amp; key maintenance |
 
 ---
 
@@ -23,7 +42,13 @@ When you restructure documentation or deprecate an API route, AI coding assistan
 
 AI crawlers (GPTBot, ClaudeBot, PerplexityBot) do not execute client-side JavaScript. Intercepting at the HTTP layer ensures bots receive recovery metadata before the response body finishes.
 
-### Next.js (App Router & Pages)
+### 1. Get your free public key
+
+Register your domain at **[agent404.dev](https://www.agent404.dev)** to generate your read-only public key (`pk_...`).
+
+### 2. Add 3 lines of middleware
+
+#### Next.js (App Router & Pages)
 
 ```bash
 npm install @agent404/next
@@ -34,7 +59,7 @@ npm install @agent404/next
 import { agent404 } from "@agent404/next";
 
 export const middleware = agent404({
-  apiKey: process.env.AGENT404_PUBLIC_KEY!,
+  apiKey: process.env.AGENT404_PUBLIC_KEY!, // pk_... from agent404.dev
 });
 
 export const config = {
@@ -42,7 +67,7 @@ export const config = {
 };
 ```
 
-### Cloudflare Workers
+#### Cloudflare Workers
 
 ```bash
 npm install @agent404/cloudflare
@@ -53,12 +78,12 @@ npm install @agent404/cloudflare
 import { agent404Worker } from "@agent404/cloudflare";
 
 export default agent404Worker({
-  apiKey: "pk_your_public_key",
+  apiKey: "pk_your_public_key", // pk_... from agent404.dev
   origin: "https://docs.example.com",
 });
 ```
 
-### Express / Node.js
+#### Express / Node.js
 
 ```bash
 npm install @agent404/express
@@ -70,7 +95,7 @@ import { recoverExpress404 } from "@agent404/express";
 
 app.use(async (req, res) => {
   const recovered = await recoverExpress404(req, "<h1>Not Found</h1>", {
-    apiKey: process.env.AGENT404_PUBLIC_KEY,
+    apiKey: process.env.AGENT404_PUBLIC_KEY, // pk_... from agent404.dev
   });
   res.status(404);
   recovered.headers.forEach((v, k) => res.setHeader(k, v));
@@ -90,12 +115,12 @@ For human visitors and headless browser agents (e.g. Browser-Use, Playwright, Mu
 <script
   src="https://www.agent404.dev/agent-404.min.js"
   data-site-id="your-site-id"
-  data-public-key="your-public-key"
+  data-public-key="pk_your_public_key"
   defer
 ></script>
 ```
 
-> **Security Note:** `data-public-key` is strictly read-only (`/api/suggest`). Never expose your secret API key in HTML. Page indexing is handled automatically via verified sitemap crawls.
+> **Security Note:** `data-public-key` is strictly read-only (`/api/suggest`). Never expose your secret write API key in HTML. Page indexing is handled automatically in the background via verified sitemap crawls.
 
 ---
 
@@ -137,15 +162,15 @@ Every incoming dead URL is scored against your indexed sitemap using four weight
 | Signal | Weight | Purpose & Catch Category |
 |---|---|---|
 | **Path Segment Jaccard** | `0.35` | Tokenized path overlap, version bumps (`/v1/auth` &rarr; `/v2/auth`) |
-| **pgvector Cosine Embeddings** | `0.30` | 256d semantic vectors for zero-lexical overlap rewrites (`/auth` &rarr; `/security/tokens`) |
+| **pgvector Cosine Embeddings** | `0.30` | Semantic vector similarity for rewrites with no lexical overlap (`/auth` &rarr; `/security/tokens`) |
 | **Levenshtein Distance** | `0.20` | Character-level typos, singular/plural differences (`/payment` &rarr; `/payments`) |
-| **Keyword & Heading Overlap** | `0.15` | Matches tokens against page titles and H1/H2 metadata |
-
-*When embeddings are unconfigured or unavailable, the matcher falls back gracefully to a 3-signal heuristic (`0.50` / `0.30` / `0.20`).*
+| **Keyword & Heading Overlap** | `0.15` | Matches tokens against indexed page titles and H1/H2 metadata |
 
 ---
 
 ## API Reference
+
+The [agent404.dev](https://www.agent404.dev) API can also be queried directly from custom gateways, proxies, or CLI tooling.
 
 ### 1. Register a Domain
 
@@ -157,9 +182,9 @@ curl -X POST https://www.agent404.dev/api/sites \
 
 Returns `id`, `apiKey` (write secret), `publicKey` (read-only for middleware/HTML), and `verificationToken`.
 
-### 2. Prove Domain Ownership & Start Crawl
+### 2. Verify Domain Ownership & Start Auto-Crawl
 
-Prove ownership via DNS TXT or `.well-known` before suggestions go live:
+Prove domain ownership via DNS TXT or `.well-known` before suggestions go live:
 
 ```bash
 # DNS TXT: _agent404.docs.yourcompany.com = <verificationToken>
@@ -168,14 +193,14 @@ Prove ownership via DNS TXT or `.well-known` before suggestions go live:
 curl -X POST https://www.agent404.dev/api/sites/<id>/verify
 ```
 
-Once verified, agent-404 automatically fetches and indexes `https://docs.yourcompany.com/sitemap.xml`.
+Once verified, agent-404 automatically crawls and indexes `https://docs.yourcompany.com/sitemap.xml` and keeps embeddings refreshed.
 
 ### 3. Query Suggestions
 
 ```bash
 curl -X POST https://www.agent404.dev/api/suggest \
   -H "Content-Type: application/json" \
-  -H "x-api-key: your-public-key" \
+  -H "x-api-key: pk_your_public_key" \
   -d '{"url": "https://docs.yourcompany.com/v1/old-endpoint"}'
 ```
 
@@ -212,22 +237,34 @@ Response:
 
 ---
 
-## Self-Hosting & Deployment
+## Audit Your Documentation CLI
 
-Deploy your own hosted instance with Neon Postgres and Auth0 passwordless authentication in under 2 minutes:
+Scan your documentation for 404 risks and check AI agent readiness from your terminal:
 
-### Environment Variables
+```bash
+npx agent-404 audit docs.yourcompany.com
+```
+
+Or view a live interactive report at **[agent404.dev/demo](https://www.agent404.dev/demo)**.
+
+---
+
+## Advanced: Self-Hosting & Enterprise Isolation
+
+The core engine of agent-404 is open source under the MIT license. While 99% of teams use the zero-maintenance hosted service on [agent404.dev](https://www.agent404.dev), you can self-host the backend in air-gapped VPCs or compliance-restricted environments.
+
+### Required Environment Variables
 
 | Variable | Required | Description |
 |---|---|---|
-| `DATABASE_URL` | **Yes** | Neon Postgres connection string with pgvector extension |
+| `DATABASE_URL` | **Yes** | Neon Postgres connection string with `pgvector` extension enabled |
 | `CRON_SECRET` | **Yes** | Bearer secret for automated sitemap re-crawling (`/api/cron`) |
-| `AUTH0_DOMAIN` | **Yes** | Auth0 tenant domain (for passwordless owner dashboard) |
+| `AUTH0_DOMAIN` | **Yes** | Auth0 tenant domain (for passwordless email dashboard) |
 | `AUTH0_CLIENT_ID` | **Yes** | Auth0 Regular Web App Client ID |
 | `AUTH0_CLIENT_SECRET` | **Yes** | Auth0 Regular Web App Client Secret |
 | `AUTH0_SESSION_ENCRYPTION_KEY` | **Yes** | 32+ character cookie encryption secret |
-| `BASE_URL` | **Yes** | Canonical app origin (e.g. `https://www.agent404.dev`) |
-| `EMBEDDING_API_KEY` | Optional | OpenRouter / OpenAI API key for 256d semantic vectors |
+| `BASE_URL` | **Yes** | Canonical app origin (e.g. `https://your-agent404.internal`) |
+| `EMBEDDING_API_KEY` | Optional | OpenRouter / OpenAI API key for semantic vector embeddings |
 | `EMBEDDING_API_URL` | Optional | Custom OpenAI-compatible embeddings endpoint |
 | `EMBEDDING_MODEL` | Optional | Custom embedding model (default: `text-embedding-3-small`) |
 
@@ -241,7 +278,7 @@ cd agent-404
 # 2. Install dependencies
 npm install
 
-# 3. Configure local environment in .env.local
+# 3. Configure local environment
 cp .env.example .env.local
 
 # 4. Run database migrations
@@ -251,7 +288,7 @@ npm run db:migrate
 npm run dev
 
 # 6. Run test suite
-npm test                 # Unit tests (193 passing)
+npm test                 # Unit & integration tests (30 suites, 247 tests)
 npm run test:browser     # Playwright browser suite
 ```
 
@@ -261,7 +298,7 @@ npm run test:browser     # Playwright browser suite
 
 - **Framework**: Hono with `@hono/node-server` (Vercel Node.js Serverless) & Cloudflare Workers
 - **Database**: Neon Postgres with `pgvector`
-- **Embeddings**: OpenAI `text-embedding-3-small` (256 dimensions)
+- **Embeddings**: High-dimensional semantic vectors (`text-embedding-3-small` / Cloudflare Workers AI)
 - **Crawler**: Streaming SAX sitemap parser with SSRF guard and DNS pinning
 - **Client Overlay**: Zero-dependency vanilla JS (<3KB gzipped)
 

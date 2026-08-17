@@ -1,19 +1,19 @@
 # Cloudflare Worker 404 Recovery Proxy
 
-A standalone Cloudflare Worker that intercepts 404 responses from your origin server and enriches them with Agent 404 recovery suggestions.
+A standalone Cloudflare Worker reverse proxy that intercepts 404 responses from your origin server and enriches them with [agent-404](https://www.agent404.dev) recovery suggestions (`Link: rel="alternate"` headers and `schema.org` JSON-LD).
 
-## 1-Click Deploy
+## Setup
 
-1. Clone or copy this directory.
-2. Set your configuration in `wrangler.toml`:
+1. Register your documentation domain at **[agent404.dev](https://www.agent404.dev)** to get your public API key (`pk_...`).
+2. Configure your `wrangler.toml`:
    ```toml
    name = "my-site-404-proxy"
    main = "src/index.ts"
    compatibility_date = "2024-12-01"
 
    [vars]
-   AGENT404_PUBLIC_KEY = "pk_your_public_key_here"
-   ORIGIN_URL = "https://docs.example.com"
+   ORIGIN_URL = "https://docs.yourcompany.com"
+   AGENT404_API_KEY = "pk_your_public_key"
    ```
 3. Deploy to Cloudflare Workers:
    ```bash

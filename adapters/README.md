@@ -1,6 +1,8 @@
 # Agent 404 Adapters & Middleware
 
-This directory contains client-side and HTTP-layer integration adapters for customer web applications to integrate with the Agent 404 suggestion service.
+This directory contains client-side and HTTP-layer integration adapters for customer web applications to connect with the [agent404.dev](https://www.agent404.dev) suggestion engine.
+
+Get your read-only public API key (`pk_...`) by registering your domain at **[agent404.dev](https://www.agent404.dev)**. The hosted service handles sitemap crawling, vector embeddings, and real-time bot analytics out of the box with zero database infrastructure to manage.
 
 ## Available Adapters
 
