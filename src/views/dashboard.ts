@@ -140,43 +140,11 @@ function rawAgentPrompt(site: Pick<DashboardSiteData, "id" | "publicKey" | "doma
    - Always ensure requests use \`https://www.agent404.dev\` (not apex) to avoid CORS preflight issues.`;
 }
 
-function agentLogosClusterHtml(): string {
-	return `<span class="agent-logos-cluster" aria-hidden="true">
-  <svg class="agent-logo agent-logo-claude" width="15" height="15" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" title="Claude / Anthropic">
-    <g stroke="#D97757" stroke-width="2.3" stroke-linecap="round">
-      <line x1="12" y1="2.5" x2="12" y2="21.5"/>
-      <line x1="2.5" y1="12" x2="21.5" y2="12"/>
-      <line x1="5.28" y1="5.28" x2="18.72" y2="18.72"/>
-      <line x1="18.72" y1="5.28" x2="5.28" y2="18.72"/>
-      <line x1="12" y1="2.5" x2="12" y2="21.5" transform="rotate(22.5 12 12)"/>
-      <line x1="2.5" y1="12" x2="21.5" y2="12" transform="rotate(22.5 12 12)"/>
-    </g>
-  </svg>
-  <svg class="agent-logo agent-logo-terminal" width="15" height="15" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" title="Claude Code">
-    <rect width="22" height="22" x="1" y="1" rx="6" fill="#18181b"/>
-    <path d="M6.5 8.5L10.5 12L6.5 15.5" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-    <line x1="12.5" y1="15.5" x2="17.5" y2="15.5" stroke="#ffffff" stroke-width="2" stroke-linecap="round"/>
-  </svg>
-  <svg class="agent-logo agent-logo-cursor" width="15" height="15" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" title="Cursor">
-    <rect width="22" height="22" x="1" y="1" rx="6" fill="#09090b"/>
-    <path d="M12 4L18.5 7.75V15.25L12 19L5.5 15.25V7.75L12 4Z" fill="#18181b" stroke="#ffffff" stroke-width="1.2" stroke-linejoin="round"/>
-    <path d="M12 4L18.5 7.75L12 11.5L5.5 7.75L12 4Z" fill="#ffffff" fill-opacity="0.95"/>
-    <path d="M12 11.5V19L18.5 15.25V7.75L12 11.5Z" fill="#71717a"/>
-    <path d="M5.5 7.75L12 11.5V19L5.5 15.25V7.75Z" fill="#3f3f46"/>
-  </svg>
-  <svg class="agent-logo agent-logo-editor" width="15" height="15" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" title="Windsurf &amp; Copilot">
-    <rect width="22" height="22" x="1" y="1" rx="6" fill="#09090b"/>
-    <rect x="4.5" y="5.5" width="6" height="13" rx="1.5" fill="#ffffff"/>
-    <rect x="12.5" y="5.5" width="7" height="13" rx="1.5" fill="#52525b"/>
-  </svg>
-</span>`;
-}
-
 function agentOnboardButtonHtml(site: Pick<DashboardSiteData, "id" | "publicKey" | "domain">): string {
 	const prompt = rawAgentPrompt(site);
-	return `<button type="button" class="btn-agent-onboard" data-copy-agent-prompt="${escapeHtml(prompt)}" title="Copy setup prompt for Claude Code, Cursor, Windsurf, or Copilot" aria-label="Onboard your agent to agent-404">
-  <span class="btn-agent-label">Onboard your agent to agent-404</span>
-  ${agentLogosClusterHtml()}
+	return `<button type="button" class="btn-agent-onboard" data-copy-agent-prompt="${escapeHtml(prompt)}" title="Copy a setup prompt for Claude Code, Cursor, Windsurf, or Copilot" aria-label="Copy AI agent setup prompt">
+  <span class="btn-agent-icon" aria-hidden="true">✨</span>
+  <span class="btn-agent-label">Copy AI setup prompt</span>
 </button>`;
 }
 
@@ -225,8 +193,22 @@ function siteSection(site: DashboardSiteData, index: number): string {
 		})
 		.join("\n");
 
-	const warning =
-		site.pageCount === 0
+	const verificationNeededWarning = !site.verified
+		? `<div class="alert-box alert-warning" role="alert">
+  <div class="alert-header">
+    <svg class="alert-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+    <strong>Domain not verified — indexing is paused</strong>
+  </div>
+  <p class="alert-desc">
+    ${escapeHtml(site.domain)} has not proven ownership yet, so agent-404 will not crawl its sitemap or index pages.
+    <code>0 indexed pages</code> is expected until verification completes — it is not a sign of a broken script.
+    Add the DNS TXT record below and click <strong>Verify now</strong>.
+  </p>
+</div>`
+		: "";
+
+	const noBeaconsWarning =
+		site.verified && site.pageCount === 0
 			? `<div class="alert-box alert-warning" role="alert">
   <div class="alert-header">
     <svg class="alert-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
@@ -236,17 +218,63 @@ function siteSection(site: DashboardSiteData, index: number): string {
     This site has not indexed any pages yet. The install is not working — an empty page count is not a quiet success.
     Confirm the snippet uses <code>https://www.agent404.dev</code> (not the apex; redirects break CORS preflight),
     then open a live page and check the browser console for <code>[agent-404]</code> warnings.
-    You can also call <code>GET /api/install/status</code> with your API key.
+    You can also call <code>GET /api/install/status</code> with your API key,
+    or use <strong>Copy AI setup prompt</strong> above to have a coding agent finish this for you.
   </p>
-  <div class="alert-agent-row">
-    <span>Let an AI agent inspect and complete the setup for you:</span>
-    <button type="button" class="btn-alert-copy-prompt" data-copy-agent-prompt="${escapeHtml(rawAgentPrompt(site))}">
-      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
-      Copy Agent Prompt
-    </button>
-  </div>
 </div>`
 			: "";
+
+	const warning = verificationNeededWarning || noBeaconsWarning;
+
+	const verificationPanel = !site.verified
+		? `<div class="section-block" id="verify-${escapeHtml(site.id)}">
+    <div class="section-title-row">
+      <h3 class="section-title">Verify Domain Ownership</h3>
+      <span class="section-meta">Required before indexing starts</span>
+    </div>
+    <p class="alert-desc" style="margin-bottom:1rem">
+      Add a DNS TXT record (or a well-known file, whichever is easier) proving you control ${escapeHtml(site.domain)}, then verify.
+      DNS changes can take a few minutes to propagate.
+    </p>
+    <div class="verify-instructions">
+      <div class="verify-option">
+        <span class="meta-label">DNS TXT Record</span>
+        <div class="meta-item" style="margin-top:0.35rem">
+          <span class="meta-label">Name</span>
+          <code class="meta-value">${escapeHtml(site.verification.dnsTxt.name)}</code>
+          <button type="button" class="btn-icon-copy" data-copy="${escapeHtml(site.verification.dnsTxt.name)}" title="Copy record name" aria-label="Copy record name">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+          </button>
+        </div>
+        <div class="meta-item" style="margin-top:0.35rem">
+          <span class="meta-label">Value</span>
+          <code class="meta-value">${escapeHtml(site.verification.dnsTxt.value)}</code>
+          <button type="button" class="btn-icon-copy" data-copy="${escapeHtml(site.verification.dnsTxt.value)}" title="Copy record value" aria-label="Copy record value">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+          </button>
+        </div>
+      </div>
+      <div class="verify-option">
+        <span class="meta-label">Or well-known file</span>
+        <div class="meta-item" style="margin-top:0.35rem">
+          <span class="meta-label">URL</span>
+          <code class="meta-value">${escapeHtml(site.verification.wellKnown.url)}</code>
+        </div>
+        <div class="meta-item" style="margin-top:0.35rem">
+          <span class="meta-label">Body</span>
+          <code class="meta-value">${escapeHtml(site.verification.wellKnown.body)}</code>
+          <button type="button" class="btn-icon-copy" data-copy="${escapeHtml(site.verification.wellKnown.body)}" title="Copy file body" aria-label="Copy file body">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+    <div class="verify-action-row">
+      <button type="button" class="btn btn-primary btn-verify-now" data-site-id="${escapeHtml(site.id)}">Verify now</button>
+      <span class="verify-status" hidden></span>
+    </div>
+  </div>`
+		: "";
 
 	return `
 <section class="site-card" id="site-${escapeHtml(site.id)}">
@@ -256,6 +284,9 @@ function siteSection(site: DashboardSiteData, index: number): string {
         <h2 class="site-domain">${escapeHtml(site.domain)}</h2>
         <span class="badge ${site.pageCount > 0 ? "badge-success" : "badge-neutral"}">
           <span class="dot"></span> ${site.pageCount > 0 ? "Active" : "Awaiting Beacons"}
+        </span>
+        <span class="badge ${site.verified ? "badge-success" : "badge-warning"}">
+          <span class="dot"></span> ${site.verified ? "Domain Verified" : "Verification Needed"}
         </span>
         ${agentOnboardButtonHtml(site)}
       </div>
@@ -280,6 +311,8 @@ function siteSection(site: DashboardSiteData, index: number): string {
 
   ${warning}
 
+  ${verificationPanel}
+
   <!-- Integration Snippets -->
   <div class="integration-panel">
     <div class="integration-tabs-header">
@@ -292,10 +325,6 @@ function siteSection(site: DashboardSiteData, index: number): string {
           <span class="tab-agent-sparkle">✨</span> Agent Prompt
         </button>
       </div>
-      <button type="button" class="btn-copy-agent-quick" data-copy-agent-prompt="${escapeHtml(rawAgentPrompt(site))}" title="Copy complete prompt for AI coding agents">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
-        <span>Copy Agent Prompt</span>
-      </button>
     </div>
 
     <div class="tab-content active" id="tab-next-${index}">
@@ -345,7 +374,7 @@ function siteSection(site: DashboardSiteData, index: number): string {
             <span class="code-lang">Prompt for Claude Code, Cursor, Windsurf, Copilot, &amp; Pi</span>
             <a href="/skills/agent-404/SKILL.md" target="_blank" class="agent-skill-link" title="Open SKILL.md specification">SKILL.md &nearr;</a>
           </div>
-          <button type="button" class="copy-btn copy-btn-primary" data-copy-agent-prompt="${escapeHtml(rawAgentPrompt(site))}">Copy Agent Prompt</button>
+          <button type="button" class="copy-btn copy-btn-primary" data-copy-agent-prompt="${escapeHtml(rawAgentPrompt(site))}">Copy</button>
         </div>
         <pre class="snippet snippet-markdown"><code>${escapeHtml(rawAgentPrompt(site))}</code></pre>
         <div class="agent-helper-row">
@@ -363,7 +392,7 @@ function siteSection(site: DashboardSiteData, index: number): string {
     <div class="stat-card">
       <span class="stat-label">Indexed Pages</span>
       <div class="stat-value">${site.pageCount.toLocaleString()}</div>
-      <span class="stat-hint">${site.pageCount > 0 ? "Continuous sitemap sync" : "No pages yet"}</span>
+      <span class="stat-hint">${site.pageCount > 0 ? "Continuous sitemap sync" : site.verified ? "No pages yet" : "Paused — verify domain to start indexing"}</span>
     </div>
     <div class="stat-card">
       <span class="stat-label">Suggestions Served</span>
@@ -1077,56 +1106,41 @@ export function dashboardHtml(data: DashboardData): string {
     font-family: var(--font-mono);
   }
 
-  /* Onboard Agent Pill Button (Cloudflare-style) */
+  /* Onboard Agent Button */
   .btn-agent-onboard {
     display: inline-flex;
     align-items: center;
-    gap: 0.65rem;
-    background: #ffffff;
-    color: #09090b;
-    border: 1px solid rgba(255, 255, 255, 0.9);
-    border-radius: 9999px;
-    padding: 0.35rem 0.85rem;
+    gap: 0.45rem;
+    background: var(--accent-subtle);
+    color: #93c5fd;
+    border: 1px solid rgba(59, 130, 246, 0.35);
+    border-radius: var(--radius-sm);
+    padding: 0.4rem 0.85rem;
     font-size: 0.8125rem;
-    font-weight: 550;
+    font-weight: 600;
     font-family: var(--font-sans);
     cursor: pointer;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25), 0 1px 2px rgba(0, 0, 0, 0.15);
-    transition: all 0.16s cubic-bezier(0.16, 1, 0.3, 1);
+    transition: all 0.15s ease;
     white-space: nowrap;
     text-decoration: none;
     line-height: 1.2;
     margin-left: auto;
   }
   .btn-agent-onboard:hover {
-    background: #ffffff;
-    transform: translateY(-1px);
-    box-shadow: 0 4px 14px rgba(255, 255, 255, 0.2), 0 2px 4px rgba(0, 0, 0, 0.3);
-    border-color: #ffffff;
-    color: #000;
+    background: rgba(59, 130, 246, 0.22);
+    border-color: var(--accent);
+    color: #bfdbfe;
   }
   .btn-agent-onboard:active {
-    transform: translateY(0);
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+    transform: translateY(0.5px);
   }
   .btn-agent-onboard.copied {
-    background: #ecfdf5;
-    border-color: #10b981;
-    color: #065f46;
+    background: var(--emerald-subtle);
+    border-color: var(--emerald);
+    color: #6ee7b7;
   }
-
-  .agent-logos-cluster {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.3rem;
-  }
-
-  .agent-logo {
-    display: inline-block;
-    flex-shrink: 0;
-    width: 15px;
-    height: 15px;
-    vertical-align: middle;
+  .btn-agent-icon {
+    font-size: 0.75rem;
   }
 
   @media (max-width: 768px) {
@@ -1163,6 +1177,48 @@ export function dashboardHtml(data: DashboardData): string {
     color: var(--text-muted);
   }
   .badge-neutral .dot { width: 5px; height: 5px; border-radius: 50%; background: var(--text-muted); }
+
+  .badge-warning {
+    background: var(--amber-subtle);
+    border-color: rgba(245, 158, 11, 0.25);
+    color: var(--amber);
+  }
+  .badge-warning .dot { width: 5px; height: 5px; border-radius: 50%; background: var(--amber); }
+
+  /* Domain Verification Panel */
+  .verify-instructions {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1rem;
+    margin-bottom: 1.25rem;
+  }
+  @media (max-width: 768px) {
+    .verify-instructions { grid-template-columns: 1fr; }
+  }
+
+  .verify-option {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 1rem 1.15rem;
+  }
+  .verify-option .meta-item { display: flex; flex-wrap: wrap; }
+  .verify-option .meta-value { word-break: break-all; }
+
+  .verify-action-row {
+    display: flex;
+    align-items: center;
+    gap: 0.85rem;
+    flex-wrap: wrap;
+  }
+
+  .verify-status {
+    font-size: 0.8rem;
+    font-family: var(--font-mono);
+  }
+  .verify-status.status-ok { color: var(--emerald); }
+  .verify-status.status-error { color: var(--rose); }
+  .verify-status.status-pending { color: var(--text-muted); }
 
   .site-meta-keys {
     display: flex;
@@ -1260,27 +1316,6 @@ export function dashboardHtml(data: DashboardData): string {
   .tab-agent-sparkle {
     margin-right: 0.25rem;
     font-size: 0.75rem;
-  }
-
-  .btn-copy-agent-quick {
-    background: none;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    color: var(--text-secondary);
-    font-size: 0.72rem;
-    font-family: var(--font-mono);
-    padding: 0.25rem 0.6rem;
-    display: inline-flex;
-    align-items: center;
-    gap: 0.35rem;
-    cursor: pointer;
-    transition: all 0.15s;
-    margin-bottom: 0.25rem;
-  }
-  .btn-copy-agent-quick:hover {
-    color: var(--text);
-    border-color: var(--border-focus);
-    background: var(--surface-hover);
   }
 
   .tab-content { display: none; }
@@ -1393,40 +1428,6 @@ export function dashboardHtml(data: DashboardData): string {
     padding: 0.1rem 0.3rem;
     border-radius: 3px;
     font-size: 0.9em;
-  }
-
-  .alert-agent-row {
-    margin-top: 0.75rem;
-    padding-top: 0.65rem;
-    border-top: 1px solid rgba(245, 158, 11, 0.2);
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.75rem;
-    font-size: 0.8rem;
-    color: var(--text);
-    flex-wrap: wrap;
-  }
-
-  .btn-alert-copy-prompt {
-    background: rgba(245, 158, 11, 0.15);
-    border: 1px solid rgba(245, 158, 11, 0.4);
-    color: #fde68a;
-    border-radius: var(--radius-sm);
-    padding: 0.25rem 0.6rem;
-    font-size: 0.75rem;
-    font-family: var(--font-mono);
-    font-weight: 500;
-    cursor: pointer;
-    display: inline-flex;
-    align-items: center;
-    gap: 0.35rem;
-    transition: all 0.15s;
-  }
-  .btn-alert-copy-prompt:hover {
-    background: rgba(245, 158, 11, 0.25);
-    border-color: rgba(245, 158, 11, 0.6);
-    color: #fff;
   }
 
   .snippet {
@@ -1884,22 +1885,21 @@ export function dashboardHtml(data: DashboardData): string {
       if (!text) return;
       navigator.clipboard.writeText(text).then(() => {
         const isPill = btn.classList.contains('btn-agent-onboard');
-        const isQuickBtn = btn.classList.contains('btn-copy-agent-quick') || btn.classList.contains('btn-alert-copy-prompt') || btn.classList.contains('copy-btn-primary');
 
         if (isPill) {
           const labelEl = btn.querySelector('.btn-agent-label');
           if (labelEl) {
             const prev = labelEl.textContent;
-            labelEl.textContent = 'Prompt copied! ✓';
+            labelEl.textContent = 'Copied!';
             btn.classList.add('copied');
             setTimeout(() => {
               labelEl.textContent = prev;
               btn.classList.remove('copied');
             }, 2000);
           }
-        } else if (isQuickBtn) {
+        } else {
           const prev = btn.textContent;
-          btn.textContent = 'Copied! ✓';
+          btn.textContent = 'Copied!';
           setTimeout(() => { btn.textContent = prev; }, 1800);
         }
         showToast('Agent prompt copied! Paste into Claude Code, Cursor, Windsurf, or Copilot.');
@@ -2070,6 +2070,48 @@ export function dashboardHtml(data: DashboardData): string {
       submitRegistration(domain, errEl);
     });
   }
+
+  // Verify domain ownership
+  document.querySelectorAll('.btn-verify-now').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const siteId = btn.getAttribute('data-site-id');
+      const statusEl = btn.parentElement.querySelector('.verify-status');
+      btn.disabled = true;
+      const prevText = btn.textContent;
+      btn.textContent = 'Verifying…';
+      if (statusEl) {
+        statusEl.hidden = false;
+        statusEl.className = 'verify-status status-pending';
+        statusEl.textContent = 'Checking DNS / well-known file…';
+      }
+      try {
+        const res = await fetch('/api/sites/' + encodeURIComponent(siteId) + '/verify', {
+          method: 'POST',
+          credentials: 'same-origin',
+        });
+        const body = await res.json().catch(() => ({}));
+        if (res.ok && body.verified) {
+          showToast('Domain verified — indexing will begin shortly');
+          setTimeout(() => { window.location.reload(); }, 600);
+          return;
+        }
+        if (statusEl) {
+          statusEl.className = 'verify-status status-error';
+          statusEl.textContent = body.error
+            ? body.error + ' — TXT record not found yet, DNS can take a few minutes to propagate.'
+            : 'TXT record not found yet — DNS can take a few minutes to propagate.';
+        }
+      } catch (err) {
+        if (statusEl) {
+          statusEl.className = 'verify-status status-error';
+          statusEl.textContent = 'Network error while verifying. Please try again.';
+        }
+      } finally {
+        btn.disabled = false;
+        btn.textContent = prevText;
+      }
+    });
+  });
 
   // Interactive 404 tester
   document.querySelectorAll('.tester-form').forEach((form) => {

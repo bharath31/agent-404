@@ -72,6 +72,11 @@ export interface DashboardSiteData {
 	lastBeaconAt: string | null;
 	recentLogs: SuggestionLog[];
 	matchQuality: MatchQualityStats;
+	verified: boolean;
+	verification: {
+		dnsTxt: { name: string; value: string };
+		wellKnown: { url: string; body: string };
+	};
 }
 
 export interface DashboardData {

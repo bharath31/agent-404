@@ -19,10 +19,15 @@ install.get("/status", async (c) => {
 	}
 
 	const stats = await storage.getStats(siteId);
+	const domainVerified = Boolean(site.verifiedAt);
 	const installVerified = stats.pageCount > 0;
-	const warning = installVerified
-		? null
-		: "No beacons received. The script is not reaching /api/register. Use https://www.agent404.dev (apex redirects break CORS preflight) and check the browser console for [agent-404] warnings.";
+
+	let warning: string | null = null;
+	if (!installVerified) {
+		warning = domainVerified
+			? "No beacons received. The script is not reaching /api/register. Use https://www.agent404.dev (apex redirects break CORS preflight) and check the browser console for [agent-404] warnings."
+			: "Domain ownership is not verified yet. Indexing and crawling are paused until you verify — add the DNS TXT record (or well-known file) and confirm in the dashboard. This is not a script/CORS issue.";
+	}
 
 	return c.json({
 		ok: true,
@@ -30,6 +35,7 @@ install.get("/status", async (c) => {
 		pageCount: stats.pageCount,
 		lastBeaconAt: stats.lastBeaconAt,
 		suggestionsServed: stats.suggestionsServed,
+		domainVerified,
 		installVerified,
 		warning,
 	});

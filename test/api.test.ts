@@ -1232,7 +1232,7 @@ describe("API routes", () => {
 	});
 
 	describe("GET /api/install/status", () => {
-		it("should warn when no beacons have been received", async () => {
+		it("should warn about missing domain verification, not a broken beacon, for unverified sites", async () => {
 			vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("Not Found", { status: 404 }));
 
 			const createRes = await app.request("/api/sites", {
@@ -1247,6 +1247,26 @@ describe("API routes", () => {
 			});
 			expect(res.status).toBe(200);
 			const body = await res.json();
+			expect(body.domainVerified).toBe(false);
+			expect(body.installVerified).toBe(false);
+			expect(body.pageCount).toBe(0);
+			// The domain is unverified — crawling never ran, so this must not be
+			// mistaken for a broken script/CORS install (that's a different cause).
+			expect(body.warning).toMatch(/not verified/i);
+			expect(body.warning).not.toMatch(/No beacons received/);
+		});
+
+		it("should warn about no beacons when a verified domain still has zero pages", async () => {
+			vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("Not Found", { status: 404 }));
+
+			const { apiKey } = await createVerifiedSite(app, storage, "silent-verified.example.com");
+
+			const res = await app.request("/api/install/status", {
+				headers: { "x-api-key": apiKey },
+			});
+			expect(res.status).toBe(200);
+			const body = await res.json();
+			expect(body.domainVerified).toBe(true);
 			expect(body.installVerified).toBe(false);
 			expect(body.pageCount).toBe(0);
 			expect(body.warning).toMatch(/No beacons received/);
