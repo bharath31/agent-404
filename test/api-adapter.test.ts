@@ -29,4 +29,18 @@ describe("applyForwardedProto", () => {
 		});
 		expect(applyForwardedProto(req)).toBe(req);
 	});
+
+	it("preserves request instance and body stream without consuming body", async () => {
+		const req = new Request("http://www.agent404.dev/api/sites", {
+			method: "POST",
+			headers: { "Content-Type": "application/json", "x-forwarded-proto": "https" },
+			body: JSON.stringify({ domain: "example.com" }),
+		});
+		const out = applyForwardedProto(req);
+		expect(out).toBe(req);
+		expect(out.url).toBe("https://www.agent404.dev/api/sites");
+		expect(out.bodyUsed).toBe(false);
+		const json = await out.json();
+		expect(json).toEqual({ domain: "example.com" });
+	});
 });
