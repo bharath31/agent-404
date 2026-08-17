@@ -1,4 +1,12 @@
-import type { PageRecord, SiteRecord, SiteStats, SuggestionLog, MatchQualityStats } from "../types.js";
+import type {
+	PageRecord,
+	SiteRecord,
+	SiteStats,
+	SuggestionLog,
+	MatchQualityStats,
+	FunnelStep,
+	FunnelConversionMetrics,
+} from "../types.js";
 
 export interface StorageAdapter {
 	createSite(domain: string, ownerSub: string): Promise<SiteRecord>;
@@ -42,6 +50,19 @@ export interface StorageAdapter {
 	getStats(siteId: string): Promise<SiteStats>;
 	getSuggestionLogs(siteId: string, limit: number): Promise<SuggestionLog[]>;
 	getMatchQualityStats(siteId: string): Promise<MatchQualityStats>;
+
+	/**
+	 * BAT-42: durable record of a single audit-to-install funnel step, backed
+	 * by Postgres (`funnel_events`) rather than a per-isolate in-memory buffer
+	 * — see `src/lib/funnel-telemetry.ts` for the fire-and-forget wrapper.
+	 */
+	recordFunnelEvent(
+		step: FunnelStep,
+		domain?: string,
+		metadata?: Record<string, unknown>,
+	): Promise<void>;
+	/** Aggregate conversion metrics across all funnel stages, computed from durable storage. */
+	getFunnelMetrics(): Promise<FunnelConversionMetrics>;
 
 	/**
 	 * BAT-62: count of sites that are actually working — indexed a page AND

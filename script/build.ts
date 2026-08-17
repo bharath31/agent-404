@@ -20,3 +20,35 @@ buildSync({
 });
 
 console.log("Built public/agent-404.min.js");
+
+// Build CLI binary
+buildSync({
+	entryPoints: [resolve(__dirname, "../bin/agent-404.ts")],
+	outfile: resolve(__dirname, "../bin/agent-404.js"),
+	bundle: true,
+	minify: false,
+	format: "esm",
+	target: "node18",
+	platform: "node",
+});
+
+console.log("Built bin/agent-404.js");
+
+// Build published npm package adapters (customer-facing library surface —
+// self-contained, no imports from src/). Transpiled in place, unbundled, so
+// each file keeps its own ./core.js relative import rather than duplicating
+// core.ts's content into every adapter.
+const ADAPTER_ENTRYPOINTS = ["index", "core", "next", "express", "cloudflare", "netlify"];
+for (const name of ADAPTER_ENTRYPOINTS) {
+	buildSync({
+		entryPoints: [resolve(__dirname, `../adapters/${name}.ts`)],
+		outfile: resolve(__dirname, `../adapters/${name}.js`),
+		bundle: false,
+		format: "esm",
+		target: "node18",
+		platform: "node",
+	});
+}
+
+console.log(`Built adapters/{${ADAPTER_ENTRYPOINTS.join(",")}}.js`);
+

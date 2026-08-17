@@ -42,6 +42,15 @@ describe("ClaudeBot Probe & Standing Audit (BAT-38, BAT-39)", () => {
 		const fetched = await getRes.json();
 		expect(fetched.id).toBe(report.id);
 		expect(fetched.domain).toBe("example.com");
+
+		// Retrieve OG SVG image (BAT-41)
+		const ogRes = await app.request(`/api/audit/${report.id}/og.svg`);
+		expect(ogRes.status).toBe(200);
+		expect(ogRes.headers.get("content-type")).toContain("image/svg+xml");
+		const svgText = await ogRes.text();
+		expect(svgText).toContain("<svg");
+		expect(svgText).toContain("example.com");
+		expect(svgText).toContain(String(report.score));
 	});
 
 	it("returns 404 for non-existent audit ID", async () => {

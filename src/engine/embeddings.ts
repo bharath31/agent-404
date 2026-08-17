@@ -89,19 +89,22 @@ export async function generatePageEmbedding(
  * Generate an embedding for a dead URL (used at suggest time).
  * Builds text from the URL path segments.
  */
-export async function generateDeadUrlEmbedding(deadUrl: string): Promise<number[] | null> {
-	let text = "";
+/** Text to embed for a dead URL: its path segments, unslugified. */
+export function deadUrlEmbeddingText(deadUrl: string): string {
 	try {
 		const u = new URL(deadUrl);
-		text = u.pathname
+		return u.pathname
 			.split("/")
 			.filter(Boolean)
 			.map((s) => s.replace(/[-_]/g, " "))
 			.join(" ");
 	} catch {
-		text = deadUrl;
+		return deadUrl;
 	}
+}
 
+export async function generateDeadUrlEmbedding(deadUrl: string): Promise<number[] | null> {
+	const text = deadUrlEmbeddingText(deadUrl);
 	if (!text) return null;
 	return generateEmbedding(text);
 }

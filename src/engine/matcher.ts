@@ -1,5 +1,6 @@
 import type { PageRecord, Suggestion } from "../types.js";
 import { stemToken } from "./stemmer.js";
+import { normalizePathname } from "./url-normalize.js";
 
 const SCORE_THRESHOLD = 0.2;
 const MAX_RESULTS = 5;
@@ -24,14 +25,14 @@ export function findSuggestions(
 	pages: PageRecord[],
 	deadUrlEmbedding?: number[] | null,
 ): Suggestion[] {
-	const deadPath = normalizePath(deadUrl);
+	const deadPath = normalizePathname(deadUrl);
 	const deadSegments = pathSegments(deadPath);
 	const deadKeywords = extractKeywords(deadPath);
 
 	const scored: Suggestion[] = [];
 
 	for (const page of pages) {
-		const pagePath = normalizePath(page.url);
+		const pagePath = normalizePathname(page.url);
 		const pageSegments = pathSegments(pagePath);
 
 		// Signal 1: Path segment similarity (Jaccard, version-tolerant)
@@ -104,15 +105,6 @@ export function cosineSimilarity(a: number[], b: number[]): number {
 	const denom = Math.sqrt(normA) * Math.sqrt(normB);
 	if (denom === 0) return 0;
 	return dot / denom;
-}
-
-function normalizePath(url: string): string {
-	try {
-		const u = new URL(url);
-		return u.pathname.replace(/\/+$/, "").toLowerCase();
-	} catch {
-		return url.replace(/\/+$/, "").toLowerCase();
-	}
 }
 
 function pathSegments(path: string): string[] {

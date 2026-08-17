@@ -6,6 +6,7 @@ import { generateDeadUrlEmbedding } from "../../engine/embeddings.js";
 import { getCachedSuggest, setCachedSuggest } from "../../engine/suggest-cache.js";
 import { normalizeDeadUrl, pathHint } from "../../engine/url-normalize.js";
 import { buildJsonLd, buildLinkHeader } from "../../../adapters/core.js";
+import { recordSuggestionServedEvent } from "../../lib/recovery-tracker.js";
 
 type Env = { Variables: { storage: PostgresStorage; siteId: string } };
 
@@ -15,11 +16,12 @@ async function generateAndLogSuggestions(
 	storage: PostgresStorage,
 	siteId: string,
 	rawUrl: string,
+	userAgent?: string,
 ) {
 	const deadUrl = normalizeDeadUrl(rawUrl);
 	const cached = getCachedSuggest(siteId, deadUrl);
 	if (cached) {
-		logSuggestionsServed(storage, siteId, deadUrl, cached);
+		logSuggestionsServed(storage, siteId, deadUrl, cached, userAgent);
 		return cached;
 	}
 
@@ -44,7 +46,7 @@ async function generateAndLogSuggestions(
 		suggestions,
 		jsonLd: buildJsonLd(suggestions),
 	};
-	logSuggestionsServed(storage, siteId, deadUrl, payload);
+	logSuggestionsServed(storage, siteId, deadUrl, payload, userAgent);
 	setCachedSuggest(siteId, deadUrl, payload);
 	return payload;
 }
@@ -53,6 +55,7 @@ async function generateAndLogSuggestions(
 suggest.get("/", async (c) => {
 	const siteId = c.get("siteId");
 	const storage = c.get("storage");
+	const userAgent = c.req.header("user-agent");
 
 	const url = c.req.query("url");
 	if (!url || typeof url !== "string") {
@@ -62,7 +65,7 @@ suggest.get("/", async (c) => {
 		return c.json({ error: "url too long" }, 400);
 	}
 
-	const payload = await generateAndLogSuggestions(storage, siteId, url);
+	const payload = await generateAndLogSuggestions(storage, siteId, url, userAgent);
 	return suggestResponse(c, payload, true);
 });
 
@@ -70,6 +73,7 @@ suggest.get("/", async (c) => {
 suggest.post("/", async (c) => {
 	const siteId = c.get("siteId");
 	const storage = c.get("storage");
+	const userAgent = c.req.header("user-agent");
 
 	const body = await c.req.json<{ url: string }>().catch(() => ({ url: "" }));
 	if (!body.url || typeof body.url !== "string") {
@@ -79,7 +83,7 @@ suggest.post("/", async (c) => {
 		return c.json({ error: "url too long" }, 400);
 	}
 
-	const payload = await generateAndLogSuggestions(storage, siteId, body.url);
+	const payload = await generateAndLogSuggestions(storage, siteId, body.url, userAgent);
 	return suggestResponse(c, payload, false);
 });
 
@@ -114,17 +118,26 @@ function logSuggestionsServed(
 	siteId: string,
 	deadUrl: string,
 	payload: unknown,
+	userAgent?: string,
 ): void {
 	const suggestions = (payload as { suggestions?: Array<{ url: string; score: number; matchType: string }> })
 		.suggestions;
 	if (!suggestions?.length) return;
+	const suggestedUrls = suggestions.map((s) => s.url);
 	const scores = JSON.stringify(suggestions.map((s) => s.score));
 	const matchTypes = JSON.stringify(suggestions.map((s) => s.matchType));
+
+	try {
+		recordSuggestionServedEvent(siteId, deadUrl, suggestedUrls, userAgent);
+	} catch {
+		// Telemetry must never turn a working suggest response into a 500.
+	}
+
 	storage
 		.recordSuggestionServed(
 			siteId,
 			deadUrl,
-			suggestions.map((s) => s.url),
+			suggestedUrls,
 			scores,
 			matchTypes,
 		)
