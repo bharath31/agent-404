@@ -25,9 +25,13 @@ AI crawlers (GPTBot, ClaudeBot, PerplexityBot) do not execute client-side JavaSc
 
 ### Next.js (App Router & Pages)
 
+```bash
+npm install @agent-404/next
+```
+
 ```ts
 // middleware.ts
-import { agent404 } from "./adapters/next";
+import { agent404 } from "@agent-404/next";
 
 export const middleware = agent404({
   apiKey: process.env.AGENT404_PUBLIC_KEY!,
@@ -40,33 +44,41 @@ export const config = {
 
 ### Cloudflare Workers
 
+```bash
+npm install @agent-404/cloudflare
+```
+
 ```ts
 // worker.ts
-import { agent404Worker } from "./adapters/cloudflare";
+import { agent404Worker } from "@agent-404/cloudflare";
 
-export default {
-  async fetch(req: Request, env: Env, ctx: ExecutionContext) {
-    return agent404Worker(req, env, {
-      publicKey: env.AGENT404_PUBLIC_KEY,
-      siteId: env.AGENT404_SITE_ID,
-    });
-  },
-};
+export default agent404Worker({
+  apiKey: "pk_your_public_key",
+  origin: "https://docs.example.com",
+});
 ```
 
 ### Express / Node.js
 
-```ts
-// server.js
-import { recoverExpress404 } from "./adapters/express";
-
-app.use(recoverExpress404({
-  publicKey: process.env.AGENT404_PUBLIC_KEY,
-  siteId: process.env.AGENT404_SITE_ID,
-}));
+```bash
+npm install @agent-404/express
 ```
 
-*Also available: Netlify Edge (`adapters/netlify.ts`) and nginx (`adapters/nginx.md`).*
+```ts
+// server.js
+import { recoverExpress404 } from "@agent-404/express";
+
+app.use(async (req, res) => {
+  const recovered = await recoverExpress404(req, "<h1>Not Found</h1>", {
+    apiKey: process.env.AGENT404_PUBLIC_KEY,
+  });
+  res.status(404);
+  recovered.headers.forEach((v, k) => res.setHeader(k, v));
+  res.send(await recovered.text());
+});
+```
+
+*Also available: [`@agent-404/netlify`](https://www.npmjs.com/package/@agent-404/netlify) for Netlify Edge Functions and nginx (`adapters/nginx.md`).*
 
 ---
 

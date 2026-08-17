@@ -783,41 +783,41 @@ export const config = {
         <div class="code-preview">
           <button type="button" class="copy-btn" data-copy="import { agent404Worker } from &quot;@agent-404/cloudflare&quot;;
 
-export default {
-  async fetch(req, env, ctx) {
-    return agent404Worker(req, env, {
-      publicKey: env.AGENT404_PUBLIC_KEY,
-      siteId: env.AGENT404_SITE_ID,
-    });
-  },
-};">Copy</button>
+export default agent404Worker({
+  apiKey: &quot;pk_your_public_key&quot;,
+  origin: &quot;https://docs.example.com&quot;,
+});">Copy</button>
           <pre><code>import { agent404Worker } from "@agent-404/cloudflare";
 
-export default {
-  async fetch(req, env, ctx) {
-    return agent404Worker(req, env, {
-      publicKey: env.AGENT404_PUBLIC_KEY,
-      siteId: env.AGENT404_SITE_ID,
-    });
-  },
-};</code></pre>
+export default agent404Worker({
+  apiKey: "pk_your_public_key",
+  origin: "https://docs.example.com",
+});</code></pre>
         </div>
       </div>
 
       <div class="tab-panel" id="tab-panel-express">
         <div class="code-preview">
-          <button type="button" class="copy-btn" data-copy="import { agent404Express } from &quot;@agent-404/express&quot;;
+          <button type="button" class="copy-btn" data-copy="import { recoverExpress404 } from &quot;@agent-404/express&quot;;
 
-app.use(agent404Express({
-  publicKey: process.env.AGENT404_PUBLIC_KEY,
-  siteId: process.env.AGENT404_SITE_ID,
-}));">Copy</button>
-          <pre><code>import { agent404Express } from "@agent-404/express";
+app.use(async (req, res) => {
+  const recovered = await recoverExpress404(req, &quot;&lt;h1&gt;Not Found&lt;/h1&gt;&quot;, {
+    apiKey: process.env.AGENT404_PUBLIC_KEY,
+  });
+  res.status(404);
+  recovered.headers.forEach((v, k) => res.setHeader(k, v));
+  res.send(await recovered.text());
+});">Copy</button>
+          <pre><code>import { recoverExpress404 } from "@agent-404/express";
 
-app.use(agent404Express({
-  publicKey: process.env.AGENT404_PUBLIC_KEY,
-  siteId: process.env.AGENT404_SITE_ID,
-}));</code></pre>
+app.use(async (req, res) => {
+  const recovered = await recoverExpress404(req, "&lt;h1&gt;Not Found&lt;/h1&gt;", {
+    apiKey: process.env.AGENT404_PUBLIC_KEY,
+  });
+  res.status(404);
+  recovered.headers.forEach((v, k) => res.setHeader(k, v));
+  res.send(await recovered.text());
+});</code></pre>
         </div>
       </div>
 

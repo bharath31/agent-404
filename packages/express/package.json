@@ -1,0 +1,39 @@
+{
+  "name": "@agent-404/express",
+  "version": "0.1.0",
+  "description": "agent-404 Express middleware — self-healing 404 pages for AI agents and crawlers",
+  "keywords": ["404", "express", "middleware", "ai-agents", "seo", "crawlers"],
+  "author": "Bharath",
+  "license": "MIT",
+  "homepage": "https://www.agent404.dev",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/bharath31/agent-404",
+    "directory": "packages/express"
+  },
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": ["dist", "README.md"],
+  "peerDependencies": {
+    "express": ">=4"
+  },
+  "peerDependenciesMeta": {
+    "express": {
+      "optional": true
+    }
+  },
+  "scripts": {
+    "build": "tsx ../../script/build-packages.ts express",
+    "prepublishOnly": "npm run build"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
