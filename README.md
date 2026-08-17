@@ -13,34 +13,34 @@
 
 **Self-healing 404 pages for AI coding assistants, search bots, and developers.**
 
-When you restructure documentation or deprecate an API route, AI coding assistants (Claude Code, Cursor, Copilot), RAG retrieval pipelines, and search indexers (GPTBot, Perplexity) continue to request outdated URLs baked into their pre-training weights. Because headless bots never execute client-rendered JavaScript, standard 404 pages cause models to hallucinate broken code or abandon the task.
+When you restructure documentation or deprecate an API route, AI coding assistants (Cursor, Claude Code, GitHub Copilot) and AI search engines (ChatGPT Search, Perplexity) continue to request outdated URLs from their training datasets. Because these agents never run client-rendered JavaScript, standard 404 pages cause models to hallucinate broken code or drop citations.
 
-**agent-404** intercepts requests at the HTTP middleware layer, instantly returning ranked semantic destination routes via **RFC 5988 `Link: rel="alternate"` headers**, **`schema.org/ItemList` JSON-LD**, and **JSON payloads** so agents self-correct in a single hop.
+**agent-404** intercepts requests at the HTTP middleware layer. It returns ranked destination routes in **RFC 5988 `Link: rel="alternate"` headers**, **`schema.org/ItemList` JSON-LD**, and **JSON payloads** so agents self-correct in one hop.
 
-> 🚀 **Get Started in 60 Seconds with the Hosted Service on [agent404.dev](https://www.agent404.dev):**
-> Free to start with zero infrastructure to manage. `agent404.dev` handles automated daily sitemap synchronization, vector embeddings, edge caching (<25ms), and live crawler analytics out of the box.
+> 🚀 **Get Started in 60 Seconds on [agent404.dev](https://www.agent404.dev):**
+> Free to start with zero infrastructure to manage. `agent404.dev` provides daily sitemap synchronization, vector embeddings, edge caching (<25ms), and live agent analytics out of the box.
 
 ---
 
 ## Why Use the Hosted Cloud on [agent404.dev](https://www.agent404.dev)?
 
-While the core engine is open source, running 404 recovery in production requires continuous sitemap parsing, vector embedding pipelines, edge latency optimization, and crawler telemetry.
+While the core engine is open source, running 404 recovery in production requires continuous sitemap parsing, vector embedding pipelines, edge latency optimization, and agent telemetry.
 
 | Feature | Hosted Cloud (`agent404.dev`) | Self-Hosted Instance |
 |---|---|---|
 | **Setup Time** | **&lt; 60 seconds** (copy 3 lines of middleware) | 45+ minutes (DB, Auth0, cron, keys) |
-| **Sitemap Crawling** | **Automated daily sync &amp; edge index** | Manual cron triggers &amp; SAX parser setup |
-| **Vector Embeddings** | **Managed high-dimensional embeddings** | Requires OpenAI / OpenRouter API keys |
+| **Sitemap Crawling** | **Daily sync &amp; edge index** | Manual cron triggers and SAX parser setup |
+| **Vector Embeddings** | **Managed high-dimensional embeddings** | Requires OpenAI or OpenRouter API keys |
 | **Database &amp; Infra** | **Zero database or vector store to manage** | Provision Neon Postgres + `pgvector` |
 | **Edge Performance** | **Sub-25ms global edge suggestion cache** | Self-managed multi-region routing |
-| **Bot Analytics** | **Live dashboard (ClaudeBot, GPTBot, Perplexity)** | Build custom telemetry logging |
-| **Maintenance** | **Zero ops &middot; automatic upgrades** | Ongoing infrastructure &amp; key maintenance |
+| **Agent Analytics** | **Live dashboard (Cursor, Claude, ChatGPT, Perplexity)** | Build custom telemetry logging |
+| **Maintenance** | **Zero ops (automatic upgrades)** | Ongoing infrastructure and key maintenance |
 
 ---
 
-## Quick Install (HTTP Layer — Recommended)
+## Quick Install (HTTP Layer)
 
-AI crawlers (GPTBot, ClaudeBot, PerplexityBot) do not execute client-side JavaScript. Intercepting at the HTTP layer ensures bots receive recovery metadata before the response body finishes.
+AI coding agents and search indexers (Cursor, Claude Code, ChatGPT, Perplexity) do not execute client-side JavaScript. Intercepting at the HTTP layer ensures agents receive recovery metadata before the response body finishes.
 
 ### 1. Get your free public key
 
@@ -127,7 +127,7 @@ For human visitors and headless browser agents (e.g. Browser-Use, Playwright, Mu
 ## How It Works
 
 ```
-1. ClaudeBot / GPTBot requests moved endpoint:
+1. Cursor / Claude Code requests moved endpoint:
    GET /docs/v1/authentication
 
 2. agent-404 Edge Middleware intercepts HTTP 404:

@@ -1043,16 +1043,90 @@ function getEnvValue(key, env) {
   }
   return "";
 }
+function getCloudflareEmbeddingConfig(env) {
+  const accountId = getEnvValue("CLOUDFLARE_ACCOUNT_ID", env);
+  const apiToken = getEnvValue("CLOUDFLARE_API_TOKEN", env) || void 0;
+  return { accountId, apiToken };
+}
 function getEmbeddingConfig(env) {
   const url = getEnvValue("EMBEDDING_API_URL", env) || "https://openrouter.ai/api/v1/embeddings";
   const model = getEnvValue("EMBEDDING_MODEL", env) || "openai/text-embedding-3-small";
-  const apiKey = getEnvValue("EMBEDDING_API_KEY", env) || getEnvValue("OPENAI_API_KEY", env) || void 0;
+  const apiKey = getEnvValue("EMBEDDING_API_KEY", env) || getEnvValue("AI_GATEWAY_API_KEY", env) || getEnvValue("VERCEL_OIDC_TOKEN", env) || getEnvValue("OPENAI_API_KEY", env) || void 0;
   return { url, model, apiKey };
 }
 
 // src/engine/embeddings.ts
-var DIMENSIONS = 256;
+var DIMENSIONS = 768;
+var CLOUDFLARE_MODEL = "@cf/baai/bge-base-en-v1.5";
+var CLOUDFLARE_DIMENSIONS = 768;
 async function generateBatchEmbeddings(texts) {
+  if (texts.length === 0) return [];
+  const indexes = [];
+  const usable = [];
+  texts.forEach((text, i) => {
+    const trimmed = text.trim();
+    if (trimmed) {
+      indexes.push(i);
+      usable.push(trimmed);
+    }
+  });
+  let results;
+  if (usable.length === 0) {
+    results = [];
+  } else {
+    const cfResults = await generateViaCloudflare(usable);
+    results = cfResults ?? await generateViaOpenAiCompatible(usable);
+  }
+  const out = texts.map(() => null);
+  results.forEach((result, j) => {
+    out[indexes[j]] = result;
+  });
+  return out;
+}
+async function generateViaCloudflare(texts) {
+  const { accountId, apiToken } = getCloudflareEmbeddingConfig();
+  if (!accountId || !apiToken) {
+    return null;
+  }
+  try {
+    const resp = await fetch(
+      `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/run/${CLOUDFLARE_MODEL}`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiToken}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ text: texts })
+      }
+    );
+    if (!resp.ok) {
+      console.error(`Cloudflare embedding error: ${resp.status}`);
+      return texts.map(() => null);
+    }
+    const data = await resp.json();
+    const rows = Array.isArray(data.result?.data) ? Array.isArray(data.result.data[0]) ? data.result.data : [data.result.data] : [];
+    if (!data.success || rows.length === 0) {
+      console.error(
+        "Cloudflare embedding error:",
+        data.errors?.[0]?.message ?? "empty result"
+      );
+      return texts.map(() => null);
+    }
+    const results = texts.map(() => null);
+    for (let i = 0; i < rows.length && i < texts.length; i++) {
+      const emb = rows[i];
+      if (emb.length === CLOUDFLARE_DIMENSIONS && emb.every((v) => typeof v === "number" && Number.isFinite(v))) {
+        results[i] = emb;
+      }
+    }
+    return results;
+  } catch (err) {
+    console.error("Cloudflare embedding request failed:", err?.message || "unknown error");
+    return texts.map(() => null);
+  }
+}
+async function generateViaOpenAiCompatible(texts) {
   const { url, model, apiKey } = getEmbeddingConfig();
   if (!apiKey || texts.length === 0) {
     return texts.map(() => null);

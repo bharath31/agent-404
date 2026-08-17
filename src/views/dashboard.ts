@@ -65,7 +65,7 @@ app.use(async (req, res) => {
  * Tailored with the site's domain, siteId, and publicKey (never secret key).
  */
 function rawAgentPrompt(site: Pick<DashboardSiteData, "id" | "publicKey" | "domain">): string {
-	return `You are an AI coding assistant. Install and configure agent-404 (https://www.agent404.dev) in this project so that all dead links and 404 responses automatically self-heal and return semantic Link headers for AI crawlers (Claude, GPTBot, Perplexity) and human users.
+	return `You are an AI coding assistant. Install and configure agent-404 (https://www.agent404.dev) in this project so that all dead links and 404 responses automatically self-heal and return semantic Link headers for AI assistants (Cursor, Claude, ChatGPT, Perplexity) and human users.
 
 ### Project Credentials
 - **Domain:** ${site.domain}
@@ -538,7 +538,7 @@ export function dashboardHtml(data: DashboardData): string {
   <div class="empty-content">
     <h2 class="empty-title">Register your first domain</h2>
     <p class="empty-desc">
-      agent-404 monitors your site for dead links, indexes active pages automatically, and provides instant semantic 404 recovery to Claude, GPTBot, and browser agents.
+      agent-404 monitors your site for dead links, indexes active pages automatically, and provides instant semantic 404 recovery to Cursor, Claude, ChatGPT, Perplexity, and browser agents.
     </p>
 
     <form id="inline-register-form" class="inline-register-form">

@@ -3,8 +3,8 @@ name: agent-404
 description: >
   Install, configure, audit, and troubleshoot agent-404 self-healing 404 middleware,
   Link headers, and semantic recovery across Next.js, Cloudflare Workers, Express,
-  and HTML script tags. Use whenever setting up 404 recovery for AI agents (ClaudeBot,
-  GPTBot, Perplexity) or fixing dead link resilience on any website.
+  and HTML script tags. Use whenever setting up 404 recovery for AI agents (Cursor,
+  Claude Code, ChatGPT, Perplexity) or fixing dead link resilience on any website.
 license: MIT
 metadata:
   author: agent-404 <support@agent404.dev>
@@ -13,7 +13,7 @@ metadata:
 
 # Agent 404 Integration & Verification Guide
 
-Agent 404 (https://www.agent404.dev) provides HTTP-layer semantic 404 recovery for web applications. When an AI crawler (ClaudeBot, GPTBot, Perplexity) or human user hits a broken, moved, or outdated URL, agent-404 resolves the path against indexed sitemap embeddings and returns RFC 8288 `Link: <target>; rel="alternate"` headers alongside structured JSON-LD recovery payloads.
+Agent 404 (https://www.agent404.dev) provides HTTP-layer semantic 404 recovery for web applications. When an AI agent (Cursor, Claude Code, ChatGPT, Perplexity) or human user hits a broken, moved, or outdated URL, agent-404 resolves the path against indexed sitemap embeddings and returns RFC 8288 `Link: <target>; rel="alternate"` headers alongside structured JSON-LD recovery payloads.
 
 ---
 

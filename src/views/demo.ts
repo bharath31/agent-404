@@ -702,7 +702,7 @@ export const demoPageHtml = `<!DOCTYPE html>
       </div>
       <p id="audit-recommendation" style="font-size:0.85rem;color:var(--text-secondary)"></p>
       <div class="audit-checklist">
-        <div class="check-item"><span id="check-crawler">●</span> ClaudeBot / GPTBot 404 Access</div>
+        <div class="check-item"><span id="check-crawler">●</span> AI Agent 404 Access (Claude, Cursor, ChatGPT, Perplexity)</div>
         <div class="check-item"><span id="check-headers">●</span> RFC 5988 Link Headers</div>
         <div class="check-item"><span id="check-jsonld">●</span> schema.org ItemList JSON-LD</div>
       </div>
@@ -1023,11 +1023,11 @@ export const demoPageHtml = `<!DOCTYPE html>
 
       // 4. Crawler Trace
       const trace =
-        '[1] ClaudeBot GET ' + deadUrl + '\\n' +
+        '[1] AI Agent (Cursor / Claude Code) GET ' + deadUrl + '\\n' +
         '[2] agent-404 middleware intercepts HTTP 404\\n' +
         '[3] Evaluated hybrid matcher against sitemap -> top candidate: ' + topUrl + ' (' + (suggestions[0] ? Math.round(suggestions[0].score * 100) : 0) + '%)\\n' +
         '[4] Attached RFC 5988 Link header & schema.org ItemList JSON-LD to 404 response\\n' +
-        '[5] ClaudeBot parses alternate Link relation and follows destination URL in single hop without failure.';
+        '[5] AI Agent parses alternate Link relation and follows destination URL in single hop without failure.';
       document.getElementById('raw-trace-pre').textContent = trace;
     }
 
