@@ -26,12 +26,12 @@ AI crawlers (GPTBot, ClaudeBot, PerplexityBot) do not execute client-side JavaSc
 ### Next.js (App Router & Pages)
 
 ```bash
-npm install @agent-404/next
+npm install @agent404/next
 ```
 
 ```ts
 // middleware.ts
-import { agent404 } from "@agent-404/next";
+import { agent404 } from "@agent404/next";
 
 export const middleware = agent404({
   apiKey: process.env.AGENT404_PUBLIC_KEY!,
@@ -45,12 +45,12 @@ export const config = {
 ### Cloudflare Workers
 
 ```bash
-npm install @agent-404/cloudflare
+npm install @agent404/cloudflare
 ```
 
 ```ts
 // worker.ts
-import { agent404Worker } from "@agent-404/cloudflare";
+import { agent404Worker } from "@agent404/cloudflare";
 
 export default agent404Worker({
   apiKey: "pk_your_public_key",
@@ -61,12 +61,12 @@ export default agent404Worker({
 ### Express / Node.js
 
 ```bash
-npm install @agent-404/express
+npm install @agent404/express
 ```
 
 ```ts
 // server.js
-import { recoverExpress404 } from "@agent-404/express";
+import { recoverExpress404 } from "@agent404/express";
 
 app.use(async (req, res) => {
   const recovered = await recoverExpress404(req, "<h1>Not Found</h1>", {
@@ -78,7 +78,7 @@ app.use(async (req, res) => {
 });
 ```
 
-*Also available: [`@agent-404/netlify`](https://www.npmjs.com/package/@agent-404/netlify) for Netlify Edge Functions and nginx (`adapters/nginx.md`).*
+*Also available: [`@agent404/netlify`](https://www.npmjs.com/package/@agent404/netlify) for Netlify Edge Functions and nginx (`adapters/nginx.md`).*
 
 ---
 

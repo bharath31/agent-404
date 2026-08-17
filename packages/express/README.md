@@ -1,18 +1,18 @@
-# @agent-404/express
+# @agent404/express
 
 Express helper that turns your app's 404 handler into an [agent-404](https://www.agent404.dev) recovery response (`Link` headers, `schema.org` JSON-LD, and a rendered suggestion list) so AI crawlers and coding agents recover in one hop instead of hallucinating.
 
 ## Install
 
 ```bash
-npm install @agent-404/express
+npm install @agent404/express
 ```
 
 ## Usage
 
 ```js
 // server.js
-import { recoverExpress404 } from "@agent-404/express";
+import { recoverExpress404 } from "@agent404/express";
 
 app.use(async (req, res) => {
   const recovered = await recoverExpress404(req, "<h1>Not Found</h1>", {

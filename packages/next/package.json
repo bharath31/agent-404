@@ -1,5 +1,5 @@
 {
-  "name": "@agent-404/next",
+  "name": "@agent404/next",
   "version": "0.1.0",
   "description": "agent-404 Next.js middleware — self-healing 404 pages for AI agents and crawlers",
   "keywords": ["404", "nextjs", "middleware", "ai-agents", "seo", "crawlers"],

@@ -713,7 +713,7 @@
 
       <div class="tab-panel active" id="tab-panel-next">
         <div class="code-preview">
-          <button type="button" class="copy-btn" data-copy="import { agent404 } from &quot;@agent-404/next&quot;;
+          <button type="button" class="copy-btn" data-copy="import { agent404 } from &quot;@agent404/next&quot;;
 
 export const middleware = agent404({
   apiKey: process.env.AGENT404_PUBLIC_KEY!,
@@ -722,7 +722,7 @@ export const middleware = agent404({
 export const config = {
   matcher: [&quot;/((?!api|_next/static|_next/image|favicon.ico).*)&quot;],
 };">Copy</button>
-          <pre><code>import { agent404 } from "@agent-404/next";
+          <pre><code>import { agent404 } from "@agent404/next";
 
 export const middleware = agent404({
   apiKey: process.env.AGENT404_PUBLIC_KEY!,
@@ -736,7 +736,7 @@ export const config = {
 
       <div class="tab-panel" id="tab-panel-cf">
         <div class="code-preview">
-          <button type="button" class="copy-btn" data-copy="import { agent404Worker } from &quot;@agent-404/cloudflare&quot;;
+          <button type="button" class="copy-btn" data-copy="import { agent404Worker } from &quot;@agent404/cloudflare&quot;;
 
 export default {
   async fetch(req, env, ctx) {
@@ -746,7 +746,7 @@ export default {
     });
   },
 };">Copy</button>
-          <pre><code>import { agent404Worker } from "@agent-404/cloudflare";
+          <pre><code>import { agent404Worker } from "@agent404/cloudflare";
 
 export default {
   async fetch(req, env, ctx) {
@@ -761,13 +761,13 @@ export default {
 
       <div class="tab-panel" id="tab-panel-express">
         <div class="code-preview">
-          <button type="button" class="copy-btn" data-copy="import { agent404Express } from &quot;@agent-404/express&quot;;
+          <button type="button" class="copy-btn" data-copy="import { agent404Express } from &quot;@agent404/express&quot;;
 
 app.use(agent404Express({
   publicKey: process.env.AGENT404_PUBLIC_KEY,
   siteId: process.env.AGENT404_SITE_ID,
 }));">Copy</button>
-          <pre><code>import { agent404Express } from "@agent-404/express";
+          <pre><code>import { agent404Express } from "@agent404/express";
 
 app.use(agent404Express({
   publicKey: process.env.AGENT404_PUBLIC_KEY,

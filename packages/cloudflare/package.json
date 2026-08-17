@@ -1,5 +1,5 @@
 {
-  "name": "@agent-404/cloudflare",
+  "name": "@agent404/cloudflare",
   "version": "0.1.0",
   "description": "agent-404 Cloudflare Workers adapter — self-healing 404 pages for AI agents and crawlers",
   "keywords": ["404", "cloudflare", "workers", "edge", "ai-agents", "seo", "crawlers"],

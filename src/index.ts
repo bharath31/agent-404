@@ -175,9 +175,9 @@ app.get("/llms.txt", (c) =>
 - Health & Install Status: https://www.agent404.dev/api/install/status
 
 ## Quick Install (Adapters)
-- Next.js: npm install @agent-404/next
-- Cloudflare Workers: npm install @agent-404/cloudflare
-- Express: npm install @agent-404/express
+- Next.js: npm install @agent404/next
+- Cloudflare Workers: npm install @agent404/cloudflare
+- Express: npm install @agent404/express
 - HTML Script Tag: <script src="https://www.agent404.dev/agent404.js" data-site-id="YOUR_SITE_ID" data-public-key="pk_..." defer></script>
 `,
 		200,
