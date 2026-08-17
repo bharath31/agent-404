@@ -10,7 +10,9 @@ import { suggest } from "./api/routes/suggest.js";
 import { analyze } from "./api/routes/analyze.js";
 import { install } from "./api/routes/install.js";
 import { audit } from "./api/routes/audit.js";
+import { report } from "./api/routes/report.js";
 import { demo } from "./api/routes/demo.js";
+import { funnel } from "./api/routes/funnel.js";
 import { cron } from "./api/routes/cron.js";
 import { admin } from "./api/routes/admin.js";
 import { dashboard } from "./api/routes/dashboard.js";
@@ -132,6 +134,13 @@ app.use("/dashboard/*", async (c, next) => {
 	}
 	await next();
 });
+app.use("/report/*", async (c, next) => {
+	const dbUrl = getDatabaseUrl(c.env as Record<string, unknown>);
+	if (dbUrl) {
+		c.set("storage", new PostgresStorage(dbUrl));
+	}
+	await next();
+});
 
 // Rate limiting
 app.use("/api/sites", rateLimiter({ windowMs: 60_000, max: 10 }));
@@ -147,13 +156,15 @@ app.get("/", async (c) => {
 	return c.html(landingPageHtml({ signedIn }));
 });
 app.get("/demo", (c) => c.html(demoPageHtml));
-app.get("/report/:id", (c) => c.html(demoPageHtml));
 
 // Health check
 app.get("/api/health", (c) => c.json({ status: "ok" }));
 
 // Demo discovery route
 app.route("/api/demo", demo);
+
+// BAT-42 funnel telemetry beacons (public, fire-and-forget)
+app.route("/api/funnel", funnel);
 
 // Owner: register / claim a site (Auth0 passwordless email session)
 app.use("/api/sites", requireOwnerApi());
@@ -178,6 +189,7 @@ app.route("/api/install", install);
 
 // Standing audit permalinks & ClaudeBot 404 response check (BAT-38, BAT-39)
 app.route("/api/audit", audit);
+app.route("/report", report);
 
 // Admin & Cron routes
 app.route("/api/admin", admin);

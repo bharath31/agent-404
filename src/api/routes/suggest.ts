@@ -128,7 +128,7 @@ function logSuggestionsServed(
 	const matchTypes = JSON.stringify(suggestions.map((s) => s.matchType));
 
 	try {
-		recordSuggestionServedEvent(siteId, deadUrl, suggestedUrls, userAgent);
+		recordSuggestionServedEvent(storage, siteId, deadUrl, suggestedUrls, userAgent);
 	} catch {
 		// Telemetry must never turn a working suggest response into a 500.
 	}

@@ -6,10 +6,12 @@ import { register } from "../src/api/routes/register.js";
 import { suggest } from "../src/api/routes/suggest.js";
 import { apiKeyAuth, requireVerified } from "../src/api/middleware/auth.js";
 import { install } from "../src/api/routes/install.js";
+import { funnel } from "../src/api/routes/funnel.js";
+import { admin } from "../src/api/routes/admin.js";
 import { requireOwnerApi } from "../src/auth/owner.js";
 import type { StorageAdapter } from "../src/storage/interface.js";
 import type { PostgresStorage } from "../src/storage/postgres.js";
-import type { SiteRecord, PageRecord, FunnelStep, FunnelConversionMetrics } from "../src/types.js";
+import type { SiteRecord, PageRecord, FunnelStep, FunnelConversionMetrics, AgentCategory, RecoveryEvent, RecoveryRateStats, StandingAuditReport } from "../src/types.js";
 import { countLiveInstalls, LIVE_INSTALL_WINDOW_DAYS } from "../src/lib/live-installs.js";
 
 // In-memory storage for testing — no database needed
@@ -19,6 +21,8 @@ class MemoryStorage implements StorageAdapter {
 	suggestionLogs: { siteId: string; deadUrl: string; suggestedUrls: string[]; createdAt: string }[] =
 		[];
 	funnelEvents: { step: FunnelStep; domain?: string; metadata?: Record<string, unknown> }[] = [];
+	recoveryEvents: RecoveryEvent[] = [];
+	auditReports = new Map<string, StandingAuditReport>();
 	private nextPageId = 1;
 
 	async createSite(domain: string, ownerSub: string): Promise<SiteRecord> {
@@ -261,6 +265,92 @@ class MemoryStorage implements StorageAdapter {
 	async getTotalSiteCount(): Promise<number> {
 		return this.sites.length;
 	}
+
+	// --- Agent recovery tracking (BAT-61) ---
+
+	async recordRecoveryEvent(
+		siteId: string,
+		deadUrl: string,
+		suggestedUrls: string[],
+		agentCategory: AgentCategory,
+		userAgent?: string,
+		clientHash?: string,
+	): Promise<void> {
+		this.recoveryEvents.push({
+			id: String(this.recoveryEvents.length + 1),
+			siteId,
+			deadUrl,
+			suggestedUrls,
+			agentCategory,
+			userAgent: userAgent || "",
+			clientHash,
+			createdAt: new Date().toISOString(),
+			recovered: false,
+		});
+	}
+
+	async markRecoveryEventRecovered(
+		siteId: string,
+		fetchedUrl: string,
+		windowMs: number,
+		clientHash?: string,
+	): Promise<RecoveryEvent | null> {
+		const fetchedNorm = fetchedUrl.replace(/\/+$/, "").toLowerCase();
+		const now = Date.now();
+		for (let i = this.recoveryEvents.length - 1; i >= 0; i--) {
+			const e = this.recoveryEvents[i];
+			if (e.siteId !== siteId || e.recovered) continue;
+			if (now - Date.parse(e.createdAt) > windowMs) continue;
+			if (clientHash && e.clientHash && clientHash !== e.clientHash) continue;
+			const match = e.suggestedUrls.find(
+				(sug) => sug.replace(/\/+$/, "").toLowerCase() === fetchedNorm,
+			);
+			if (match) {
+				e.recovered = true;
+				e.recoveredUrl = fetchedUrl;
+				e.recoveryLatencyMs = 25;
+				return e;
+			}
+		}
+		return null;
+	}
+
+	async getRecoveryRateStats(siteId?: string): Promise<RecoveryRateStats> {
+		const events = siteId
+			? this.recoveryEvents.filter((e) => e.siteId === siteId)
+			: this.recoveryEvents;
+		const mk = (list: RecoveryEvent[]) => {
+			const total = list.length;
+			const recovered = list.filter((e) => e.recovered);
+			const latencies = recovered
+				.map((e) => e.recoveryLatencyMs)
+				.filter((l): l is number => typeof l === "number")
+				.sort((a, b) => a - b);
+			return {
+				totalSuggestions: total,
+				recoveredCount: recovered.length,
+				recoveryRate: total > 0 ? Math.round((recovered.length / total) * 1000) / 1000 : 0,
+				medianLatencyMs: latencies.length > 0 ? latencies[Math.floor(latencies.length / 2)] : null,
+			};
+		};
+		const cat = (c: AgentCategory) => mk(events.filter((e) => e.agentCategory === c));
+		return {
+			overall: mk(events),
+			byAgentCategory: {
+				crawler: cat("crawler"),
+				browser_agent: cat("browser_agent"),
+				human: cat("human"),
+			},
+		};
+	}
+
+	async saveAuditReport(report: StandingAuditReport): Promise<void> {
+		this.auditReports.set(report.id, report);
+	}
+
+	async getAuditReport(id: string): Promise<StandingAuditReport | null> {
+		return this.auditReports.get(id) ?? null;
+	}
 }
 
 function createTestApp(storage: MemoryStorage, ownerSub: string | null = "auth0|test-user") {
@@ -309,6 +399,8 @@ function createTestApp(storage: MemoryStorage, ownerSub: string | null = "auth0|
 	app.route("/api/suggest", suggest);
 	app.use("/api/install/*", apiKeyAuth());
 	app.route("/api/install", install);
+	app.route("/api/funnel", funnel);
+	app.route("/api/admin", admin);
 
 	return app;
 }
@@ -1277,6 +1369,60 @@ describe("API routes", () => {
 
 			expect(await storage.getTotalSiteCount()).toBe(3);
 			expect(await storage.getLiveInstallCount()).toBe(1);
+		});
+	});
+
+	describe("BAT-42 funnel production wiring", () => {
+		it("records install_cta_clicked via the public beacon endpoint", async () => {
+			const res = await app.request("/api/funnel/install-cta", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ domain: "beaconed.com" }),
+			});
+			expect(res.status).toBe(200);
+			expect(storage.funnelEvents.some((e) => e.step === "install_cta_clicked")).toBe(true);
+			expect(
+				storage.funnelEvents.find((e) => e.step === "install_cta_clicked")?.domain,
+			).toBe("beaconed.com");
+		});
+
+		it("records site_registered on new site registration", async () => {
+			await app.request("/api/sites", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ domain: "registered.com" }),
+			});
+			await new Promise((r) => setTimeout(r, 10));
+			expect(
+				storage.funnelEvents.some(
+					(e) => e.step === "site_registered" && e.domain === "registered.com",
+				),
+			).toBe(true);
+		});
+
+		it("records install_verified once the first page is indexed", async () => {
+			const { apiKey } = await createVerifiedSite(app, storage, "verify-me.com");
+			await app.request("/api/register", {
+				method: "POST",
+				headers: { "Content-Type": "application/json", "x-api-key": apiKey },
+				body: JSON.stringify({ url: "https://verify-me.com/", title: "Home" }),
+			});
+			await new Promise((r) => setTimeout(r, 10));
+			expect(
+				storage.funnelEvents.some((e) => e.step === "install_verified"),
+			).toBe(true);
+		});
+	});
+
+	describe("admin telemetry endpoints require CRON_SECRET", () => {
+		it("rejects GET /api/admin/funnel without authorization", async () => {
+			const res = await app.request("/api/admin/funnel");
+			expect(res.status).toBe(401);
+		});
+
+		it("rejects GET /api/admin/recovery-metrics without authorization", async () => {
+			const res = await app.request("/api/admin/recovery-metrics");
+			expect(res.status).toBe(401);
 		});
 	});
 });
