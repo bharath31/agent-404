@@ -644,7 +644,7 @@ export function landingPageHtml(opts: { signedIn?: boolean } = {}): string {
         <a href="/" class="logo">
           agent<span>-</span>404
         </a>
-        <span class="brand-badge">open source</span>
+        <span class="brand-badge">hosted edge &middot; open source</span>
       </div>
 
       <div class="nav-links">
@@ -658,10 +658,10 @@ export function landingPageHtml(opts: { signedIn?: boolean } = {}): string {
     <div class="hero">
       <div class="hero-eyebrow">
         <span class="hero-dot"></span>
-        <span>HTTP-layer 404 recovery for AI agents</span>
+        <span>Autonomous 404 Recovery for AI Agents &middot; Hosted at the Edge</span>
       </div>
 
-      <h1>Your docs change.<br><span class="highlight">Don't lose agents to 404s.</span></h1>
+      <h1>Your docs change.<br><span class="highlight">Don't lose AI agents to 404s.</span></h1>
       
       <p class="hero-desc">
         When Claude, Cursor, or GPTBot hit a moved URL, agent-404 intercepts at the edge — returning ranked semantic suggestions via RFC Link headers and JSON-LD schema so agents recover immediately.
@@ -677,9 +677,10 @@ export function landingPageHtml(opts: { signedIn?: boolean } = {}): string {
           spellcheck="false"
           required
         />
-        <button type="submit" class="btn btn-primary btn-sm">Get Started &rarr;</button>
+        <button type="submit" class="btn btn-primary btn-sm">Get Free Key &rarr;</button>
       </form>
-      <p id="hero-register-error" class="form-error" hidden style="margin-top:-2rem;margin-bottom:2.5rem;font-size:0.8rem;color:var(--rose)"></p>
+      <div style="font-size:0.75rem;color:var(--text-muted);font-family:var(--font-mono);margin-top:-2rem;margin-bottom:2.25rem;">✨ Free tier included &middot; 60s setup &middot; Automated sitemap sync &amp; vector embeddings</div>
+      <p id="hero-register-error" class="form-error" hidden style="margin-top:-1.5rem;margin-bottom:2rem;font-size:0.8rem;color:var(--rose)"></p>
 
       <div class="hero-cta-group">
         <a href="/demo" class="btn btn-secondary">
@@ -745,7 +746,7 @@ export function landingPageHtml(opts: { signedIn?: boolean } = {}): string {
     <div class="section-title-wrap">
       <span class="section-eyebrow">Integration</span>
       <h2 class="section-h2">Install in under 60 seconds</h2>
-      <p class="section-desc">Zero external dependencies. Compatible with edge runtimes and serverless adapters.</p>
+      <p class="section-desc">Paste 3 lines into your edge middleware. agent404.dev automatically crawls your sitemap, builds vector embeddings, and serves sub-25ms suggestions.</p>
     </div>
 
     <div class="install-box">
@@ -874,54 +875,55 @@ app.use(async (req, res) => {
 
     <!-- Built for Agent Stack -->
     <div class="section-title-wrap">
-      <span class="section-eyebrow">Use Cases</span>
-      <h2 class="section-h2">Built for the agent ecosystem</h2>
-      <p class="section-desc">Fixes broken workflows across modern developer tooling.</p>
+      <span class="section-eyebrow">Why Hosted agent404.dev</span>
+      <h2 class="section-h2">Zero-maintenance cloud intelligence</h2>
+      <p class="section-desc">All the power of vector embeddings and edge recovery without managing databases or cron jobs.</p>
     </div>
 
     <div class="features-grid">
       <div class="feature-card">
+        <span class="feature-tag">Automated Indexing</span>
+        <h3 class="feature-title">Continuous Sitemap Sync &amp; Embeddings</h3>
+        <p class="feature-desc">
+          No pgvector database or vector infrastructure to manage. agent404.dev continuously discovers and crawls your sitemap, generates 768d vector embeddings, and updates routes automatically.
+        </p>
+      </div>
+
+      <div class="feature-card">
         <span class="feature-tag">Coding Assistants</span>
         <h3 class="feature-title">Claude Code, Cursor, Copilot</h3>
         <p class="feature-desc">
-          Models query docs URLs baked into their pre-training data. When endpoints move, structured JSON-LD allows assistants to self-heal instead of hallucinating deprecated code.
+          Models query docs URLs baked into their pre-training weights. When endpoints move, structured Link headers and JSON-LD allow assistants to self-heal instead of hallucinating deprecated code.
         </p>
       </div>
 
       <div class="feature-card">
-        <span class="feature-tag">RAG &amp; Vector Pipelines</span>
-        <h3 class="feature-title">Retrieval Crawlers &amp; Search</h3>
+        <span class="feature-tag">Edge Performance</span>
+        <h3 class="feature-title">Sub-25ms Global Suggestion Cache</h3>
         <p class="feature-desc">
-          Indexers hit dead links after API version bumps. Instead of returning empty context or bad citations, systems receive the current destination endpoint automatically.
+          Suggestions resolve instantly from our global edge cache before response body transmission, ensuring lightning-fast recovery without putting load on your origin.
         </p>
       </div>
 
       <div class="feature-card">
-        <span class="feature-tag">Web Agents</span>
-        <h3 class="feature-title">Autonomous Browser Workflows</h3>
+        <span class="feature-tag">Agent Observability</span>
+        <h3 class="feature-title">Bot &amp; Crawler Telemetry</h3>
         <p class="feature-desc">
-          Browser agents navigating documentation give up when links 404. Standardized Link suggestions provide instant fallback routes to keep execution uninterrupted.
-        </p>
-      </div>
-
-      <div class="feature-card">
-        <span class="feature-tag">Tool Protocols</span>
-        <h3 class="feature-title">Model Context Protocol (MCP)</h3>
-        <p class="feature-desc">
-          MCP servers requesting API references or schemas receive ranked candidates rather than unparseable generic HTML error pages.
+          Real-time analytics dashboard tracking which AI crawlers (ClaudeBot, GPTBot, Perplexity) are requesting dead routes and measuring your 404 recovery rate.
         </p>
       </div>
     </div>
 
     <!-- CTA -->
     <div class="cta-card">
-      <h2>Stop losing agents to dead links</h2>
-      <p>Wire up the middleware in 60 seconds or run a standing audit on your live documentation.</p>
+      <h2>Stop losing AI agents to dead links</h2>
+      <p>Get your free public key in 60 seconds and make your documentation self-healing with zero infrastructure.</p>
       
       <div class="cta-btn-group">
-        <a href="/demo" class="btn btn-primary">Launch Live Audit &rarr;</a>
-        <a href="https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fbharath31%2Fagent-404&env=DATABASE_URL,EMBEDDING_API_KEY,CRON_SECRET,AUTH0_DOMAIN,AUTH0_CLIENT_ID,AUTH0_CLIENT_SECRET,AUTH0_SESSION_ENCRYPTION_KEY,BASE_URL&envDescription=DATABASE_URL%3A%20Neon%20Postgres.%20Auth0%20passwordless%20email%20OTP%20for%20the%20dashboard.&project-name=agent-404&repository-name=agent-404" class="btn btn-secondary" target="_blank" rel="noopener">
-          Deploy to Vercel
+        <a href="/auth/login?return_to=/dashboard" class="btn btn-primary">Get Started Free &rarr;</a>
+        <a href="/demo" class="btn btn-secondary">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+          Launch Live Audit
         </a>
         <a href="https://github.com/bharath31/agent-404" class="btn btn-secondary" target="_blank" rel="noopener">
           GitHub

@@ -1,14 +1,19 @@
 # @agent404/express
 
-Express helper that turns your app's 404 handler into an [agent-404](https://www.agent404.dev) recovery response (`Link` headers, `schema.org` JSON-LD, and a rendered suggestion list) so AI crawlers and coding agents recover in one hop instead of hallucinating.
+Express helper that turns your app's 404 handler into an [agent-404](https://www.agent404.dev) recovery response (`Link: rel="alternate"` headers, `schema.org` JSON-LD, and a rendered suggestion list) so AI crawlers and coding assistants recover in one hop instead of hallucinating.
 
-## Install
+## Quickstart
+
+### 1. Get your free public key
+Claim your documentation domain at **[agent404.dev](https://www.agent404.dev)**. The hosted service automatically indexes your sitemap, builds vector embeddings, and provides real-time crawler telemetry with zero infrastructure to manage.
+
+### 2. Install
 
 ```bash
 npm install @agent404/express
 ```
 
-## Usage
+### 3. Usage
 
 ```js
 // server.js
@@ -16,7 +21,7 @@ import { recoverExpress404 } from "@agent404/express";
 
 app.use(async (req, res) => {
   const recovered = await recoverExpress404(req, "<h1>Not Found</h1>", {
-    apiKey: process.env.AGENT404_PUBLIC_KEY,
+    apiKey: process.env.AGENT404_PUBLIC_KEY, // pk_... from agent404.dev
   });
   res.status(404);
   recovered.headers.forEach((v, k) => res.setHeader(k, v));
@@ -24,4 +29,3 @@ app.use(async (req, res) => {
 });
 ```
 
-Get `apiKey` (the read-only public key) by registering your domain at [agent404.dev](https://www.agent404.dev).

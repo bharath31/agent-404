@@ -1,26 +1,29 @@
 # @agent404/cloudflare
 
-A Cloudflare Worker that reverse-proxies your origin, and on a 404 injects [agent-404](https://www.agent404.dev) recovery suggestions (`Link` headers, `schema.org` JSON-LD, and a rendered suggestion list) at the edge so AI crawlers and coding agents recover in one hop instead of hallucinating.
+A Cloudflare Worker that reverse-proxies your origin, and on a 404 injects [agent-404](https://www.agent404.dev) recovery suggestions (`Link: rel="alternate"` headers, `schema.org` JSON-LD, and a rendered suggestion list) at the edge so AI crawlers and coding assistants recover in one hop instead of hallucinating.
 
-## Install
+## Quickstart
+
+### 1. Get your free public key
+Claim your documentation domain at **[agent404.dev](https://www.agent404.dev)**. The hosted service automatically indexes your sitemap, builds vector embeddings, and provides real-time crawler telemetry with zero infrastructure to manage.
+
+### 2. Install
 
 ```bash
 npm install @agent404/cloudflare
 ```
 
-## Usage
+### 3. Usage
 
 ```ts
 // worker.ts
 import { agent404Worker } from "@agent404/cloudflare";
 
 export default agent404Worker({
-  apiKey: "pk_your_public_key",
+  apiKey: "pk_your_public_key", // pk_... from agent404.dev
   origin: "https://docs.example.com",
 });
 ```
-
-Get `apiKey` (the read-only public key) by registering your domain at [agent404.dev](https://www.agent404.dev).
 
 ## Cloudflare Pages (`_worker.js`)
 
