@@ -664,7 +664,7 @@ export function landingPageHtml(opts: { signedIn?: boolean } = {}): string {
       <h1>Your docs change.<br><span class="highlight">Don't lose AI agents to 404s.</span></h1>
       
       <p class="hero-desc">
-        When Claude, Cursor, or GPTBot hit a moved URL, agent-404 intercepts at the edge — returning ranked semantic suggestions via RFC Link headers and JSON-LD schema so agents recover immediately.
+        When Cursor, Claude, ChatGPT, or Perplexity hit a moved URL, agent-404 intercepts at the edge. It returns ranked destination routes via RFC Link headers and JSON-LD schema so agents recover in one hop.
       </p>
 
       <form class="hero-register-box" id="hero-register-form">
@@ -907,9 +907,9 @@ app.use(async (req, res) => {
 
       <div class="feature-card">
         <span class="feature-tag">Agent Observability</span>
-        <h3 class="feature-title">Bot &amp; Crawler Telemetry</h3>
+        <h3 class="feature-title">Bot &amp; Assistant Telemetry</h3>
         <p class="feature-desc">
-          Real-time analytics dashboard tracking which AI crawlers (ClaudeBot, GPTBot, Perplexity) are requesting dead routes and measuring your 404 recovery rate.
+          Real-time analytics dashboard tracking which AI agents (Cursor, Claude, ChatGPT, Perplexity) request dead routes and measuring your 404 recovery rate.
         </p>
       </div>
     </div>

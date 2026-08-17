@@ -1,6 +1,6 @@
 # Agent 404
 
-> HTTP-layer semantic 404 recovery for AI agents (ClaudeBot, GPTBot, Perplexity) and human users.
+> HTTP-layer semantic 404 recovery for AI agents (Cursor, Claude Code, ChatGPT, Perplexity) and human users.
 
 ## Documentation & Skills
 - Agent Skill: https://www.agent404.dev/skills/agent-404/SKILL.md
