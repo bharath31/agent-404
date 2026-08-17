@@ -1,6 +1,8 @@
 import type { PageRecord, Suggestion } from "../types.js";
 import { findSuggestions } from "./matcher.js";
 import { stemToken } from "./stemmer.js";
+import { buildEmbeddingText, deadUrlEmbeddingText, generateBatchEmbeddings } from "./embeddings.js";
+import { normalizePathname } from "./url-normalize.js";
 
 export interface HallucinationPrediction {
 	hallucinatedPath: string;
@@ -52,22 +54,13 @@ const COMMON_SYNONYMS: Record<string, string[]> = {
 	releases: ["changelog", "updates", "release-notes"],
 };
 
-function normalizeUrlPath(urlOrPath: string): string {
-	try {
-		const u = new URL(urlOrPath, "https://example.com");
-		return u.pathname.replace(/\/+$/, "") || "/";
-	} catch {
-		return urlOrPath.replace(/\/+$/, "") || "/";
-	}
-}
-
 /**
  * Predict paths that AI crawlers and LLMs are likely to hallucinate based on site's actual routes.
  */
 export function generateHallucinatedPaths(
 	knownPaths: string[],
 ): Array<{ path: string; sourcePath: string; mutationType: HallucinationPrediction["mutationType"] }> {
-	const existingSet = new Set(knownPaths.map((p) => normalizeUrlPath(p).toLowerCase()));
+	const existingSet = new Set(knownPaths.map((p) => normalizePathname(p)));
 	const candidateMap = new Map<
 		string,
 		{ path: string; sourcePath: string; mutationType: HallucinationPrediction["mutationType"] }
@@ -78,7 +71,7 @@ export function generateHallucinatedPaths(
 		sourcePath: string,
 		mutationType: HallucinationPrediction["mutationType"],
 	) => {
-		const normalized = normalizeUrlPath(candPath).toLowerCase();
+		const normalized = normalizePathname(candPath);
 		if (normalized === "/" || existingSet.has(normalized) || candidateMap.has(normalized)) {
 			return;
 		}
@@ -90,7 +83,7 @@ export function generateHallucinatedPaths(
 	};
 
 	for (const originalPath of knownPaths) {
-		const norm = normalizeUrlPath(originalPath);
+		const norm = normalizePathname(originalPath);
 		if (norm === "/") continue;
 
 		const segments = norm.split("/").filter(Boolean);
@@ -196,21 +189,39 @@ export function generateHallucinatedPaths(
 
 /**
  * Predict hallucinated queries for a site and evaluate how well agent-404 suggestions recover them.
+ *
+ * Uses the same 4-signal matcher production /api/suggest uses, including
+ * real embeddings when EMBEDDING_API_KEY is configured — generateBatchEmbeddings
+ * returns null for every input with no key configured (the common case for
+ * the zero-friction `npx agent-404 audit` CLI), so this degrades to the
+ * existing 3-signal-only behavior with no added latency or cost in that case.
+ * Previously embeddings were hardcoded to null unconditionally, so this tool
+ * always measured a strictly worse match than what production actually does
+ * for any site with embeddings indexed.
  */
-export function predictAndEvaluateHallucinations(
+export async function predictAndEvaluateHallucinations(
 	pages: Array<{ url: string; title?: string; description?: string; headings?: string }>,
 	domain: string,
 	maxCandidates = 50,
-): HallucinationAuditSummary {
-	const pageRecords: PageRecord[] = pages.map((p) => ({
-		id: p.url,
-		site_id: domain,
-		url: p.url.startsWith("http") ? p.url : `https://${domain}${p.url.startsWith("/") ? "" : "/"}${p.url}`,
+): Promise<HallucinationAuditSummary> {
+	const resolvedUrls = pages.map((p) =>
+		p.url.startsWith("http") ? p.url : `https://${domain}${p.url.startsWith("/") ? "" : "/"}${p.url}`,
+	);
+
+	const pageEmbeddingTexts = pages.map((p, i) =>
+		buildEmbeddingText({ url: resolvedUrls[i], title: p.title || "", description: p.description || "" }),
+	);
+	const pageEmbeddings = await generateBatchEmbeddings(pageEmbeddingTexts);
+
+	const pageRecords: PageRecord[] = pages.map((p, i) => ({
+		id: i,
+		siteId: domain,
+		url: resolvedUrls[i],
 		title: p.title || "",
 		description: p.description || "",
 		headings: p.headings || "[]",
-		embedding: null,
-		indexed_at: new Date().toISOString(),
+		embedding: pageEmbeddings[i],
+		lastSeen: new Date().toISOString(),
 	}));
 
 	const knownPaths = pages.map((p) => {
@@ -223,16 +234,18 @@ export function predictAndEvaluateHallucinations(
 	});
 
 	const generated = generateHallucinatedPaths(knownPaths).slice(0, maxCandidates);
+	const deadUrls = generated.map((item) => `https://${domain}${item.path}`);
+	const candidateEmbeddings = await generateBatchEmbeddings(deadUrls.map((u) => deadUrlEmbeddingText(u)));
+
 	const predictions: HallucinationPrediction[] = [];
 	let recoveredCount = 0;
 	const vulnerabilities: Array<{ path: string; reason: string }> = [];
 
-	for (const item of generated) {
-		const deadUrl = `https://${domain}${item.path}`;
-		const suggestions = findSuggestions(deadUrl, pageRecords);
+	generated.forEach((item, i) => {
+		const deadUrl = deadUrls[i];
+		const suggestions = findSuggestions(deadUrl, pageRecords, candidateEmbeddings[i]);
 		const top = suggestions[0];
 
-		// Check if top suggestion matches intended source path or has high confidence (> 0.45)
 		const intendedUrl = item.sourcePath.startsWith("http")
 			? item.sourcePath
 			: `https://${domain}${item.sourcePath.startsWith("/") ? "" : "/"}${item.sourcePath}`;
@@ -242,12 +255,12 @@ export function predictAndEvaluateHallucinations(
 
 		if (top) {
 			confidence = top.score;
-			const topNorm = normalizeUrlPath(top.url);
-			const intendedNorm = normalizeUrlPath(intendedUrl);
-
-			if (topNorm === intendedNorm || top.score >= 0.5) {
-				recovered = true;
-			}
+			// "Recovered" means the top suggestion IS the intended page — not
+			// merely a confident-looking suggestion for some other page. A
+			// generic keyword-overlap match can score >=0.5 against the wrong
+			// page entirely, which previously counted as recovered and
+			// inflated recoveryRate (it feeds the CI --min-score gate).
+			recovered = normalizePathname(top.url) === normalizePathname(intendedUrl);
 		}
 
 		if (recovered) {
@@ -256,7 +269,7 @@ export function predictAndEvaluateHallucinations(
 			vulnerabilities.push({
 				path: item.path,
 				reason: top
-					? `Low match confidence (${(top.score * 100).toFixed(0)}%) for ${item.mutationType}`
+					? `Top suggestion (${(top.score * 100).toFixed(0)}% match) points to the wrong page for ${item.mutationType}`
 					: `No suggestions found for ${item.mutationType}`,
 			});
 		}
@@ -269,7 +282,7 @@ export function predictAndEvaluateHallucinations(
 			recovered,
 			confidence,
 		});
-	}
+	});
 
 	const totalTested = predictions.length;
 	const recoveryRate = totalTested > 0 ? Math.round((recoveredCount / totalTested) * 100) / 100 : 1.0;

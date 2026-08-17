@@ -4,6 +4,7 @@ import { isBlockedInternalHost } from "../../lib/ssrf-guard.js";
 import { probeClaudeBotResponse, type ClaudeBotProbeResult } from "../../engine/claudebot-probe.js";
 import { rateLimiter } from "../middleware/rate-limit.js";
 import { trackFunnelEvent } from "../../lib/funnel-telemetry.js";
+import { scoreCleanStatus, scoreLinkHeaders, scoreJsonLd, READINESS_WEIGHTS } from "../../engine/readiness-score.js";
 
 export interface StandingAuditReport {
 	id: string;
@@ -165,12 +166,16 @@ audit.post("/", async (c) => {
 	trackFunnelEvent("audit_started", domain, { deadPath });
 	const probe = await probeClaudeBotResponse(domain, deadPath);
 
-	// Calculate score
-	let score = 30; // base score for standard 404
-	if (probe.hasLinkHeaders) score += 35;
-	if (probe.hasJsonLd) score += 25;
-	if (probe.hasSuggestions) score += 10;
-	if (probe.verdict === "non_404") score = 15; // penalty for soft-404
+	// Quick-check score — shares its weights with the CLI's comprehensive
+	// audit (src/engine/readiness-score.ts) for the checks both can run from
+	// a single probe. hasSuggestions substitutes for the CLI-only checks
+	// this quick probe can't afford (sitemap-crawl hallucination recovery +
+	// broken-link health), so both still total 100.
+	const score =
+		scoreCleanStatus(probe.status) +
+		scoreLinkHeaders(probe.hasLinkHeaders) +
+		scoreJsonLd(probe.hasJsonLd) +
+		(probe.hasSuggestions ? READINESS_WEIGHTS.hasSuggestions : 0);
 
 	const id = generateAuditId(domain);
 	const permalink = `/report/${id}`;

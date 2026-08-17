@@ -25,6 +25,7 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build:script
+      - run: npm run build:types
       - run: npx vitest run
       - name: Publish to npm
         env:

@@ -9,6 +9,13 @@ import { normalizeDomain } from "../api/domain.js";
 import { isBlockedInternalHost } from "../lib/ssrf-guard.js";
 import type { AnalysisReport } from "../types.js";
 import {
+	scoreCleanStatus,
+	scoreLinkHeaders,
+	scoreJsonLd,
+	scoreHallucinationRecovery,
+	scoreBrokenLinkHealth,
+} from "../engine/readiness-score.js";
+import {
 	renderBanner,
 	renderScoreBadge,
 	renderSectionHeader,
@@ -89,38 +96,22 @@ export async function runCliAudit(options: AuditCliOptions): Promise<CliAuditRes
 	}
 
 	// 4. Run AI Hallucination stress test
-	const hallucinationSummary = predictAndEvaluateHallucinations(
+	const hallucinationSummary = await predictAndEvaluateHallucinations(
 		discoveredPages,
 		domain,
 		30,
 	);
 
-	// 5. Compute Comprehensive Agent Readiness Score (0-100)
-	let score = 0;
-
-	// (A) 404 Status Code Cleanliness (25 pts)
-	if (probe.status === 404) {
-		score += 25;
-	} else if (probe.status >= 200 && probe.status < 400) {
-		score += 5; // Soft-404 penalty
-	}
-
-	// (B) HTTP Recovery Signals (35 pts)
-	if (probe.hasLinkHeaders) score += 20;
-	if (probe.hasJsonLd) score += 15;
-
-	// (C) Hallucination Recovery Coverage (25 pts)
-	score += Math.round(hallucinationSummary.recoveryRate * 25);
-
-	// (D) Broken Link Health (15 pts)
+	// 5. Compute Comprehensive Agent Readiness Score (0-100) — shared weights
+	// with the web quick-check audit (src/engine/readiness-score.ts) so the
+	// same live site can't score differently depending on which tool ran.
 	const brokenCount = analysis?.brokenLinks.length ?? 0;
-	if (brokenCount === 0) {
-		score += 15;
-	} else if (brokenCount < 3) {
-		score += 10;
-	} else if (brokenCount < 8) {
-		score += 5;
-	}
+	const score =
+		scoreCleanStatus(probe.status) +
+		scoreLinkHeaders(probe.hasLinkHeaders) +
+		scoreJsonLd(probe.hasJsonLd) +
+		scoreHallucinationRecovery(hallucinationSummary.recoveryRate) +
+		scoreBrokenLinkHealth(brokenCount);
 
 	const pass = score >= minScore && probe.status === 404;
 

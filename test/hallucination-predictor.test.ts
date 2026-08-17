@@ -68,14 +68,14 @@ describe("Hallucination Predictor (BAT-40)", () => {
 		expect(paths).not.toContain("/");
 	});
 
-	it("predicts and evaluates recovery against matcher", () => {
+	it("predicts and evaluates recovery against matcher", async () => {
 		const pages = [
 			{ url: "https://example.com/docs/v3/auth", title: "Authentication Guide" },
 			{ url: "https://example.com/docs/users", title: "User Management" },
 			{ url: "https://example.com/docs/quickstart", title: "Quickstart" },
 		];
 
-		const summary = predictAndEvaluateHallucinations(pages, "example.com");
+		const summary = await predictAndEvaluateHallucinations(pages, "example.com");
 
 		expect(summary.totalTested).toBeGreaterThan(0);
 		expect(summary.recoveredCount).toBeGreaterThan(0);

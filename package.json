@@ -23,15 +23,37 @@
     "agent-404": "./bin/agent-404.js"
   },
   "exports": {
-    ".": "./src/index.js",
-    "./adapters": "./adapters/index.js",
-    "./adapters/core": "./adapters/core.js",
-    "./adapters/next": "./adapters/next.js",
-    "./adapters/express": "./adapters/express.js",
-    "./adapters/cloudflare": "./adapters/cloudflare.js",
-    "./adapters/netlify": "./adapters/netlify.js",
+    ".": {
+      "types": "./adapters/index.d.ts",
+      "default": "./adapters/index.js"
+    },
+    "./adapters": {
+      "types": "./adapters/index.d.ts",
+      "default": "./adapters/index.js"
+    },
+    "./adapters/core": {
+      "types": "./adapters/core.d.ts",
+      "default": "./adapters/core.js"
+    },
+    "./adapters/next": {
+      "types": "./adapters/next.d.ts",
+      "default": "./adapters/next.js"
+    },
+    "./adapters/express": {
+      "types": "./adapters/express.d.ts",
+      "default": "./adapters/express.js"
+    },
+    "./adapters/cloudflare": {
+      "types": "./adapters/cloudflare.d.ts",
+      "default": "./adapters/cloudflare.js"
+    },
+    "./adapters/netlify": {
+      "types": "./adapters/netlify.d.ts",
+      "default": "./adapters/netlify.js"
+    },
     "./client": "./public/agent-404.min.js"
   },
+  "types": "./adapters/index.d.ts",
   "files": [
     "bin",
     "adapters",
@@ -45,6 +67,8 @@
     "deploy": "vercel --prod",
     "deploy:cf": "wrangler deploy",
     "build:script": "tsx script/build.ts",
+    "build:types": "tsc -p tsconfig.adapters.json",
+    "prepublishOnly": "npm run build:script && npm run build:types",
     "db:migrate": "tsx migrations/run.ts",
     "test": "vitest run",
     "test:watch": "vitest",

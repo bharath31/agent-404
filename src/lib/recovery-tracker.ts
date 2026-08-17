@@ -1,3 +1,5 @@
+import { normalizePathname } from "../engine/url-normalize.js";
+
 export type AgentCategory = "crawler" | "browser_agent" | "human";
 
 export interface SuggestionEvent {
@@ -95,14 +97,6 @@ export function classifyUserAgent(ua?: string | null): AgentCategory {
 	return "human";
 }
 
-function normalizePath(urlOrPath: string): string {
-	try {
-		const u = new URL(urlOrPath, "https://example.com");
-		return u.pathname.replace(/\/+$/, "").toLowerCase() || "/";
-	} catch {
-		return urlOrPath.replace(/\/+$/, "").toLowerCase() || "/";
-	}
-}
 
 /**
  * Record a 404 suggestion response served to an agent or visitor.
@@ -146,7 +140,7 @@ export function recordFollowOnFetch(
 	clientHash?: string,
 ): SuggestionEvent | null {
 	const now = Date.now();
-	const fetchedNorm = normalizePath(fetchedUrl);
+	const fetchedNorm = normalizePathname(fetchedUrl);
 
 	// Find the most recent unrecovered suggestion for this site within 60s
 	for (let i = activeEvents.length - 1; i >= 0; i--) {
@@ -163,7 +157,7 @@ export function recordFollowOnFetch(
 
 		// Check if fetched URL matches any suggested URL
 		const match = event.suggestedUrls.find(
-			(sug) => normalizePath(sug) === fetchedNorm,
+			(sug) => normalizePathname(sug) === fetchedNorm,
 		);
 
 		if (match) {
