@@ -7,9 +7,21 @@ import type {
 	MatchQualityStats,
 	FunnelStep,
 	FunnelConversionMetrics,
+	RecoveryEvent,
+	RecoveryRateStats,
+	AgentCategory,
+	StandingAuditReport,
 } from "../types.js";
 import type { StorageAdapter } from "./interface.js";
 import { getDatabaseUrl } from "../config.js";
+import { normalizePathname } from "../engine/url-normalize.js";
+
+/** JSONB columns come back already parsed via the neon driver's default type
+ *  parsers, but fall back to JSON.parse defensively in case a column is ever
+ *  read as raw text (e.g. a future driver/config change). */
+function parseJsonColumn<T>(value: unknown): T {
+	return typeof value === "string" ? (JSON.parse(value) as T) : (value as T);
+}
 
 type Sql = NeonQueryFunction<false, true>;
 
@@ -382,6 +394,138 @@ export class PostgresStorage implements StorageAdapter {
 		};
 	}
 
+	// --- Agent recovery tracking (BAT-61) ---
+
+	async recordRecoveryEvent(
+		siteId: string,
+		deadUrl: string,
+		suggestedUrls: string[],
+		agentCategory: AgentCategory,
+		userAgent?: string,
+		clientHash?: string,
+	): Promise<void> {
+		await this.sql`
+			INSERT INTO recovery_events (site_id, dead_url, suggested_urls, agent_category, user_agent, client_hash)
+			VALUES (
+				${siteId},
+				${deadUrl},
+				${JSON.stringify(suggestedUrls)},
+				${agentCategory},
+				${userAgent ?? null},
+				${clientHash ?? null}
+			)
+		`;
+	}
+
+	async markRecoveryEventRecovered(
+		siteId: string,
+		fetchedUrl: string,
+		windowMs: number,
+		clientHash?: string,
+	): Promise<RecoveryEvent | null> {
+		// Use a simple two-step approach: find the most recent matching event,
+		// then update it. This avoids nested SQL template complications.
+		const { rows: candidates } = await this.sql`
+			SELECT id, suggested_urls FROM recovery_events
+			WHERE site_id = ${siteId}
+				AND recovered = FALSE
+				AND created_at > NOW() - make_interval(secs => ${windowMs / 1000})
+				AND (${clientHash ? this.sql`client_hash = ${clientHash}` : this.sql`TRUE`})
+			ORDER BY created_at DESC
+			LIMIT 50
+		`;
+
+		if (candidates.length === 0) return null;
+
+		// Find the first candidate whose suggested_urls include the fetched URL
+		const fetchedNorm = normalizePathname(fetchedUrl);
+		let matchId: number | null = null;
+		for (const cand of candidates) {
+			const urls: string[] = typeof cand.suggested_urls === "string"
+				? JSON.parse(cand.suggested_urls)
+				: (cand.suggested_urls as string[]);
+			if (urls.some((u) => normalizePathname(u) === fetchedNorm)) {
+				matchId = Number(cand.id);
+				break;
+			}
+		}
+
+		if (matchId === null) return null;
+
+		const { rows } = await this.sql`
+			UPDATE recovery_events
+			SET
+				recovered = TRUE,
+				recovered_url = ${fetchedUrl},
+				recovery_latency_ms = EXTRACT(EPOCH FROM (NOW() - created_at)) * 1000
+			WHERE id = ${matchId}
+			RETURNING *
+		`;
+		const row = rows[0];
+		if (!row) return null;
+		return this.mapRecoveryEventRow(row);
+	}
+
+	async getRecoveryRateStats(siteId?: string): Promise<RecoveryRateStats> {
+		const filter = siteId ? this.sql`WHERE site_id = ${siteId}` : this.sql``;
+		const { rows } = await this.sql`
+			SELECT
+				COUNT(*) AS total,
+				COUNT(*) FILTER (WHERE recovered) AS recovered,
+				PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY recovery_latency_ms) FILTER (WHERE recovered) AS median_latency,
+				COUNT(*) FILTER (WHERE agent_category = 'crawler') AS crawler_total,
+				COUNT(*) FILTER (WHERE agent_category = 'crawler' AND recovered) AS crawler_recovered,
+				PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY recovery_latency_ms) FILTER (WHERE agent_category = 'crawler' AND recovered) AS crawler_latency,
+				COUNT(*) FILTER (WHERE agent_category = 'browser_agent') AS agent_total,
+				COUNT(*) FILTER (WHERE agent_category = 'browser_agent' AND recovered) AS agent_recovered,
+				PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY recovery_latency_ms) FILTER (WHERE agent_category = 'browser_agent' AND recovered) AS agent_latency,
+				COUNT(*) FILTER (WHERE agent_category = 'human') AS human_total,
+				COUNT(*) FILTER (WHERE agent_category = 'human' AND recovered) AS human_recovered,
+				PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY recovery_latency_ms) FILTER (WHERE agent_category = 'human' AND recovered) AS human_latency
+			FROM recovery_events
+			${filter}
+		`;
+		const row = rows[0] || {};
+		const num = (v: unknown) => Number(v ?? 0);
+		const lat = (v: unknown) => (v == null ? null : Math.round(Number(v)));
+
+		const mk = (
+			total: number,
+			recovered: number,
+			median: number | null,
+		) => ({
+			totalSuggestions: total,
+			recoveredCount: recovered,
+			recoveryRate: total > 0 ? Math.round((recovered / total) * 1000) / 1000 : 0,
+			medianLatencyMs: median,
+		});
+
+		return {
+			overall: mk(num(row.total), num(row.recovered), lat(row.median_latency)),
+			byAgentCategory: {
+				crawler: mk(num(row.crawler_total), num(row.crawler_recovered), lat(row.crawler_latency)),
+				browser_agent: mk(num(row.agent_total), num(row.agent_recovered), lat(row.agent_latency)),
+				human: mk(num(row.human_total), num(row.human_recovered), lat(row.human_latency)),
+			},
+		};
+	}
+
+	private mapRecoveryEventRow(row: Record<string, unknown>): RecoveryEvent {
+		return {
+			id: String(row.id),
+			siteId: row.site_id as string,
+			deadUrl: row.dead_url as string,
+			suggestedUrls: (row.suggested_urls as string[] | string) ? JSON.parse(String(row.suggested_urls)) : [],
+			agentCategory: row.agent_category as AgentCategory,
+			userAgent: (row.user_agent as string) || "",
+			clientHash: (row.client_hash as string) || undefined,
+			createdAt: String(row.created_at),
+			recovered: Boolean(row.recovered),
+			recoveredUrl: (row.recovered_url as string) || undefined,
+			recoveryLatencyMs: row.recovery_latency_ms != null ? Number(row.recovery_latency_ms) : undefined,
+		};
+	}
+
 	async getLiveInstallCount(): Promise<number> {
 		const { rows } = await this.sql`
 			SELECT COUNT(*) AS count FROM sites s
@@ -402,6 +546,41 @@ export class PostgresStorage implements StorageAdapter {
 	async getTotalSiteCount(): Promise<number> {
 		const { rows } = await this.sql`SELECT COUNT(*) AS count FROM sites`;
 		return Number(rows[0]?.count ?? 0);
+	}
+
+	async saveAuditReport(report: StandingAuditReport): Promise<void> {
+		await this.sql`
+			INSERT INTO audit_reports (id, domain, created_at, score, claudebot_probe, summary, permalink, og_image_url)
+			VALUES (
+				${report.id},
+				${report.domain},
+				${report.createdAt}::timestamptz,
+				${report.score},
+				${JSON.stringify(report.claudeBotProbe)}::jsonb,
+				${JSON.stringify(report.summary)}::jsonb,
+				${report.permalink},
+				${report.ogImageUrl}
+			)
+			ON CONFLICT (id) DO NOTHING
+		`;
+	}
+
+	async getAuditReport(id: string): Promise<StandingAuditReport | null> {
+		const { rows } = await this.sql`SELECT * FROM audit_reports WHERE id = ${id}`;
+		return rows[0] ? this.mapAuditReportRow(rows[0]) : null;
+	}
+
+	private mapAuditReportRow(row: Record<string, unknown>): StandingAuditReport {
+		return {
+			id: row.id as string,
+			domain: row.domain as string,
+			createdAt: String(row.created_at),
+			score: Number(row.score),
+			claudeBotProbe: parseJsonColumn(row.claudebot_probe),
+			summary: parseJsonColumn(row.summary),
+			permalink: row.permalink as string,
+			ogImageUrl: row.og_image_url as string,
+		};
 	}
 
 	private mapSiteRow(row: Record<string, unknown>): SiteRecord {

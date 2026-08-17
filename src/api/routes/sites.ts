@@ -8,6 +8,7 @@ import {
 	wellKnownUrl,
 } from "../../engine/domain-verify.js";
 import { isDisposableSmokeDomain } from "../../lib/disposable-smoke-domain.js";
+import { trackFunnelEvent } from "../../lib/funnel-telemetry.js";
 import type { SiteRecord } from "../../types.js";
 
 export const VERIFIED_RECLAIM_GRACE_MS = 24 * 60 * 60 * 1000;
@@ -87,6 +88,8 @@ sites.post("/", async (c) => {
 		if (site.verifiedAt) {
 			crawlSitemap(domain, site.id, storage).catch(() => {});
 		}
+		// BAT-42: registration is a distinct funnel stage, not a CTA click.
+		trackFunnelEvent(storage, "site_registered", domain, { siteId: site.id });
 		return c.json(publicSite(site), 201);
 	} catch (err: any) {
 		if (err?.message?.includes("unique") || err?.message?.includes("duplicate")) {
@@ -134,6 +137,8 @@ sites.post("/claim", async (c) => {
 	if (!site) {
 		return c.json({ error: "Could not link this site. Check the API key." }, 401);
 	}
+	// BAT-42: linking an existing site is also a registration funnel stage.
+	trackFunnelEvent(c.get("storage"), "site_registered", domain, { siteId: site.id });
 	return c.json(publicSite(site), 200);
 });
 

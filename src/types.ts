@@ -1,3 +1,5 @@
+import type { ClaudeBotProbeResult } from "./engine/claudebot-probe.js";
+
 export interface SiteRecord {
 	id: string;
 	domain: string;
@@ -80,6 +82,41 @@ export interface DashboardData {
 	notice: string | null;
 }
 
+// Agent recovery tracking (BAT-61)
+export type AgentCategory = "crawler" | "browser_agent" | "human";
+
+export interface RecoveryEvent {
+	id: string;
+	siteId: string;
+	deadUrl: string;
+	suggestedUrls: string[];
+	agentCategory: AgentCategory;
+	userAgent: string;
+	clientHash?: string;
+	createdAt: string;
+	recovered: boolean;
+	recoveredUrl?: string;
+	recoveryLatencyMs?: number;
+}
+
+export interface RecoveryRateStats {
+	overall: {
+		totalSuggestions: number;
+		recoveredCount: number;
+		recoveryRate: number; // 0.0 - 1.0 (e.g. 0.75 = 75%)
+		medianLatencyMs: number | null;
+	};
+	byAgentCategory: Record<
+		AgentCategory,
+		{
+			totalSuggestions: number;
+			recoveredCount: number;
+			recoveryRate: number;
+			medianLatencyMs: number | null;
+		}
+	>;
+}
+
 // Audit-to-install conversion funnel (BAT-42)
 export type FunnelStep =
 	| "audit_started"
@@ -104,4 +141,26 @@ export interface FunnelConversionMetrics {
 		verificationRate: number; // verified / registered
 		overallFunnelConversion: number; // verified / started
 	};
+}
+
+/** A standing, shareable audit snapshot (BAT-38, BAT-39). Persisted in
+ *  Postgres (`audit_reports`) — see StorageAdapter#saveAuditReport /
+ *  #getAuditReport — so a report created on one serverless isolate is
+ *  visible when a social crawler fetches its permalink or OG image from
+ *  another. */
+export interface StandingAuditReport {
+	id: string;
+	domain: string;
+	createdAt: string;
+	score: number; // 0 - 100 Agent Readiness Score
+	claudeBotProbe: ClaudeBotProbeResult;
+	summary: {
+		status: "critical" | "warning" | "good";
+		recommendation: string;
+		crawlerAccessible: boolean;
+		linkHeadersConfigured: boolean;
+		jsonLdConfigured: boolean;
+	};
+	permalink: string;
+	ogImageUrl: string;
 }

@@ -95,10 +95,26 @@ export function generateHallucinatedPaths(
 			const vMatch = /^(v|ver|version)?(\d+)$/i.exec(seg);
 			if (vMatch) {
 				const prefix = vMatch[1] || "v";
+				const hasPrefix = Boolean(vMatch[1]);
 				const num = parseInt(vMatch[2], 10);
 				const variants: number[] = [];
-				for (let n = 1; n <= Math.max(num + 2, 4); n++) {
-					if (n !== num) variants.push(n);
+				if (!hasPrefix && num > 10) {
+					// Bare all-numeric segments this large are almost always
+					// years/IDs/pagination (/blog/2024), not versions. Generating
+					// 1..2026 variants here flooded the candidate map with ~2k
+					// entries per path and crowded out meaningful candidates.
+					// Skip version drift entirely for these.
+				} else if (num <= 10) {
+					// Real version segments (v2, v3, ...): try the plausible range.
+					for (let n = 1; n <= Math.max(num + 2, 4); n++) {
+						if (n !== num) variants.push(n);
+					}
+				} else {
+					// Prefixed large versions (v2023-style): only adjacent values
+					// are plausible; anything further is noise.
+					for (let n = num - 1; n <= num + 2; n++) {
+						if (n !== num && n > 0) variants.push(n);
+					}
 				}
 				for (const varNum of variants) {
 					const cloned = [...segments];
@@ -285,7 +301,7 @@ export async function predictAndEvaluateHallucinations(
 	});
 
 	const totalTested = predictions.length;
-	const recoveryRate = totalTested > 0 ? Math.round((recoveredCount / totalTested) * 100) / 100 : 1.0;
+	const recoveryRate = totalTested > 0 ? Math.round((recoveredCount / totalTested) * 100) / 100 : 0;
 
 	return {
 		totalTested,

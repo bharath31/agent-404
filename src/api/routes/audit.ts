@@ -1,32 +1,16 @@
 import { Hono } from "hono";
 import { normalizeDomain } from "../domain.js";
 import { isBlockedInternalHost } from "../../lib/ssrf-guard.js";
-import { probeClaudeBotResponse, type ClaudeBotProbeResult } from "../../engine/claudebot-probe.js";
+import { probeClaudeBotResponse } from "../../engine/claudebot-probe.js";
 import { rateLimiter } from "../middleware/rate-limit.js";
 import { trackFunnelEvent } from "../../lib/funnel-telemetry.js";
 import { scoreCleanStatus, scoreLinkHeaders, scoreJsonLd, READINESS_WEIGHTS } from "../../engine/readiness-score.js";
 import type { PostgresStorage } from "../../storage/postgres.js";
+import type { StandingAuditReport } from "../../types.js";
 
-export interface StandingAuditReport {
-	id: string;
-	domain: string;
-	createdAt: string;
-	score: number; // 0 - 100 Agent Readiness Score
-	claudeBotProbe: ClaudeBotProbeResult;
-	summary: {
-		status: "critical" | "warning" | "good";
-		recommendation: string;
-		crawlerAccessible: boolean;
-		linkHeadersConfigured: boolean;
-		jsonLdConfigured: boolean;
-	};
-	permalink: string;
-	ogImageUrl: string;
-}
-
-// In-memory persistent cache for standing audit reports
-const auditReports = new Map<string, StandingAuditReport>();
-const MAX_SAVED_AUDITS = 5_000;
+// Re-exported for callers that imported the type from this module before it
+// moved to src/types.ts (so it can also be shared by StorageAdapter).
+export type { StandingAuditReport } from "../../types.js";
 
 function generateAuditId(domain: string): string {
 	const hash = Math.random().toString(36).substring(2, 10);
@@ -147,8 +131,8 @@ export function generateAuditOgSvg(report: StandingAuditReport): string {
 </svg>`;
 }
 
-type Env = { Variables: { storage?: PostgresStorage } };
 
+type Env = { Variables: { storage: PostgresStorage } };
 const audit = new Hono<Env>();
 
 // Rate limit public audit creations
@@ -166,6 +150,11 @@ audit.post("/", async (c) => {
 	}
 
 	const deadPath = body.deadPath || "/docs/non-existent-link";
+	// Bound the dead path before it lands in funnel_events.metadata — a
+	// pathological input must not bloat telemetry rows.
+	if (deadPath.length > 2048) {
+		return c.json({ error: "deadPath too long" }, 400);
+	}
 	trackFunnelEvent(c.get("storage"), "audit_started", domain, { deadPath });
 	const probe = await probeClaudeBotResponse(domain, deadPath);
 
@@ -204,11 +193,11 @@ audit.post("/", async (c) => {
 		ogImageUrl,
 	};
 
-	if (auditReports.size >= MAX_SAVED_AUDITS) {
-		const firstKey = auditReports.keys().next().value;
-		if (firstKey) auditReports.delete(firstKey);
-	}
-	auditReports.set(id, report);
+	// Postgres-backed (migrations/0007_audit_reports.sql) — no in-memory size
+	// cap needed. If audit_reports grows large enough to matter, add a
+	// retention sweep to the existing cron job (src/api/routes/cron.ts)
+	// rather than eagerly evicting here.
+	await c.get("storage").saveAuditReport(report);
 	trackFunnelEvent(c.get("storage"), "audit_completed", domain, { auditId: id, score });
 
 	return c.json(report, 201);
@@ -217,7 +206,7 @@ audit.post("/", async (c) => {
 // Dynamic OG SVG Image generator for standing audit permalinks (BAT-41)
 audit.get("/:id/og.svg", async (c) => {
 	const id = c.req.param("id");
-	const report = auditReports.get(id);
+	const report = await c.get("storage").getAuditReport(id);
 	if (!report) {
 		return c.text("Audit not found", 404);
 	}
@@ -229,14 +218,19 @@ audit.get("/:id/og.svg", async (c) => {
 });
 
 // Retrieve a standing audit by permalink ID
+// Only counts as a *share* when the link is opened with an explicit share
+// intent (?share=1) — link-preview scrapers and repeat views otherwise
+// inflate reportShareRate.
 audit.get("/:id", async (c) => {
 	const id = c.req.param("id");
-	const report = auditReports.get(id);
+	const report = await c.get("storage").getAuditReport(id);
 	if (!report) {
 		return c.json({ error: "Audit report not found or expired" }, 404);
 	}
-	trackFunnelEvent(c.get("storage"), "report_shared", report.domain, { auditId: id });
+	if (c.req.query("share") === "1") {
+		trackFunnelEvent(c.get("storage"), "report_shared", report.domain, { auditId: id });
+	}
 	return c.json(report);
 });
 
-export { audit, auditReports };
+export { audit };
