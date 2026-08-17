@@ -40,6 +40,15 @@ export function getCronSecret(env?: Record<string, unknown>): string | undefined
 	return secret || undefined;
 }
 
+export function getCloudflareEmbeddingConfig(env?: Record<string, unknown>): {
+	accountId: string;
+	apiToken: string | undefined;
+} {
+	const accountId = getEnvValue("CLOUDFLARE_ACCOUNT_ID", env);
+	const apiToken = getEnvValue("CLOUDFLARE_API_TOKEN", env) || undefined;
+	return { accountId, apiToken };
+}
+
 export function getEmbeddingConfig(env?: Record<string, unknown>): {
 	url: string;
 	model: string;
@@ -47,6 +56,11 @@ export function getEmbeddingConfig(env?: Record<string, unknown>): {
 } {
 	const url = getEnvValue("EMBEDDING_API_URL", env) || "https://openrouter.ai/api/v1/embeddings";
 	const model = getEnvValue("EMBEDDING_MODEL", env) || "openai/text-embedding-3-small";
-	const apiKey = getEnvValue("EMBEDDING_API_KEY", env) || getEnvValue("OPENAI_API_KEY", env) || undefined;
+	const apiKey =
+		getEnvValue("EMBEDDING_API_KEY", env) ||
+		getEnvValue("AI_GATEWAY_API_KEY", env) ||
+		getEnvValue("VERCEL_OIDC_TOKEN", env) ||
+		getEnvValue("OPENAI_API_KEY", env) ||
+		undefined;
 	return { url, model, apiKey };
 }
