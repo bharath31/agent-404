@@ -38,13 +38,13 @@ AGENT404_SITE_ID="site-uuid-..."
 
 1. **Install adapter:**
    ```bash
-   npm install @agent-404/next
-   # or: pnpm add @agent-404/next | yarn add @agent-404/next | bun add @agent-404/next
+   npm install @agent404/next
+   # or: pnpm add @agent404/next | yarn add @agent404/next | bun add @agent404/next
    ```
 
 2. **Add Edge/Node Middleware (`middleware.ts` in project root or `src/middleware.ts`):**
    ```typescript
-   import { agent404 } from "@agent-404/next";
+   import { agent404 } from "@agent404/next";
 
    export const middleware = agent404({
      apiKey: process.env.AGENT404_PUBLIC_KEY || "pk_YOUR_PUBLIC_KEY",
@@ -60,7 +60,7 @@ AGENT404_SITE_ID="site-uuid-..."
 3. **Optional App Router Custom 404 UI (`app/not-found.tsx`):**
    ```tsx
    import { headers } from "next/headers";
-   import { notFoundSuggestions } from "@agent-404/next";
+   import { notFoundSuggestions } from "@agent404/next";
 
    export default async function NotFound() {
      const h = await headers();
@@ -104,12 +104,12 @@ AGENT404_SITE_ID="site-uuid-..."
 
 1. **Install adapter:**
    ```bash
-   npm install @agent-404/cloudflare
+   npm install @agent404/cloudflare
    ```
 
 2. **Add Worker Handler (`worker.ts` or `src/index.ts`):**
    ```typescript
-   import { agent404Worker } from "@agent-404/cloudflare";
+   import { agent404Worker } from "@agent404/cloudflare";
 
    export default {
      async fetch(req: Request, env: { AGENT404_PUBLIC_KEY?: string; AGENT404_SITE_ID?: string }, ctx: unknown): Promise<Response> {
@@ -127,13 +127,13 @@ AGENT404_SITE_ID="site-uuid-..."
 
 1. **Install adapter:**
    ```bash
-   npm install @agent-404/express
+   npm install @agent404/express
    ```
 
 2. **Add Express Middleware (`server.js` or `app.ts`):**
    ```javascript
    import express from "express";
-   import { agent404Express } from "@agent-404/express";
+   import { agent404Express } from "@agent404/express";
 
    const app = express();
 

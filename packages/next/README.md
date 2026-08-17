@@ -1,18 +1,18 @@
-# @agent-404/next
+# @agent404/next
 
 Next.js middleware that intercepts your app's 404s and injects [agent-404](https://www.agent404.dev) recovery suggestions (`Link` headers, `schema.org` JSON-LD, and a rendered suggestion list) so AI crawlers and coding agents recover in one hop instead of hallucinating.
 
 ## Install
 
 ```bash
-npm install @agent-404/next
+npm install @agent404/next
 ```
 
 ## Usage
 
 ```ts
 // middleware.ts
-import { agent404 } from "@agent-404/next";
+import { agent404 } from "@agent404/next";
 
 export const middleware = agent404({
   apiKey: process.env.AGENT404_PUBLIC_KEY!,

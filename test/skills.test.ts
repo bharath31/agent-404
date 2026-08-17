@@ -10,7 +10,7 @@ describe("Agent Skill & Discovery Endpoints", () => {
 		const text = await res.text();
 		expect(text).toContain("Agent 404");
 		expect(text).toContain("/skills/agent-404/SKILL.md");
-		expect(text).toContain("@agent-404/next");
+		expect(text).toContain("@agent404/next");
 	});
 
 	it("serves the SKILL.md specification at /skills/agent-404/SKILL.md", async () => {
@@ -20,9 +20,9 @@ describe("Agent Skill & Discovery Endpoints", () => {
 		const markdown = await res.text();
 		expect(markdown).toBe(AGENT_404_SKILL_MD);
 		expect(markdown).toContain("name: agent-404");
-		expect(markdown).toContain("@agent-404/next");
-		expect(markdown).toContain("@agent-404/cloudflare");
-		expect(markdown).toContain("@agent-404/express");
+		expect(markdown).toContain("@agent404/next");
+		expect(markdown).toContain("@agent404/cloudflare");
+		expect(markdown).toContain("@agent404/express");
 	});
 
 	it("redirects /skills/agent-404 to /skills/agent-404/SKILL.md", async () => {

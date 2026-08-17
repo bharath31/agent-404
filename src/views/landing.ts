@@ -758,7 +758,7 @@ export function landingPageHtml(opts: { signedIn?: boolean } = {}): string {
 
       <div class="tab-panel active" id="tab-panel-next">
         <div class="code-preview">
-          <button type="button" class="copy-btn" data-copy="import { agent404 } from &quot;@agent-404/next&quot;;
+          <button type="button" class="copy-btn" data-copy="import { agent404 } from &quot;@agent404/next&quot;;
 
 export const middleware = agent404({
   apiKey: process.env.AGENT404_PUBLIC_KEY!,
@@ -767,7 +767,7 @@ export const middleware = agent404({
 export const config = {
   matcher: [&quot;/((?!api|_next/static|_next/image|favicon.ico).*)&quot;],
 };">Copy</button>
-          <pre><code>import { agent404 } from "@agent-404/next";
+          <pre><code>import { agent404 } from "@agent404/next";
 
 export const middleware = agent404({
   apiKey: process.env.AGENT404_PUBLIC_KEY!,
@@ -781,13 +781,13 @@ export const config = {
 
       <div class="tab-panel" id="tab-panel-cf">
         <div class="code-preview">
-          <button type="button" class="copy-btn" data-copy="import { agent404Worker } from &quot;@agent-404/cloudflare&quot;;
+          <button type="button" class="copy-btn" data-copy="import { agent404Worker } from &quot;@agent404/cloudflare&quot;;
 
 export default agent404Worker({
   apiKey: &quot;pk_your_public_key&quot;,
   origin: &quot;https://docs.example.com&quot;,
 });">Copy</button>
-          <pre><code>import { agent404Worker } from "@agent-404/cloudflare";
+          <pre><code>import { agent404Worker } from "@agent404/cloudflare";
 
 export default agent404Worker({
   apiKey: "pk_your_public_key",
@@ -798,7 +798,7 @@ export default agent404Worker({
 
       <div class="tab-panel" id="tab-panel-express">
         <div class="code-preview">
-          <button type="button" class="copy-btn" data-copy="import { recoverExpress404 } from &quot;@agent-404/express&quot;;
+          <button type="button" class="copy-btn" data-copy="import { recoverExpress404 } from &quot;@agent404/express&quot;;
 
 app.use(async (req, res) => {
   const recovered = await recoverExpress404(req, &quot;&lt;h1&gt;Not Found&lt;/h1&gt;&quot;, {
@@ -808,7 +808,7 @@ app.use(async (req, res) => {
   recovered.headers.forEach((v, k) => res.setHeader(k, v));
   res.send(await recovered.text());
 });">Copy</button>
-          <pre><code>import { recoverExpress404 } from "@agent-404/express";
+          <pre><code>import { recoverExpress404 } from "@agent404/express";
 
 app.use(async (req, res) => {
   const recovered = await recoverExpress404(req, "&lt;h1&gt;Not Found&lt;/h1&gt;", {

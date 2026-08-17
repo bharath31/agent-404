@@ -27,7 +27,7 @@ function rawScriptSnippet(site: Pick<DashboardSiteData, "id" | "publicKey">): st
 }
 
 function rawNextSnippet(site: Pick<DashboardSiteData, "id" | "publicKey">): string {
-	return `import { agent404 } from "@agent-404/next";
+	return `import { agent404 } from "@agent404/next";
 
 export const middleware = agent404({
   apiKey: process.env.AGENT404_PUBLIC_KEY || "${site.publicKey}",
@@ -39,7 +39,7 @@ export const config = {
 }
 
 function rawCloudflareSnippet(site: Pick<DashboardSiteData, "id" | "publicKey">): string {
-	return `import { agent404Worker } from "@agent-404/cloudflare";
+	return `import { agent404Worker } from "@agent404/cloudflare";
 
 export default agent404Worker({
   apiKey: "${site.publicKey}",
@@ -48,7 +48,7 @@ export default agent404Worker({
 }
 
 function rawExpressSnippet(site: Pick<DashboardSiteData, "id" | "publicKey">): string {
-	return `import { recoverExpress404 } from "@agent-404/express";
+	return `import { recoverExpress404 } from "@agent404/express";
 
 app.use(async (req, res) => {
   const recovered = await recoverExpress404(req, "<h1>Not Found</h1>", {
@@ -76,14 +76,14 @@ function rawAgentPrompt(site: Pick<DashboardSiteData, "id" | "publicKey" | "doma
 ### Instructions
 1. Inspect the codebase to detect the project framework (Next.js, Cloudflare Workers, Express, or Static HTML).
 2. Install the appropriate SDK:
-   - Next.js: run \`npm install @agent-404/next\` (or pnpm/yarn/bun)
-   - Cloudflare Workers: run \`npm install @agent-404/cloudflare\`
-   - Express: run \`npm install @agent-404/express\`
+   - Next.js: run \`npm install @agent404/next\` (or pnpm/yarn/bun)
+   - Cloudflare Workers: run \`npm install @agent404/cloudflare\`
+   - Express: run \`npm install @agent404/express\`
    - Static HTML: insert the \`<script>\` tag in <head> or <body>
 3. Configure the middleware/adapter:
    - **Next.js (\`middleware.ts\`):**
      \`\`\`typescript
-     import { agent404 } from "@agent-404/next";
+     import { agent404 } from "@agent404/next";
 
      export const middleware = agent404({
        apiKey: process.env.AGENT404_PUBLIC_KEY || "${site.publicKey}",
@@ -96,7 +96,7 @@ function rawAgentPrompt(site: Pick<DashboardSiteData, "id" | "publicKey" | "doma
      \`\`\`
    - **Cloudflare Worker (\`worker.ts\`):**
      \`\`\`typescript
-     import { agent404Worker } from "@agent-404/cloudflare";
+     import { agent404Worker } from "@agent404/cloudflare";
 
      export default {
        async fetch(req: Request, env: any, ctx: any) {
@@ -109,7 +109,7 @@ function rawAgentPrompt(site: Pick<DashboardSiteData, "id" | "publicKey" | "doma
      \`\`\`
    - **Express (\`server.js\` / \`app.ts\`):**
      \`\`\`javascript
-     import { agent404Express } from "@agent-404/express";
+     import { agent404Express } from "@agent404/express";
 
      app.use(agent404Express({
        publicKey: process.env.AGENT404_PUBLIC_KEY || "${site.publicKey}",

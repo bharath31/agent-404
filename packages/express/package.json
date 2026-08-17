@@ -1,5 +1,5 @@
 {
-  "name": "@agent-404/express",
+  "name": "@agent404/express",
   "version": "0.1.0",
   "description": "agent-404 Express middleware — self-healing 404 pages for AI agents and crawlers",
   "keywords": ["404", "express", "middleware", "ai-agents", "seo", "crawlers"],

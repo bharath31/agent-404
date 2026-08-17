@@ -206,8 +206,8 @@ export function printCliAuditReport(result: CliAuditResult, noColor = false): vo
 
 	// 5. Quick install command
 	console.log(renderSectionHeader("Quick Install", noColor));
-	console.log(`  ${c.bold("Next.js:", noColor)}   ${c.cyan("npm i @agent-404/next", noColor)}`);
-	console.log(`  ${c.bold("Express:", noColor)}   ${c.cyan("npm i @agent-404/express", noColor)}`);
-	console.log(`  ${c.bold("Workers:", noColor)}   ${c.cyan("npm i @agent-404/cloudflare", noColor)}`);
+	console.log(`  ${c.bold("Next.js:", noColor)}   ${c.cyan("npm i @agent404/next", noColor)}`);
+	console.log(`  ${c.bold("Express:", noColor)}   ${c.cyan("npm i @agent404/express", noColor)}`);
+	console.log(`  ${c.bold("Workers:", noColor)}   ${c.cyan("npm i @agent404/cloudflare", noColor)}`);
 	console.log(`  ${c.bold("Snippet:", noColor)}   ${c.cyan(`<script src="https://agent404.dev/agent-404.min.js" data-site-id="${result.domain}" defer></script>`, noColor)}\n`);
 }

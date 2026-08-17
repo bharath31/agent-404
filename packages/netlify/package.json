@@ -1,5 +1,5 @@
 {
-  "name": "@agent-404/netlify",
+  "name": "@agent404/netlify",
   "version": "0.1.0",
   "description": "agent-404 Netlify Edge Functions adapter — self-healing 404 pages for AI agents and crawlers",
   "keywords": ["404", "netlify", "edge", "ai-agents", "seo", "crawlers"],
