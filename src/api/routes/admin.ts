@@ -40,7 +40,8 @@ admin.get("/funnel", async (c) => {
 	if (!isCronAuthorized(c)) {
 		return c.json({ error: "Unauthorized" }, 401);
 	}
-	const metrics = getFunnelMetrics();
+	const storage = c.get("storage");
+	const metrics = await getFunnelMetrics(storage);
 	return c.json(metrics);
 });
 

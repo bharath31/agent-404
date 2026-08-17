@@ -1,119 +1,43 @@
-export type FunnelStep =
-	| "audit_started"
-	| "audit_completed"
-	| "report_shared"
-	| "install_cta_clicked"
-	| "site_registered"
-	| "install_verified";
+import type { StorageAdapter } from "../storage/interface.js";
+import type { FunnelStep, FunnelConversionMetrics } from "../types.js";
 
-export interface FunnelEvent {
-	step: FunnelStep;
-	domain?: string;
-	metadata?: Record<string, unknown>;
-	timestamp: string;
-}
-
-export interface FunnelConversionMetrics {
-	totalAuditsStarted: number;
-	totalAuditsCompleted: number;
-	totalReportsShared: number;
-	totalInstallCtaClicks: number;
-	totalSitesRegistered: number;
-	totalInstallsVerified: number;
-	rates: {
-		auditCompletionRate: number; // completed / started
-		reportShareRate: number; // shared / completed
-		installCtaRate: number; // cta / completed
-		registrationRate: number; // registered / cta
-		verificationRate: number; // verified / registered
-		overallFunnelConversion: number; // verified / started
-	};
-}
-
-// In-memory sliding buffer for funnel events (persists across isolate requests, bounded to 10k items)
-const MAX_EVENTS = 10_000;
-const eventsBuffer: FunnelEvent[] = [];
+export type { FunnelStep, FunnelConversionMetrics };
 
 /**
  * Record a step in the audit-to-install conversion funnel (BAT-42).
+ *
+ * Backed by durable storage (Postgres `funnel_events`, see
+ * `PostgresStorage#recordFunnelEvent`) rather than a module-level in-memory
+ * buffer — on Vercel/Cloudflare there's no guarantee requests land on the
+ * same isolate, and cold starts reset module state entirely, so an in-memory
+ * buffer only ever reflected a partial, effectively-random slice of traffic.
+ *
+ * Fire-and-forget: telemetry must never break the request it's attached to.
+ * Callers do not need to await this call; failures are swallowed. The
+ * returned promise is exposed so tests can await it for determinism. If no
+ * storage is available (e.g. DATABASE_URL not configured), this is a no-op.
  */
 export function trackFunnelEvent(
+	storage: StorageAdapter | undefined,
 	step: FunnelStep,
 	domain?: string,
 	metadata?: Record<string, unknown>,
-): FunnelEvent {
-	const event: FunnelEvent = {
-		step,
-		domain: domain?.toLowerCase().replace(/^https?:\/\//, "").replace(/\/+$/, ""),
-		metadata,
-		timestamp: new Date().toISOString(),
-	};
+): Promise<void> {
+	if (!storage) return Promise.resolve();
 
-	if (eventsBuffer.length >= MAX_EVENTS) {
-		eventsBuffer.shift();
-	}
-	eventsBuffer.push(event);
-	return event;
+	const normalizedDomain = domain
+		?.toLowerCase()
+		.replace(/^https?:\/\//, "")
+		.replace(/\/+$/, "");
+
+	return storage.recordFunnelEvent(step, normalizedDomain, metadata).catch(() => {});
 }
 
 /**
- * Compute aggregate conversion metrics across all funnel stages.
+ * Compute aggregate conversion metrics across all funnel stages, read from
+ * durable storage rather than whatever happens to be in one instance's
+ * in-memory buffer.
  */
-export function getFunnelMetrics(): FunnelConversionMetrics {
-	let started = 0;
-	let completed = 0;
-	let shared = 0;
-	let cta = 0;
-	let registered = 0;
-	let verified = 0;
-
-	for (const e of eventsBuffer) {
-		switch (e.step) {
-			case "audit_started":
-				started++;
-				break;
-			case "audit_completed":
-				completed++;
-				break;
-			case "report_shared":
-				shared++;
-				break;
-			case "install_cta_clicked":
-				cta++;
-				break;
-			case "site_registered":
-				registered++;
-				break;
-			case "install_verified":
-				verified++;
-				break;
-		}
-	}
-
-	const safeRate = (num: number, denom: number) =>
-		denom > 0 ? Math.round((num / denom) * 1000) / 1000 : 0;
-
-	return {
-		totalAuditsStarted: started,
-		totalAuditsCompleted: completed,
-		totalReportsShared: shared,
-		totalInstallCtaClicks: cta,
-		totalSitesRegistered: registered,
-		totalInstallsVerified: verified,
-		rates: {
-			auditCompletionRate: safeRate(completed, started),
-			reportShareRate: safeRate(shared, completed),
-			installCtaRate: safeRate(cta, completed),
-			registrationRate: safeRate(registered, cta),
-			verificationRate: safeRate(verified, registered),
-			overallFunnelConversion: safeRate(verified, started),
-		},
-	};
-}
-
-/**
- * Clear events buffer (for test isolation).
- */
-export function resetFunnelEvents(): void {
-	eventsBuffer.length = 0;
+export function getFunnelMetrics(storage: StorageAdapter): Promise<FunnelConversionMetrics> {
+	return storage.getFunnelMetrics();
 }

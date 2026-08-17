@@ -5,6 +5,7 @@ import { probeClaudeBotResponse, type ClaudeBotProbeResult } from "../../engine/
 import { rateLimiter } from "../middleware/rate-limit.js";
 import { trackFunnelEvent } from "../../lib/funnel-telemetry.js";
 import { scoreCleanStatus, scoreLinkHeaders, scoreJsonLd, READINESS_WEIGHTS } from "../../engine/readiness-score.js";
+import type { PostgresStorage } from "../../storage/postgres.js";
 
 export interface StandingAuditReport {
 	id: string;
@@ -146,7 +147,9 @@ export function generateAuditOgSvg(report: StandingAuditReport): string {
 </svg>`;
 }
 
-const audit = new Hono();
+type Env = { Variables: { storage?: PostgresStorage } };
+
+const audit = new Hono<Env>();
 
 // Rate limit public audit creations
 audit.use("/", rateLimiter({ windowMs: 60_000, max: 10 }));
@@ -163,7 +166,7 @@ audit.post("/", async (c) => {
 	}
 
 	const deadPath = body.deadPath || "/docs/non-existent-link";
-	trackFunnelEvent("audit_started", domain, { deadPath });
+	trackFunnelEvent(c.get("storage"), "audit_started", domain, { deadPath });
 	const probe = await probeClaudeBotResponse(domain, deadPath);
 
 	// Quick-check score — shares its weights with the CLI's comprehensive
@@ -206,7 +209,7 @@ audit.post("/", async (c) => {
 		if (firstKey) auditReports.delete(firstKey);
 	}
 	auditReports.set(id, report);
-	trackFunnelEvent("audit_completed", domain, { auditId: id, score });
+	trackFunnelEvent(c.get("storage"), "audit_completed", domain, { auditId: id, score });
 
 	return c.json(report, 201);
 });
@@ -232,7 +235,7 @@ audit.get("/:id", async (c) => {
 	if (!report) {
 		return c.json({ error: "Audit report not found or expired" }, 404);
 	}
-	trackFunnelEvent("report_shared", report.domain, { auditId: id });
+	trackFunnelEvent(c.get("storage"), "report_shared", report.domain, { auditId: id });
 	return c.json(report);
 });
 
