@@ -31,7 +31,6 @@ function rawNextSnippet(site: Pick<DashboardSiteData, "id" | "publicKey">): stri
 
 export const middleware = agent404({
   apiKey: process.env.AGENT404_PUBLIC_KEY || "${site.publicKey}",
-  siteId: "${site.id}",
 });
 
 export const config = {
@@ -42,23 +41,23 @@ export const config = {
 function rawCloudflareSnippet(site: Pick<DashboardSiteData, "id" | "publicKey">): string {
 	return `import { agent404Worker } from "@agent-404/cloudflare";
 
-export default {
-  async fetch(req, env, ctx) {
-    return agent404Worker(req, env, {
-      publicKey: "${site.publicKey}",
-      siteId: "${site.id}",
-    });
-  },
-};`;
+export default agent404Worker({
+  apiKey: "${site.publicKey}",
+  origin: "https://your-origin.example.com",
+});`;
 }
 
 function rawExpressSnippet(site: Pick<DashboardSiteData, "id" | "publicKey">): string {
-	return `import { agent404Express } from "@agent-404/express";
+	return `import { recoverExpress404 } from "@agent-404/express";
 
-app.use(agent404Express({
-  publicKey: "${site.publicKey}",
-  siteId: "${site.id}",
-}));`;
+app.use(async (req, res) => {
+  const recovered = await recoverExpress404(req, "<h1>Not Found</h1>", {
+    apiKey: "${site.publicKey}",
+  });
+  res.status(404);
+  recovered.headers.forEach((v, k) => res.setHeader(k, v));
+  res.send(await recovered.text());
+});`;
 }
 
 /**

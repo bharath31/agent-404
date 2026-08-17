@@ -828,6 +828,16 @@ function stemToken(word) {
   return word;
 }
 
+// src/engine/url-normalize.ts
+function normalizePathname(urlOrPath) {
+  try {
+    const u = new URL(urlOrPath, "https://example.com");
+    return u.pathname.replace(/\/+$/, "").toLowerCase() || "/";
+  } catch {
+    return urlOrPath.replace(/\/+$/, "").toLowerCase() || "/";
+  }
+}
+
 // src/engine/matcher.ts
 var SCORE_THRESHOLD = 0.2;
 var MAX_RESULTS = 5;
@@ -839,12 +849,12 @@ var W3_PATH_SEG = 0.5;
 var W3_LEVENSHTEIN = 0.3;
 var W3_TEXT = 0.2;
 function findSuggestions(deadUrl, pages, deadUrlEmbedding) {
-  const deadPath = normalizePath(deadUrl);
+  const deadPath = normalizePathname(deadUrl);
   const deadSegments = pathSegments(deadPath);
   const deadKeywords = extractKeywords(deadPath);
   const scored = [];
   for (const page of pages) {
-    const pagePath = normalizePath(page.url);
+    const pagePath = normalizePathname(page.url);
     const pageSegments = pathSegments(pagePath);
     const pathSegScore = jaccardVersionTolerant(deadSegments, pageSegments);
     const levScore = 1 - normalizedLevenshtein(deadPath, pagePath);
@@ -895,14 +905,6 @@ function cosineSimilarity(a, b) {
   const denom = Math.sqrt(normA) * Math.sqrt(normB);
   if (denom === 0) return 0;
   return dot / denom;
-}
-function normalizePath(url) {
-  try {
-    const u = new URL(url);
-    return u.pathname.replace(/\/+$/, "").toLowerCase();
-  } catch {
-    return url.replace(/\/+$/, "").toLowerCase();
-  }
 }
 function pathSegments(path) {
   return path.split("/").filter(Boolean);
@@ -1027,6 +1029,81 @@ function keywordOverlap(a, b) {
   return intersection / union;
 }
 
+// src/config.ts
+var CANONICAL_ORIGIN = "https://www.agent404.dev";
+var CANONICAL_SCRIPT_URL = `${CANONICAL_ORIGIN}/agent-404.min.js`;
+function getEnvValue(key, env) {
+  const fromEnv = env?.[key];
+  if (typeof fromEnv === "string" && fromEnv.trim()) {
+    return fromEnv.trim();
+  }
+  const fromProcess = typeof process !== "undefined" ? process.env?.[key] : void 0;
+  if (typeof fromProcess === "string" && fromProcess.trim()) {
+    return fromProcess.trim();
+  }
+  return "";
+}
+function getEmbeddingConfig(env) {
+  const url = getEnvValue("EMBEDDING_API_URL", env) || "https://openrouter.ai/api/v1/embeddings";
+  const model = getEnvValue("EMBEDDING_MODEL", env) || "openai/text-embedding-3-small";
+  const apiKey = getEnvValue("EMBEDDING_API_KEY", env) || getEnvValue("OPENAI_API_KEY", env) || void 0;
+  return { url, model, apiKey };
+}
+
+// src/engine/embeddings.ts
+var DIMENSIONS = 256;
+async function generateBatchEmbeddings(texts) {
+  const { url, model, apiKey } = getEmbeddingConfig();
+  if (!apiKey || texts.length === 0) {
+    return texts.map(() => null);
+  }
+  try {
+    const resp = await fetch(url, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        input: texts,
+        model,
+        dimensions: DIMENSIONS
+      })
+    });
+    if (!resp.ok) {
+      console.error(`Embedding API error: ${resp.status}`);
+      return texts.map(() => null);
+    }
+    const data = await resp.json();
+    const results = texts.map(() => null);
+    for (const item of data.data) {
+      results[item.index] = item.embedding;
+    }
+    return results;
+  } catch (err) {
+    console.error("Embedding API request failed:", err?.message || "unknown error");
+    return texts.map(() => null);
+  }
+}
+function buildEmbeddingText(page) {
+  let pathPart = "";
+  try {
+    const u = new URL(page.url);
+    pathPart = u.pathname.split("/").filter(Boolean).map((s) => s.replace(/[-_]/g, " ")).join(" ");
+  } catch {
+    pathPart = page.url;
+  }
+  return [pathPart, page.title, page.description].filter(Boolean).join(" \u2014 ");
+}
+function deadUrlEmbeddingText(deadUrl) {
+  try {
+    const u = new URL(deadUrl);
+    return u.pathname.split("/").filter(Boolean).map((s) => s.replace(/[-_]/g, " ")).join(" ");
+  } catch {
+    return deadUrl;
+  }
+}
+
 // src/engine/hallucination-predictor.ts
 var COMMON_SYNONYMS = {
   docs: ["doc", "documentation", "guide", "reference", "api"],
@@ -1051,19 +1128,11 @@ var COMMON_SYNONYMS = {
   changelog: ["releases", "updates", "history"],
   releases: ["changelog", "updates", "release-notes"]
 };
-function normalizeUrlPath(urlOrPath) {
-  try {
-    const u = new URL(urlOrPath, "https://example.com");
-    return u.pathname.replace(/\/+$/, "") || "/";
-  } catch {
-    return urlOrPath.replace(/\/+$/, "") || "/";
-  }
-}
 function generateHallucinatedPaths(knownPaths) {
-  const existingSet = new Set(knownPaths.map((p) => normalizeUrlPath(p).toLowerCase()));
+  const existingSet = new Set(knownPaths.map((p) => normalizePathname(p)));
   const candidateMap = /* @__PURE__ */ new Map();
   const addCandidate = (candPath, sourcePath, mutationType) => {
-    const normalized = normalizeUrlPath(candPath).toLowerCase();
+    const normalized = normalizePathname(candPath);
     if (normalized === "/" || existingSet.has(normalized) || candidateMap.has(normalized)) {
       return;
     }
@@ -1074,7 +1143,7 @@ function generateHallucinatedPaths(knownPaths) {
     });
   };
   for (const originalPath of knownPaths) {
-    const norm = normalizeUrlPath(originalPath);
+    const norm = normalizePathname(originalPath);
     if (norm === "/") continue;
     const segments = norm.split("/").filter(Boolean);
     if (segments.length === 0) continue;
@@ -1083,10 +1152,18 @@ function generateHallucinatedPaths(knownPaths) {
       const vMatch = /^(v|ver|version)?(\d+)$/i.exec(seg);
       if (vMatch) {
         const prefix = vMatch[1] || "v";
+        const hasPrefix = Boolean(vMatch[1]);
         const num = parseInt(vMatch[2], 10);
         const variants = [];
-        for (let n = 1; n <= Math.max(num + 2, 4); n++) {
-          if (n !== num) variants.push(n);
+        if (!hasPrefix && num > 10) {
+        } else if (num <= 10) {
+          for (let n = 1; n <= Math.max(num + 2, 4); n++) {
+            if (n !== num) variants.push(n);
+          }
+        } else {
+          for (let n = num - 1; n <= num + 2; n++) {
+            if (n !== num && n > 0) variants.push(n);
+          }
         }
         for (const varNum of variants) {
           const cloned = [...segments];
@@ -1160,16 +1237,23 @@ function generateHallucinatedPaths(knownPaths) {
   }
   return Array.from(candidateMap.values());
 }
-function predictAndEvaluateHallucinations(pages, domain, maxCandidates = 50) {
-  const pageRecords = pages.map((p) => ({
-    id: p.url,
-    site_id: domain,
-    url: p.url.startsWith("http") ? p.url : `https://${domain}${p.url.startsWith("/") ? "" : "/"}${p.url}`,
+async function predictAndEvaluateHallucinations(pages, domain, maxCandidates = 50) {
+  const resolvedUrls = pages.map(
+    (p) => p.url.startsWith("http") ? p.url : `https://${domain}${p.url.startsWith("/") ? "" : "/"}${p.url}`
+  );
+  const pageEmbeddingTexts = pages.map(
+    (p, i) => buildEmbeddingText({ url: resolvedUrls[i], title: p.title || "", description: p.description || "" })
+  );
+  const pageEmbeddings = await generateBatchEmbeddings(pageEmbeddingTexts);
+  const pageRecords = pages.map((p, i) => ({
+    id: i,
+    siteId: domain,
+    url: resolvedUrls[i],
     title: p.title || "",
     description: p.description || "",
     headings: p.headings || "[]",
-    embedding: null,
-    indexed_at: (/* @__PURE__ */ new Date()).toISOString()
+    embedding: pageEmbeddings[i],
+    lastSeen: (/* @__PURE__ */ new Date()).toISOString()
   }));
   const knownPaths = pages.map((p) => {
     try {
@@ -1180,30 +1264,28 @@ function predictAndEvaluateHallucinations(pages, domain, maxCandidates = 50) {
     }
   });
   const generated = generateHallucinatedPaths(knownPaths).slice(0, maxCandidates);
+  const deadUrls = generated.map((item) => `https://${domain}${item.path}`);
+  const candidateEmbeddings = await generateBatchEmbeddings(deadUrls.map((u) => deadUrlEmbeddingText(u)));
   const predictions = [];
   let recoveredCount = 0;
   const vulnerabilities = [];
-  for (const item of generated) {
-    const deadUrl = `https://${domain}${item.path}`;
-    const suggestions = findSuggestions(deadUrl, pageRecords);
+  generated.forEach((item, i) => {
+    const deadUrl = deadUrls[i];
+    const suggestions = findSuggestions(deadUrl, pageRecords, candidateEmbeddings[i]);
     const top = suggestions[0];
     const intendedUrl = item.sourcePath.startsWith("http") ? item.sourcePath : `https://${domain}${item.sourcePath.startsWith("/") ? "" : "/"}${item.sourcePath}`;
     let recovered = false;
     let confidence = 0;
     if (top) {
       confidence = top.score;
-      const topNorm = normalizeUrlPath(top.url);
-      const intendedNorm = normalizeUrlPath(intendedUrl);
-      if (topNorm === intendedNorm || top.score >= 0.5) {
-        recovered = true;
-      }
+      recovered = normalizePathname(top.url) === normalizePathname(intendedUrl);
     }
     if (recovered) {
       recoveredCount++;
     } else {
       vulnerabilities.push({
         path: item.path,
-        reason: top ? `Low match confidence (${(top.score * 100).toFixed(0)}%) for ${item.mutationType}` : `No suggestions found for ${item.mutationType}`
+        reason: top ? `Top suggestion (${(top.score * 100).toFixed(0)}% match) points to the wrong page for ${item.mutationType}` : `No suggestions found for ${item.mutationType}`
       });
     }
     predictions.push({
@@ -1214,9 +1296,9 @@ function predictAndEvaluateHallucinations(pages, domain, maxCandidates = 50) {
       recovered,
       confidence
     });
-  }
+  });
   const totalTested = predictions.length;
-  const recoveryRate = totalTested > 0 ? Math.round(recoveredCount / totalTested * 100) / 100 : 1;
+  const recoveryRate = totalTested > 0 ? Math.round(recoveredCount / totalTested * 100) / 100 : 0;
   return {
     totalTested,
     recoveredCount,
@@ -1234,6 +1316,44 @@ function normalizeDomain(raw) {
     return null;
   }
   return domain.toLowerCase();
+}
+
+// src/engine/readiness-score.ts
+var READINESS_WEIGHTS = {
+  /** Clean HTTP 404 on the dead path. */
+  statusClean: 25,
+  /** Consolation credit for a soft-404 (200-399) that still isn't a true 404. */
+  statusSoft: 5,
+  /** Link: rel="alternate" response headers present. */
+  linkHeaders: 20,
+  /** schema.org/ItemList JSON-LD present in the 404 body. */
+  jsonLd: 15,
+  /** CLI only: hallucinated-path recovery rate from the sitemap-crawl stress test. */
+  hallucinationRecovery: 25,
+  /** CLI only: internal broken-link health from the sitemap crawl. */
+  brokenLinkHealth: 15,
+  /** Web quick-check only: single-probe substitute for the two CLI-only checks above. */
+  hasSuggestions: 40
+};
+function scoreCleanStatus(httpStatus) {
+  if (httpStatus === 404) return READINESS_WEIGHTS.statusClean;
+  if (httpStatus >= 200 && httpStatus < 400) return READINESS_WEIGHTS.statusSoft;
+  return 0;
+}
+function scoreLinkHeaders(present) {
+  return present ? READINESS_WEIGHTS.linkHeaders : 0;
+}
+function scoreJsonLd(present) {
+  return present ? READINESS_WEIGHTS.jsonLd : 0;
+}
+function scoreHallucinationRecovery(recoveryRate) {
+  return Math.round(recoveryRate * READINESS_WEIGHTS.hallucinationRecovery);
+}
+function scoreBrokenLinkHealth(brokenCount) {
+  if (brokenCount === 0) return READINESS_WEIGHTS.brokenLinkHealth;
+  if (brokenCount < 3) return Math.round(READINESS_WEIGHTS.brokenLinkHealth * 2 / 3);
+  if (brokenCount < 8) return Math.round(READINESS_WEIGHTS.brokenLinkHealth / 3);
+  return 0;
 }
 
 // src/cli/format.ts
@@ -1332,28 +1452,13 @@ async function runCliAudit(options) {
     );
   } catch {
   }
-  const hallucinationSummary = predictAndEvaluateHallucinations(
+  const hallucinationSummary = await predictAndEvaluateHallucinations(
     discoveredPages,
     domain,
     30
   );
-  let score = 0;
-  if (probe.status === 404) {
-    score += 25;
-  } else if (probe.status >= 200 && probe.status < 400) {
-    score += 5;
-  }
-  if (probe.hasLinkHeaders) score += 20;
-  if (probe.hasJsonLd) score += 15;
-  score += Math.round(hallucinationSummary.recoveryRate * 25);
   const brokenCount = analysis?.brokenLinks.length ?? 0;
-  if (brokenCount === 0) {
-    score += 15;
-  } else if (brokenCount < 3) {
-    score += 10;
-  } else if (brokenCount < 8) {
-    score += 5;
-  }
+  const score = scoreCleanStatus(probe.status) + scoreLinkHeaders(probe.hasLinkHeaders) + scoreJsonLd(probe.hasJsonLd) + scoreHallucinationRecovery(hallucinationSummary.recoveryRate) + scoreBrokenLinkHealth(brokenCount);
   const pass = score >= minScore && probe.status === 404;
   const recommendations = [];
   if (!probe.hasLinkHeaders) {
