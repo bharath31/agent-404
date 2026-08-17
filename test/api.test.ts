@@ -9,7 +9,7 @@ import { install } from "../src/api/routes/install.js";
 import { requireOwnerApi } from "../src/auth/owner.js";
 import type { StorageAdapter } from "../src/storage/interface.js";
 import type { PostgresStorage } from "../src/storage/postgres.js";
-import type { SiteRecord, PageRecord } from "../src/types.js";
+import type { SiteRecord, PageRecord, FunnelStep, FunnelConversionMetrics } from "../src/types.js";
 import { countLiveInstalls, LIVE_INSTALL_WINDOW_DAYS } from "../src/lib/live-installs.js";
 
 // In-memory storage for testing — no database needed
@@ -18,6 +18,7 @@ class MemoryStorage implements StorageAdapter {
 	pages: PageRecord[] = [];
 	suggestionLogs: { siteId: string; deadUrl: string; suggestedUrls: string[]; createdAt: string }[] =
 		[];
+	funnelEvents: { step: FunnelStep; domain?: string; metadata?: Record<string, unknown> }[] = [];
 	private nextPageId = 1;
 
 	async createSite(domain: string, ownerSub: string): Promise<SiteRecord> {
@@ -203,6 +204,43 @@ class MemoryStorage implements StorageAdapter {
 			last7d: 0,
 			last30d: 0,
 			matchTypeDistribution: { moved: 0, similar: 0, related: 0 },
+		};
+	}
+
+	async recordFunnelEvent(
+		step: FunnelStep,
+		domain?: string,
+		metadata?: Record<string, unknown>,
+	): Promise<void> {
+		this.funnelEvents.push({ step, domain, metadata });
+	}
+
+	async getFunnelMetrics(): Promise<FunnelConversionMetrics> {
+		const count = (step: FunnelStep) => this.funnelEvents.filter((e) => e.step === step).length;
+		const started = count("audit_started");
+		const completed = count("audit_completed");
+		const shared = count("report_shared");
+		const cta = count("install_cta_clicked");
+		const registered = count("site_registered");
+		const verified = count("install_verified");
+		const safeRate = (num: number, denom: number) =>
+			denom > 0 ? Math.round((num / denom) * 1000) / 1000 : 0;
+
+		return {
+			totalAuditsStarted: started,
+			totalAuditsCompleted: completed,
+			totalReportsShared: shared,
+			totalInstallCtaClicks: cta,
+			totalSitesRegistered: registered,
+			totalInstallsVerified: verified,
+			rates: {
+				auditCompletionRate: safeRate(completed, started),
+				reportShareRate: safeRate(shared, completed),
+				installCtaRate: safeRate(cta, completed),
+				registrationRate: safeRate(registered, cta),
+				verificationRate: safeRate(verified, registered),
+				overallFunnelConversion: safeRate(verified, started),
+			},
 		};
 	}
 

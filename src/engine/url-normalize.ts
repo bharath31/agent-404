@@ -16,6 +16,24 @@ export function normalizeDeadUrl(url: string): string {
 	}
 }
 
+/**
+ * Canonical pathname comparison key: lowercased, trailing slash stripped,
+ * "/" for the root. Shared by matcher.ts, hallucination-predictor.ts and
+ * recovery-tracker.ts so "is this the same page" decisions agree across
+ * modules — they previously each carried a slightly different copy (one
+ * didn't lowercase, one had no relative-URL base fallback), which let a
+ * suggestion that matcher.ts scored as an exact match read as a mismatch
+ * elsewhere.
+ */
+export function normalizePathname(urlOrPath: string): string {
+	try {
+		const u = new URL(urlOrPath, "https://example.com");
+		return u.pathname.replace(/\/+$/, "").toLowerCase() || "/";
+	} catch {
+		return urlOrPath.replace(/\/+$/, "").toLowerCase() || "/";
+	}
+}
+
 export function pathHint(url: string): string {
 	try {
 		const parts = new URL(url).pathname.split("/").filter(Boolean);

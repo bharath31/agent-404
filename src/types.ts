@@ -79,3 +79,29 @@ export interface DashboardData {
 	pendingDomain: string | null;
 	notice: string | null;
 }
+
+// Audit-to-install conversion funnel (BAT-42)
+export type FunnelStep =
+	| "audit_started"
+	| "audit_completed"
+	| "report_shared"
+	| "install_cta_clicked"
+	| "site_registered"
+	| "install_verified";
+
+export interface FunnelConversionMetrics {
+	totalAuditsStarted: number;
+	totalAuditsCompleted: number;
+	totalReportsShared: number;
+	totalInstallCtaClicks: number;
+	totalSitesRegistered: number;
+	totalInstallsVerified: number;
+	rates: {
+		auditCompletionRate: number; // completed / started
+		reportShareRate: number; // shared / completed
+		installCtaRate: number; // cta / completed
+		registrationRate: number; // registered / cta
+		verificationRate: number; // verified / registered
+		overallFunnelConversion: number; // verified / started
+	};
+}

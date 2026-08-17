@@ -1,14 +1,74 @@
 {
   "name": "agent-404",
   "version": "0.1.0",
-  "private": true,
+  "description": "Make 404 pages agent-friendly for AI crawlers & LLMs",
+  "keywords": [
+    "404",
+    "seo",
+    "ai-agents",
+    "claudebot",
+    "gptbot",
+    "perplexitybot",
+    "json-ld",
+    "link-headers"
+  ],
+  "author": "Bharath",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/bharath31/agent-404"
+  },
   "type": "module",
+  "bin": {
+    "agent-404": "./bin/agent-404.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./adapters/index.d.ts",
+      "default": "./adapters/index.js"
+    },
+    "./adapters": {
+      "types": "./adapters/index.d.ts",
+      "default": "./adapters/index.js"
+    },
+    "./adapters/core": {
+      "types": "./adapters/core.d.ts",
+      "default": "./adapters/core.js"
+    },
+    "./adapters/next": {
+      "types": "./adapters/next.d.ts",
+      "default": "./adapters/next.js"
+    },
+    "./adapters/express": {
+      "types": "./adapters/express.d.ts",
+      "default": "./adapters/express.js"
+    },
+    "./adapters/cloudflare": {
+      "types": "./adapters/cloudflare.d.ts",
+      "default": "./adapters/cloudflare.js"
+    },
+    "./adapters/netlify": {
+      "types": "./adapters/netlify.d.ts",
+      "default": "./adapters/netlify.js"
+    },
+    "./client": "./public/agent-404.min.js"
+  },
+  "types": "./adapters/index.d.ts",
+  "files": [
+    "bin",
+    "adapters",
+    "public/agent-404.min.js",
+    "SPEC.md",
+    "README.md"
+  ],
   "scripts": {
     "dev": "vercel dev",
     "dev:cf": "wrangler dev",
     "deploy": "vercel --prod",
     "deploy:cf": "wrangler deploy",
     "build:script": "tsx script/build.ts",
+    "build:types": "tsc -p tsconfig.adapters.json",
+    "prepublishOnly": "npm run build:script && npm run build:types",
     "db:migrate": "tsx migrations/run.ts",
     "test": "vitest run",
     "test:watch": "vitest",

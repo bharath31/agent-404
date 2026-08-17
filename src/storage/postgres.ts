@@ -1,5 +1,13 @@
 import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
-import type { PageRecord, SiteRecord, SiteStats, SuggestionLog, MatchQualityStats } from "../types.js";
+import type {
+	PageRecord,
+	SiteRecord,
+	SiteStats,
+	SuggestionLog,
+	MatchQualityStats,
+	FunnelStep,
+	FunnelConversionMetrics,
+} from "../types.js";
 import type { StorageAdapter } from "./interface.js";
 import { getDatabaseUrl } from "../config.js";
 
@@ -12,6 +20,10 @@ function timingSafeEqual(a: string, b: string): boolean {
 		result |= a.charCodeAt(i) ^ b.charCodeAt(i);
 	}
 	return result === 0;
+}
+
+function safeRate(num: number, denom: number): number {
+	return denom > 0 ? Math.round((num / denom) * 1000) / 1000 : 0;
 }
 
 export class PostgresStorage implements StorageAdapter {
@@ -322,6 +334,54 @@ export class PostgresStorage implements StorageAdapter {
 	 * last 7 days, excluding CI/test domains. Keep this WHERE clause in
 	 * sync with that definition if either changes.
 	 */
+	async recordFunnelEvent(
+		step: FunnelStep,
+		domain?: string,
+		metadata?: Record<string, unknown>,
+	): Promise<void> {
+		await this.sql`
+			INSERT INTO funnel_events (step, domain, metadata)
+			VALUES (${step}, ${domain ?? null}, ${metadata ? JSON.stringify(metadata) : null})
+		`;
+	}
+
+	async getFunnelMetrics(): Promise<FunnelConversionMetrics> {
+		const { rows } = await this.sql`
+			SELECT
+				COUNT(*) FILTER (WHERE step = 'audit_started') as started,
+				COUNT(*) FILTER (WHERE step = 'audit_completed') as completed,
+				COUNT(*) FILTER (WHERE step = 'report_shared') as shared,
+				COUNT(*) FILTER (WHERE step = 'install_cta_clicked') as cta,
+				COUNT(*) FILTER (WHERE step = 'site_registered') as registered,
+				COUNT(*) FILTER (WHERE step = 'install_verified') as verified
+			FROM funnel_events
+		`;
+		const row = rows[0] || {};
+		const started = Number(row.started ?? 0);
+		const completed = Number(row.completed ?? 0);
+		const shared = Number(row.shared ?? 0);
+		const cta = Number(row.cta ?? 0);
+		const registered = Number(row.registered ?? 0);
+		const verified = Number(row.verified ?? 0);
+
+		return {
+			totalAuditsStarted: started,
+			totalAuditsCompleted: completed,
+			totalReportsShared: shared,
+			totalInstallCtaClicks: cta,
+			totalSitesRegistered: registered,
+			totalInstallsVerified: verified,
+			rates: {
+				auditCompletionRate: safeRate(completed, started),
+				reportShareRate: safeRate(shared, completed),
+				installCtaRate: safeRate(cta, completed),
+				registrationRate: safeRate(registered, cta),
+				verificationRate: safeRate(verified, registered),
+				overallFunnelConversion: safeRate(verified, started),
+			},
+		};
+	}
+
 	async getLiveInstallCount(): Promise<number> {
 		const { rows } = await this.sql`
 			SELECT COUNT(*) AS count FROM sites s
