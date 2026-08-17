@@ -29,6 +29,7 @@ import {
 } from "./auth/config.js";
 import { requireOwnerApi, sessionOwnerSub } from "./auth/owner.js";
 import { getDatabaseUrl } from "./config.js";
+import { AGENT_404_SKILL_MD } from "./skills/agent-404.js";
 import type { SiteRecord } from "./types.js";
 
 export type Bindings = {
@@ -159,6 +160,38 @@ app.get("/demo", (c) => c.html(demoPageHtml));
 
 // Health check
 app.get("/api/health", (c) => c.json({ status: "ok" }));
+
+// Agent skill & llms.txt discovery
+app.get("/llms.txt", (c) =>
+	c.text(
+		`# Agent 404
+
+> HTTP-layer semantic 404 recovery for AI agents (ClaudeBot, GPTBot, Perplexity) and human users.
+
+## Documentation & Skills
+- Agent Skill: https://www.agent404.dev/skills/agent-404/SKILL.md
+- Skill Raw: https://www.agent404.dev/skills/agent-404
+- API Reference: https://www.agent404.dev/api/suggest
+- Health & Install Status: https://www.agent404.dev/api/install/status
+
+## Quick Install (Adapters)
+- Next.js: npm install @agent-404/next
+- Cloudflare Workers: npm install @agent-404/cloudflare
+- Express: npm install @agent-404/express
+- HTML Script Tag: <script src="https://www.agent404.dev/agent404.js" data-site-id="YOUR_SITE_ID" data-public-key="pk_..." defer></script>
+`,
+		200,
+		{ "Content-Type": "text/plain; charset=utf-8" },
+	),
+);
+
+app.get("/skills/agent-404", (c) => c.redirect("/skills/agent-404/SKILL.md", 302));
+
+app.get("/skills/agent-404/SKILL.md", (c) =>
+	c.text(AGENT_404_SKILL_MD, 200, {
+		"Content-Type": "text/markdown; charset=utf-8",
+	}),
+);
 
 // Demo discovery route
 app.route("/api/demo", demo);

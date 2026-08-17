@@ -60,4 +60,37 @@ describe("dashboardHtml", () => {
 		expect(html).toContain(CANONICAL_SCRIPT_URL);
 		expect(html).not.toContain("<script\n  src=");
 	});
+
+	it("renders an onboard agent pill button with agent icons and tailored prompt", () => {
+		const html = dashboardHtml(data());
+		expect(html).toContain("btn-agent-onboard");
+		expect(html).toContain("Onboard your agent to agent-404");
+		expect(html).toContain("data-copy-agent-prompt");
+		expect(html).toContain("agent-logos-cluster");
+		expect(html).toContain("agent-logo-claude");
+		expect(html).toContain("agent-logo-terminal");
+		expect(html).toContain("agent-logo-cursor");
+		expect(html).toContain("agent-logo-editor");
+		expect(html).toContain("example.com");
+		expect(html).toContain("site-1");
+		expect(html).toContain("pk_abc");
+		expect(html).not.toContain("key_abc");
+	});
+
+	it("renders an Agent Prompt integration tab and helper badges", () => {
+		const html = dashboardHtml(data());
+		expect(html).toContain("tab-btn-agent");
+		expect(html).toContain("Agent Prompt");
+		expect(html).toContain("/skills/agent-404/SKILL.md");
+		expect(html).toContain("Claude Code");
+		expect(html).toContain("Cursor");
+		expect(html).toContain("Windsurf");
+		expect(html).toContain("btn-copy-agent-quick");
+	});
+
+	it("renders a copy agent prompt CTA in the warning alert box when awaiting beacons", () => {
+		const html = dashboardHtml(data());
+		expect(html).toContain("alert-agent-row");
+		expect(html).toContain("btn-alert-copy-prompt");
+	});
 });

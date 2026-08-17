@@ -61,6 +61,125 @@ app.use(agent404Express({
 }));`;
 }
 
+/**
+ * Single source of truth for the complete AI coding agent prompt.
+ * Tailored with the site's domain, siteId, and publicKey (never secret key).
+ */
+function rawAgentPrompt(site: Pick<DashboardSiteData, "id" | "publicKey" | "domain">): string {
+	return `You are an AI coding assistant. Install and configure agent-404 (https://www.agent404.dev) in this project so that all dead links and 404 responses automatically self-heal and return semantic Link headers for AI crawlers (Claude, GPTBot, Perplexity) and human users.
+
+### Project Credentials
+- **Domain:** ${site.domain}
+- **Site ID:** ${site.id}
+- **Public Key:** ${site.publicKey}
+- **Canonical API Base:** https://www.agent404.dev
+
+### Instructions
+1. Inspect the codebase to detect the project framework (Next.js, Cloudflare Workers, Express, or Static HTML).
+2. Install the appropriate SDK:
+   - Next.js: run \`npm install @agent-404/next\` (or pnpm/yarn/bun)
+   - Cloudflare Workers: run \`npm install @agent-404/cloudflare\`
+   - Express: run \`npm install @agent-404/express\`
+   - Static HTML: insert the \`<script>\` tag in <head> or <body>
+3. Configure the middleware/adapter:
+   - **Next.js (\`middleware.ts\`):**
+     \`\`\`typescript
+     import { agent404 } from "@agent-404/next";
+
+     export const middleware = agent404({
+       apiKey: process.env.AGENT404_PUBLIC_KEY || "${site.publicKey}",
+       siteId: "${site.id}",
+     });
+
+     export const config = {
+       matcher: ["/((?!api|_next/static|_next/image|favicon.ico).*)"],
+     };
+     \`\`\`
+   - **Cloudflare Worker (\`worker.ts\`):**
+     \`\`\`typescript
+     import { agent404Worker } from "@agent-404/cloudflare";
+
+     export default {
+       async fetch(req: Request, env: any, ctx: any) {
+         return agent404Worker(req, env, {
+           publicKey: env.AGENT404_PUBLIC_KEY || "${site.publicKey}",
+           siteId: "${site.id}",
+         });
+       },
+     };
+     \`\`\`
+   - **Express (\`server.js\` / \`app.ts\`):**
+     \`\`\`javascript
+     import { agent404Express } from "@agent-404/express";
+
+     app.use(agent404Express({
+       publicKey: process.env.AGENT404_PUBLIC_KEY || "${site.publicKey}",
+       siteId: "${site.id}",
+     }));
+     \`\`\`
+   - **HTML Script Tag:**
+     \`\`\`html
+     <script
+       src="${CANONICAL_SCRIPT_URL}"
+       data-site-id="${site.id}"
+       data-public-key="${site.publicKey}"
+       defer
+     ></script>
+     \`\`\`
+4. Set environment variables in \`.env\` or \`.env.local\`:
+   \`\`\`env
+   AGENT404_PUBLIC_KEY="${site.publicKey}"
+   AGENT404_SITE_ID="${site.id}"
+   \`\`\`
+5. Verify the installation:
+   - Request a non-existent route (e.g. \`curl -I http://localhost:3000/non-existent-test\`) and confirm that \`Link: </suggested-path>; rel="alternate"\` is present.
+   - Confirm indexing status with:
+     \`\`\`bash
+     curl "https://www.agent404.dev/api/install/status?domain=${site.domain}&apiKey=${site.publicKey}"
+     \`\`\`
+   - Always ensure requests use \`https://www.agent404.dev\` (not apex) to avoid CORS preflight issues.`;
+}
+
+function agentLogosClusterHtml(): string {
+	return `<span class="agent-logos-cluster" aria-hidden="true">
+  <svg class="agent-logo agent-logo-claude" width="15" height="15" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" title="Claude / Anthropic">
+    <g stroke="#D97757" stroke-width="2.3" stroke-linecap="round">
+      <line x1="12" y1="2.5" x2="12" y2="21.5"/>
+      <line x1="2.5" y1="12" x2="21.5" y2="12"/>
+      <line x1="5.28" y1="5.28" x2="18.72" y2="18.72"/>
+      <line x1="18.72" y1="5.28" x2="5.28" y2="18.72"/>
+      <line x1="12" y1="2.5" x2="12" y2="21.5" transform="rotate(22.5 12 12)"/>
+      <line x1="2.5" y1="12" x2="21.5" y2="12" transform="rotate(22.5 12 12)"/>
+    </g>
+  </svg>
+  <svg class="agent-logo agent-logo-terminal" width="15" height="15" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" title="Claude Code">
+    <rect width="22" height="22" x="1" y="1" rx="6" fill="#18181b"/>
+    <path d="M6.5 8.5L10.5 12L6.5 15.5" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    <line x1="12.5" y1="15.5" x2="17.5" y2="15.5" stroke="#ffffff" stroke-width="2" stroke-linecap="round"/>
+  </svg>
+  <svg class="agent-logo agent-logo-cursor" width="15" height="15" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" title="Cursor">
+    <rect width="22" height="22" x="1" y="1" rx="6" fill="#09090b"/>
+    <path d="M12 4L18.5 7.75V15.25L12 19L5.5 15.25V7.75L12 4Z" fill="#18181b" stroke="#ffffff" stroke-width="1.2" stroke-linejoin="round"/>
+    <path d="M12 4L18.5 7.75L12 11.5L5.5 7.75L12 4Z" fill="#ffffff" fill-opacity="0.95"/>
+    <path d="M12 11.5V19L18.5 15.25V7.75L12 11.5Z" fill="#71717a"/>
+    <path d="M5.5 7.75L12 11.5V19L5.5 15.25V7.75Z" fill="#3f3f46"/>
+  </svg>
+  <svg class="agent-logo agent-logo-editor" width="15" height="15" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" title="Windsurf &amp; Copilot">
+    <rect width="22" height="22" x="1" y="1" rx="6" fill="#09090b"/>
+    <rect x="4.5" y="5.5" width="6" height="13" rx="1.5" fill="#ffffff"/>
+    <rect x="12.5" y="5.5" width="7" height="13" rx="1.5" fill="#52525b"/>
+  </svg>
+</span>`;
+}
+
+function agentOnboardButtonHtml(site: Pick<DashboardSiteData, "id" | "publicKey" | "domain">): string {
+	const prompt = rawAgentPrompt(site);
+	return `<button type="button" class="btn-agent-onboard" data-copy-agent-prompt="${escapeHtml(prompt)}" title="Copy setup prompt for Claude Code, Cursor, Windsurf, or Copilot" aria-label="Onboard your agent to agent-404">
+  <span class="btn-agent-label">Onboard your agent to agent-404</span>
+  ${agentLogosClusterHtml()}
+</button>`;
+}
+
 function snippetHtml(site: Pick<DashboardSiteData, "id" | "publicKey">): string {
 	return escapeHtml(rawScriptSnippet(site));
 }
@@ -119,6 +238,13 @@ function siteSection(site: DashboardSiteData, index: number): string {
     then open a live page and check the browser console for <code>[agent-404]</code> warnings.
     You can also call <code>GET /api/install/status</code> with your API key.
   </p>
+  <div class="alert-agent-row">
+    <span>Let an AI agent inspect and complete the setup for you:</span>
+    <button type="button" class="btn-alert-copy-prompt" data-copy-agent-prompt="${escapeHtml(rawAgentPrompt(site))}">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+      Copy Agent Prompt
+    </button>
+  </div>
 </div>`
 			: "";
 
@@ -131,6 +257,7 @@ function siteSection(site: DashboardSiteData, index: number): string {
         <span class="badge ${site.pageCount > 0 ? "badge-success" : "badge-neutral"}">
           <span class="dot"></span> ${site.pageCount > 0 ? "Active" : "Awaiting Beacons"}
         </span>
+        ${agentOnboardButtonHtml(site)}
       </div>
       <div class="site-meta-keys">
         <div class="meta-item">
@@ -155,11 +282,20 @@ function siteSection(site: DashboardSiteData, index: number): string {
 
   <!-- Integration Snippets -->
   <div class="integration-panel">
-    <div class="integration-tabs" role="tablist">
-      <button type="button" class="tab-btn active" data-tab-target="tab-next-${index}">Next.js</button>
-      <button type="button" class="tab-btn" data-tab-target="tab-cf-${index}">Cloudflare</button>
-      <button type="button" class="tab-btn" data-tab-target="tab-express-${index}">Express</button>
-      <button type="button" class="tab-btn" data-tab-target="tab-script-${index}">Script Tag</button>
+    <div class="integration-tabs-header">
+      <div class="integration-tabs" role="tablist">
+        <button type="button" class="tab-btn active" data-tab-target="tab-next-${index}">Next.js</button>
+        <button type="button" class="tab-btn" data-tab-target="tab-cf-${index}">Cloudflare</button>
+        <button type="button" class="tab-btn" data-tab-target="tab-express-${index}">Express</button>
+        <button type="button" class="tab-btn" data-tab-target="tab-script-${index}">Script Tag</button>
+        <button type="button" class="tab-btn tab-btn-agent" data-tab-target="tab-agent-${index}">
+          <span class="tab-agent-sparkle">✨</span> Agent Prompt
+        </button>
+      </div>
+      <button type="button" class="btn-copy-agent-quick" data-copy-agent-prompt="${escapeHtml(rawAgentPrompt(site))}" title="Copy complete prompt for AI coding agents">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>
+        <span>Copy Agent Prompt</span>
+      </button>
     </div>
 
     <div class="tab-content active" id="tab-next-${index}">
@@ -199,6 +335,25 @@ function siteSection(site: DashboardSiteData, index: number): string {
           <button type="button" class="copy-btn" data-copy="${escapeHtml(rawScriptSnippet(site))}">Copy</button>
         </div>
         <pre class="snippet"><code>${snippetHtml(site)}</code></pre>
+      </div>
+    </div>
+
+    <div class="tab-content" id="tab-agent-${index}">
+      <div class="code-block">
+        <div class="code-block-header">
+          <div class="agent-tab-badges">
+            <span class="code-lang">Prompt for Claude Code, Cursor, Windsurf, Copilot, &amp; Pi</span>
+            <a href="/skills/agent-404/SKILL.md" target="_blank" class="agent-skill-link" title="Open SKILL.md specification">SKILL.md &nearr;</a>
+          </div>
+          <button type="button" class="copy-btn copy-btn-primary" data-copy-agent-prompt="${escapeHtml(rawAgentPrompt(site))}">Copy Agent Prompt</button>
+        </div>
+        <pre class="snippet snippet-markdown"><code>${escapeHtml(rawAgentPrompt(site))}</code></pre>
+        <div class="agent-helper-row">
+          <div class="agent-tip-pill"><strong>Claude Code:</strong> <code>claude "Install agent-404"</code></div>
+          <div class="agent-tip-pill"><strong>Cursor:</strong> Paste into Composer (<code>Cmd+I</code>)</div>
+          <div class="agent-tip-pill"><strong>Windsurf:</strong> Paste into Cascade (<code>Cmd+I</code>)</div>
+          <div class="agent-tip-pill"><strong>Copilot:</strong> Paste into Copilot Edits</div>
+        </div>
       </div>
     </div>
   </div>
@@ -922,6 +1077,67 @@ export function dashboardHtml(data: DashboardData): string {
     font-family: var(--font-mono);
   }
 
+  /* Onboard Agent Pill Button (Cloudflare-style) */
+  .btn-agent-onboard {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.65rem;
+    background: #ffffff;
+    color: #09090b;
+    border: 1px solid rgba(255, 255, 255, 0.9);
+    border-radius: 9999px;
+    padding: 0.35rem 0.85rem;
+    font-size: 0.8125rem;
+    font-weight: 550;
+    font-family: var(--font-sans);
+    cursor: pointer;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25), 0 1px 2px rgba(0, 0, 0, 0.15);
+    transition: all 0.16s cubic-bezier(0.16, 1, 0.3, 1);
+    white-space: nowrap;
+    text-decoration: none;
+    line-height: 1.2;
+    margin-left: auto;
+  }
+  .btn-agent-onboard:hover {
+    background: #ffffff;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 14px rgba(255, 255, 255, 0.2), 0 2px 4px rgba(0, 0, 0, 0.3);
+    border-color: #ffffff;
+    color: #000;
+  }
+  .btn-agent-onboard:active {
+    transform: translateY(0);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  }
+  .btn-agent-onboard.copied {
+    background: #ecfdf5;
+    border-color: #10b981;
+    color: #065f46;
+  }
+
+  .agent-logos-cluster {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+  }
+
+  .agent-logo {
+    display: inline-block;
+    flex-shrink: 0;
+    width: 15px;
+    height: 15px;
+    vertical-align: middle;
+  }
+
+  @media (max-width: 768px) {
+    .btn-agent-onboard {
+      margin-left: 0;
+      width: 100%;
+      justify-content: center;
+      margin-top: 0.5rem;
+    }
+  }
+
   .badge {
     display: inline-flex;
     align-items: center;
@@ -988,6 +1204,22 @@ export function dashboardHtml(data: DashboardData): string {
     margin-bottom: 1.75rem;
   }
 
+  .integration-tabs-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--surface-elevated);
+    border-bottom: 1px solid var(--border);
+    padding: 0.25rem 0.5rem 0;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+
+  .integration-tabs-header .integration-tabs {
+    border-bottom: none;
+    padding: 0;
+  }
+
   .integration-tabs {
     display: flex;
     background: var(--surface-elevated);
@@ -1018,6 +1250,39 @@ export function dashboardHtml(data: DashboardData): string {
     font-weight: 600;
   }
 
+  .tab-btn-agent {
+    color: #93c5fd;
+  }
+  .tab-btn-agent.active {
+    color: #bfdbfe;
+    border-bottom-color: #3b82f6;
+  }
+  .tab-agent-sparkle {
+    margin-right: 0.25rem;
+    font-size: 0.75rem;
+  }
+
+  .btn-copy-agent-quick {
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
+    font-size: 0.72rem;
+    font-family: var(--font-mono);
+    padding: 0.25rem 0.6rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    cursor: pointer;
+    transition: all 0.15s;
+    margin-bottom: 0.25rem;
+  }
+  .btn-copy-agent-quick:hover {
+    color: var(--text);
+    border-color: var(--border-focus);
+    background: var(--surface-hover);
+  }
+
   .tab-content { display: none; }
   .tab-content.active { display: block; }
 
@@ -1031,12 +1296,20 @@ export function dashboardHtml(data: DashboardData): string {
     align-items: center;
     justify-content: space-between;
     margin-bottom: 0.75rem;
+    flex-wrap: wrap;
+    gap: 0.5rem;
   }
 
   .code-lang {
     font-family: var(--font-mono);
     font-size: 0.7rem;
     color: var(--text-muted);
+  }
+
+  .code-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
   }
 
   .copy-btn {
@@ -1053,6 +1326,107 @@ export function dashboardHtml(data: DashboardData): string {
   .copy-btn:hover {
     color: var(--text);
     border-color: var(--border-focus);
+  }
+
+  .copy-btn-primary {
+    background: var(--accent);
+    color: #ffffff;
+    border-color: var(--accent);
+    font-weight: 600;
+  }
+  .copy-btn-primary:hover {
+    background: var(--accent-hover);
+    border-color: var(--accent-hover);
+    color: #ffffff;
+  }
+
+  .agent-tab-badges {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+  }
+
+  .agent-skill-link {
+    font-size: 0.7rem;
+    font-family: var(--font-mono);
+    color: var(--accent);
+    text-decoration: underline;
+    transition: color 0.15s;
+  }
+  .agent-skill-link:hover {
+    color: #93c5fd;
+  }
+
+  .snippet-markdown {
+    color: #e4e4e7;
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 380px;
+    overflow-y: auto;
+  }
+
+  .agent-helper-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 1rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--border-subtle);
+  }
+
+  .agent-tip-pill {
+    background: var(--surface-elevated);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 0.3rem 0.6rem;
+    font-size: 0.72rem;
+    color: var(--text-secondary);
+  }
+  .agent-tip-pill strong {
+    color: var(--text);
+  }
+  .agent-tip-pill code {
+    font-family: var(--font-mono);
+    color: #93c5fd;
+    background: rgba(0,0,0,0.3);
+    padding: 0.1rem 0.3rem;
+    border-radius: 3px;
+    font-size: 0.9em;
+  }
+
+  .alert-agent-row {
+    margin-top: 0.75rem;
+    padding-top: 0.65rem;
+    border-top: 1px solid rgba(245, 158, 11, 0.2);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    font-size: 0.8rem;
+    color: var(--text);
+    flex-wrap: wrap;
+  }
+
+  .btn-alert-copy-prompt {
+    background: rgba(245, 158, 11, 0.15);
+    border: 1px solid rgba(245, 158, 11, 0.4);
+    color: #fde68a;
+    border-radius: var(--radius-sm);
+    padding: 0.25rem 0.6rem;
+    font-size: 0.75rem;
+    font-family: var(--font-mono);
+    font-weight: 500;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    transition: all 0.15s;
+  }
+  .btn-alert-copy-prompt:hover {
+    background: rgba(245, 158, 11, 0.25);
+    border-color: rgba(245, 158, 11, 0.6);
+    color: #fff;
   }
 
   .snippet {
@@ -1499,6 +1873,36 @@ export function dashboardHtml(data: DashboardData): string {
         } else {
           showToast('Copied to clipboard');
         }
+      });
+    });
+  });
+
+  // Agent prompt copy buttons
+  document.querySelectorAll('[data-copy-agent-prompt]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const text = btn.getAttribute('data-copy-agent-prompt') || '';
+      if (!text) return;
+      navigator.clipboard.writeText(text).then(() => {
+        const isPill = btn.classList.contains('btn-agent-onboard');
+        const isQuickBtn = btn.classList.contains('btn-copy-agent-quick') || btn.classList.contains('btn-alert-copy-prompt') || btn.classList.contains('copy-btn-primary');
+
+        if (isPill) {
+          const labelEl = btn.querySelector('.btn-agent-label');
+          if (labelEl) {
+            const prev = labelEl.textContent;
+            labelEl.textContent = 'Prompt copied! ✓';
+            btn.classList.add('copied');
+            setTimeout(() => {
+              labelEl.textContent = prev;
+              btn.classList.remove('copied');
+            }, 2000);
+          }
+        } else if (isQuickBtn) {
+          const prev = btn.textContent;
+          btn.textContent = 'Copied! ✓';
+          setTimeout(() => { btn.textContent = prev; }, 1800);
+        }
+        showToast('Agent prompt copied! Paste into Claude Code, Cursor, Windsurf, or Copilot.');
       });
     });
   });
