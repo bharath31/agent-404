@@ -51,6 +51,7 @@
   },
   "dependencies": {
     "@auth0/auth0-hono": "^1.2.6",
+    "@auth0/auth0-server-js": "^1.12.1",
     "@hono/node-server": "^2.1.1",
     "@neondatabase/serverless": "^1.0.2",
     "@vercel/analytics": "^2.0.1",
@@ -59,6 +60,7 @@
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20260313.1",
     "@playwright/test": "^1.58.2",
+    "@types/node": "^26.2.0",
     "@vercel/node": "^5.6.15",
     "esbuild": "^0.24.0",
     "tsx": "^4.19.0",
