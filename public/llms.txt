@@ -1,0 +1,15 @@
+# Agent 404
+
+> HTTP-layer semantic 404 recovery for AI agents (ClaudeBot, GPTBot, Perplexity) and human users.
+
+## Documentation & Skills
+- Agent Skill: https://www.agent404.dev/skills/agent-404/SKILL.md
+- Skill Raw: https://www.agent404.dev/skills/agent-404
+- API Reference: https://www.agent404.dev/api/suggest
+- Health & Install Status: https://www.agent404.dev/api/install/status
+
+## Quick Install (Adapters)
+- Next.js: `npm install @agent-404/next`
+- Cloudflare Workers: `npm install @agent-404/cloudflare`
+- Express: `npm install @agent-404/express`
+- HTML Script Tag: `<script src="https://www.agent404.dev/agent404.js" data-site-id="YOUR_SITE_ID" data-public-key="pk_..." defer></script>`
