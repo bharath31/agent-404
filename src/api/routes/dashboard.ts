@@ -6,6 +6,7 @@ import { requireOwnerPage } from "../../auth/owner.js";
 import { normalizeDomain } from "../domain.js";
 import { dashboardHtml } from "../../dashboard.js";
 import type { DashboardSiteData } from "../../types.js";
+import { verificationInstructions } from "./sites.js";
 
 type Env = {
 	Variables: {
@@ -68,6 +69,8 @@ dashboard.get("/", requireOwnerPage(), async (c) => {
 				lastBeaconAt: stats.lastBeaconAt,
 				recentLogs,
 				matchQuality,
+				verified: Boolean(site.verifiedAt),
+				verification: verificationInstructions(site.domain, site.verificationToken),
 			};
 		}),
 	);

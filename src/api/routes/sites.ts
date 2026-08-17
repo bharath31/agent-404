@@ -17,7 +17,7 @@ type Env = { Variables: { storage: PostgresStorage; siteId: string; ownerSub: st
 
 const sites = new Hono<Env>();
 
-function verificationInstructions(domain: string, token: string) {
+export function verificationInstructions(domain: string, token: string) {
 	return {
 		dnsTxt: { name: verificationTxtName(domain), value: token },
 		wellKnown: { url: wellKnownUrl(domain), body: token },
