@@ -21,3 +21,20 @@ export default agent404Worker({
 ```
 
 Get `apiKey` (the read-only public key) by registering your domain at [agent404.dev](https://www.agent404.dev).
+
+## Cloudflare Pages (`_worker.js`)
+
+On Pages, the default origin fetch would re-enter the same Pages function and recurse (Cloudflare aborts it with error 1019). Serve probes from the static asset binding instead:
+
+```js
+import { agent404Worker } from "@agent404/cloudflare";
+
+export default {
+  async fetch(request, env) {
+    return agent404Worker({
+      apiKey: env.AGENT404_PUBLIC_KEY || "pk_your_public_key",
+      fetchOrigin: (req) => env.ASSETS.fetch(req),
+    }).fetch(request, env);
+  },
+};
+```
