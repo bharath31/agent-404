@@ -22,6 +22,8 @@ Agent 404 (https://www.agent404.dev) provides HTTP-layer semantic 404 recovery f
 Every indexed site requires two identifiers:
 - **Site ID (`siteId`):** UUID identifying the domain's vector index (e.g. `a46ae835-f410-40be-beea-225479f3ad94`).
 - **Public Key (`publicKey`):** Safe public read/beacon key (starts with `pk_`). Safe to commit or expose in client headers.
+
+> Adapter configs take only `apiKey` (the `pk_` key value). `siteId` is used by the dashboard, the HTML script tag (`data-site-id`), and the verification flow — it is **not** a key in any adapter's config object.
 - **Canonical API Base:** Always `https://www.agent404.dev` (never apex `agent404.dev` to avoid 308 redirects breaking CORS preflight).
 
 ```env
@@ -48,7 +50,6 @@ AGENT404_SITE_ID="site-uuid-..."
 
    export const middleware = agent404({
      apiKey: process.env.AGENT404_PUBLIC_KEY || "pk_YOUR_PUBLIC_KEY",
-     siteId: process.env.AGENT404_SITE_ID || "YOUR_SITE_ID",
    });
 
    export const config = {
@@ -111,14 +112,50 @@ AGENT404_SITE_ID="site-uuid-..."
    ```typescript
    import { agent404Worker } from "@agent404/cloudflare";
 
+   export default agent404Worker({
+     apiKey: "pk_YOUR_PUBLIC_KEY",
+   });
+   ```
+
+   `agent404Worker(config)` is a **factory**: it takes a `RecoveryConfig` (`apiKey`, optional `apiBase` / `origin` / `timeoutMs`) plus `fetchOrigin` / `probeTimeoutMs`, and returns a `{ fetch }` handler — never call it with a `Request` or per-request config. Only `apiKey` (the `pk_` key) is required; `siteId` is a dashboard identifier and is not read by the adapter.
+
+3. **Cloudflare Pages (`_worker.js` advanced mode) — use the `ASSETS` binding:**
+   ```javascript
+   import { agent404Worker } from "@agent404/cloudflare";
+
    export default {
-     async fetch(req: Request, env: { AGENT404_PUBLIC_KEY?: string; AGENT404_SITE_ID?: string }, ctx: unknown): Promise<Response> {
-       return agent404Worker(req, env, {
-         publicKey: env.AGENT404_PUBLIC_KEY || "pk_YOUR_PUBLIC_KEY",
-         siteId: env.AGENT404_SITE_ID || "YOUR_SITE_ID",
-       });
+     async fetch(request, env, ctx) {
+       return agent404Worker({
+         apiKey: env.AGENT404_PUBLIC_KEY || "pk_YOUR_PUBLIC_KEY",
+         // Required on Pages: a self-fetch re-enters the same Pages function,
+         // and the probe passthrough keeps the probe header, so the request
+         // recurses until Cloudflare kills it with error 1019.
+         fetchOrigin: (req) => env.ASSETS.fetch(req),
+       }).fetch(request, env, ctx);
      },
    };
+   ```
+
+   The default `fetchOrigin` (global `fetch`) is only safe when the probe URL is served without re-entering the Worker: a route-based Worker on the same zone as its origin (same-zone subrequests bypass the Worker), or a Worker proxying a different host. On Pages, always set `fetchOrigin` to `env.ASSETS.fetch`.
+
+---
+
+### Netlify Edge Functions
+
+1. **Install adapter:**
+   ```bash
+   npm install @agent404/netlify
+   ```
+
+2. **Add Edge Function (`netlify/edge-functions/agent-404.ts`):**
+   ```typescript
+   import { agent404Netlify } from "@agent404/netlify";
+
+   export default agent404Netlify({
+     apiKey: Netlify.env.get("AGENT404_PUBLIC_KEY") || "pk_YOUR_PUBLIC_KEY",
+   });
+
+   export const config = { path: "/*" };
    ```
 
 ---
@@ -130,21 +167,27 @@ AGENT404_SITE_ID="site-uuid-..."
    npm install @agent404/express
    ```
 
-2. **Add Express Middleware (`server.js` or `app.ts`):**
+2. **Add Express 404 Handler (`server.js` or `app.ts`):**
    ```javascript
    import express from "express";
-   import { agent404Express } from "@agent404/express";
+   import { recoverExpress404 } from "@agent404/express";
 
    const app = express();
 
-   // Attach agent404 middleware
-   app.use(agent404Express({
-     publicKey: process.env.AGENT404_PUBLIC_KEY || "pk_YOUR_PUBLIC_KEY",
-     siteId: process.env.AGENT404_SITE_ID || "YOUR_SITE_ID",
-   }));
-
    // Your standard routes...
+
+   // Last: 404 handler with agent-404 recovery
+   app.use(async (req, res) => {
+     const recovered = await recoverExpress404(req, "<h1>Not Found</h1>", {
+       apiKey: process.env.AGENT404_PUBLIC_KEY || "pk_YOUR_PUBLIC_KEY",
+     });
+     res.status(404);
+     recovered.headers.forEach((v, k) => res.setHeader(k, v));
+     res.send(await recovered.text());
+   });
    ```
+
+   The adapter exports `recoverExpress404(req, bodyHtml, config)` for use inside your own 404 handler — there is no middleware factory. Only `apiKey` is required.
 
 ---
 
@@ -196,4 +239,6 @@ npx agent-404 audit yourdomain.com
 | **CORS Preflight Failure** | Requesting apex `https://agent404.dev` which triggers 308 redirect | Use canonical `https://www.agent404.dev` |
 | **Awaiting Beacons Warning** | Zero page views or index beacons received yet | Open a live page in browser or run curl with the script tag |
 | **High Latency on Static Files** | Matcher not excluding `_next/static`, images, fonts | Update middleware `matcher` regex to filter out static extensions |
-| **Recursive Fetch Loop** | Middleware probing itself on downstream requests | Use built-in adapter which automatically sends `x-agent-404: probe` header to bypass loops |
+| **Recursive Fetch Loop (Next.js)** | Edge Middleware re-runs on `fetch()` to the same host, so a probe self-fetch is intercepted again | Built-in adapter sends the `x-agent-404: probe` header, which middleware passes through without recovering — loops are broken by the header, no action needed |
+| **Worker Exception / HTTP 500 (Cloudflare Pages)** | Calling `agent404Worker` per-request with a `Request` instead of using the factory (`agent404Worker(config)` returns `{ fetch }`) | Use the recipe in section 2 — the factory takes the config object and returns a handler to return from `fetch()` |
+| **Worker Exception / error 1019 (Cloudflare Pages)** | Probe self-fetch re-enters the same Pages function; the passthrough keeps the probe header, so the request recurses until Cloudflare aborts it | Pass `fetchOrigin: (req) => env.ASSETS.fetch(req)` so probes terminate at the static asset store (see section 2) |
