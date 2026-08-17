@@ -1016,6 +1016,112 @@ app.use(agent404Express({
       }, 300);
       setTimeout(cycleTicker, 3500);
     }
+
+    // Domain registration — passwordless email OTP via Auth0, then dashboard
+    const signedIn = ${signedIn};
+    const domainInput = document.getElementById('domain-input');
+    const errorEl = document.getElementById('register-error');
+    const claimPanel = document.getElementById('claim-panel');
+    domainInput.addEventListener('keydown', e => { if (e.key === 'Enter') registerSite(); });
+    document.getElementById('claim-btn').addEventListener('click', claimSite);
+
+    function showError(msg) {
+      errorEl.textContent = msg;
+      errorEl.hidden = !msg;
+    }
+
+    function loginUrl(domain) {
+      const returnTo = domain
+        ? '/dashboard?register=' + encodeURIComponent(domain)
+        : '/dashboard';
+      return '/auth/login?return_to=' + encodeURIComponent(returnTo);
+    }
+
+    async function registerSite() {
+      let domain = domainInput.value.trim();
+      if (!domain) { domainInput.focus(); return; }
+      domain = domain.replace(/^https?:\\/\\//, '').replace(/\\/+\$/, '');
+      showError('');
+      claimPanel.hidden = true;
+
+      if (!signedIn) {
+        // BAT-42: beacon the install CTA click even for signed-out visitors —
+        // the click is the funnel stage, not the registration.
+        fetch('/api/funnel/install-cta', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ domain }),
+        }).catch(() => {});
+        window.location.href = loginUrl(domain);
+        return;
+      }
+
+      const btn = document.getElementById('register-btn');
+      const origText = btn.textContent;
+      btn.textContent = 'Generating...';
+      btn.disabled = true;
+      btn.style.opacity = '0.7';
+
+      // BAT-42: beacon the install CTA click (fire-and-forget, must never
+      // block the registration flow).
+      fetch('/api/funnel/install-cta', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ domain }),
+      }).catch(() => {});
+
+      try {
+        const res = await fetch('/api/sites', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ domain })
+        });
+
+        if (res.status === 401) {
+          window.location.href = loginUrl(domain);
+          return;
+        }
+
+        if (res.status === 201 || res.status === 200) {
+          window.location.href = '/dashboard';
+          return;
+        }
+
+        const err = await res.json().catch(() => ({}));
+        if (res.status === 409 && err.code === 'unowned') {
+          claimPanel.hidden = false;
+          claimPanel.dataset.domain = err.domain || domain;
+          showError(err.error || 'Link this site with your API key.');
+          return;
+        }
+        showError(err.error || 'Something went wrong');
+      } catch {
+        showError('Network error — please try again');
+      } finally {
+        btn.textContent = origText;
+        btn.disabled = false;
+        btn.style.opacity = '1';
+      }
+    }
+
+    async function claimSite() {
+      const domain = claimPanel.dataset.domain || domainInput.value.trim();
+      const apiKey = document.getElementById('claim-key-input').value.trim();
+      showError('');
+      const res = await fetch('/api/sites/claim', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ domain, apiKey })
+      });
+      if (res.ok) {
+        window.location.href = '/dashboard';
+        return;
+      }
+      const err = await res.json().catch(() => ({}));
+      showError(err.error || 'Could not link this site.');
+    }
     tickerDead.style.transition = 'opacity 0.3s';
     tickerLive.style.transition = 'opacity 0.3s';
     setTimeout(cycleTicker, 3500);

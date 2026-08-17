@@ -166,6 +166,11 @@ audit.post("/", async (c) => {
 	}
 
 	const deadPath = body.deadPath || "/docs/non-existent-link";
+	// Bound the dead path before it lands in funnel_events.metadata — a
+	// pathological input must not bloat telemetry rows.
+	if (deadPath.length > 2048) {
+		return c.json({ error: "deadPath too long" }, 400);
+	}
 	trackFunnelEvent(c.get("storage"), "audit_started", domain, { deadPath });
 	const probe = await probeClaudeBotResponse(domain, deadPath);
 
@@ -229,13 +234,18 @@ audit.get("/:id/og.svg", async (c) => {
 });
 
 // Retrieve a standing audit by permalink ID
+// Only counts as a *share* when the link is opened with an explicit share
+// intent (?share=1) — link-preview scrapers and repeat views otherwise
+// inflate reportShareRate.
 audit.get("/:id", async (c) => {
 	const id = c.req.param("id");
 	const report = auditReports.get(id);
 	if (!report) {
 		return c.json({ error: "Audit report not found or expired" }, 404);
 	}
-	trackFunnelEvent(c.get("storage"), "report_shared", report.domain, { auditId: id });
+	if (c.req.query("share") === "1") {
+		trackFunnelEvent(c.get("storage"), "report_shared", report.domain, { auditId: id });
+	}
 	return c.json(report);
 });
 

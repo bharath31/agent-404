@@ -58,6 +58,7 @@ async function run() {
 		"0005_scale.sql",
 		"0006_site_owner.sql",
 		"0008_funnel_events.sql",
+		"0009_recovery_events.sql",
 	];
 	for (const file of migrations) {
 		console.log(`\nRunning migration: ${file}`);

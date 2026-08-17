@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import type { PostgresStorage } from "../../storage/postgres.js";
 import { registerPage } from "../../engine/indexer.js";
 import { urlBelongsToSite } from "../../lib/site-host.js";
+import { trackFunnelEvent } from "../../lib/funnel-telemetry.js";
 import { recordFollowOnFetch } from "../../lib/recovery-tracker.js";
 import type { SiteRecord } from "../../types.js";
 
@@ -63,7 +64,25 @@ register.post("/", async (c) => {
 	});
 
 	// Record follow-on fetch correlation for 404 recovery tracking (BAT-61)
-	recordFollowOnFetch(siteId, body.url);
+	recordFollowOnFetch(storage, siteId, body.url);
+
+	// BAT-42: the first page indexed is the first proof the install actually
+	// works end-to-end (beacons are flowing). Only checked when a genuinely
+	// new page was inserted (not content-hash-skipped), so the deduplicated
+	// hot path stays free of the extra count query.
+	if (!result.skipped) {
+		storage
+			.getStats(siteId)
+			.then((stats) => {
+				if (stats.pageCount === 1) {
+					trackFunnelEvent(storage, "install_verified", site.domain, {
+						siteId,
+						url: body.url,
+					});
+				}
+			})
+			.catch(() => {});
+	}
 
 	return c.json({ ok: true, skipped: result.skipped });
 });

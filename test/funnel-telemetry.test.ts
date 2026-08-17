@@ -131,4 +131,30 @@ describe("Funnel Telemetry (BAT-42)", () => {
 			trackFunnelEvent(storage, "audit_started", "site.com"),
 		).resolves.toBeUndefined();
 	});
+
+	it("records the full production funnel sequence including post-share stages", async () => {
+		const storage = newStorage();
+
+		// audit_started from POST /api/audit
+		await trackFunnelEvent(storage, "audit_started", "site.com", { deadPath: "/x" });
+		// audit_completed from POST /api/audit success
+		await trackFunnelEvent(storage, "audit_completed", "site.com", { auditId: "a1", score: 70 });
+		// report_shared from GET /api/audit/:id?share=1 (explicit share only)
+		await trackFunnelEvent(storage, "report_shared", "site.com", { auditId: "a1" });
+		// install_cta_clicked from POST /api/funnel/install-cta beacon
+		await trackFunnelEvent(storage, "install_cta_clicked", "site.com");
+		// site_registered from POST /api/sites
+		await trackFunnelEvent(storage, "site_registered", "site.com");
+		// install_verified from first indexed page (POST /api/register)
+		await trackFunnelEvent(storage, "install_verified", "site.com");
+
+		const metrics = await getFunnelMetrics(storage);
+		expect(metrics.totalAuditsStarted).toBe(1);
+		expect(metrics.totalAuditsCompleted).toBe(1);
+		expect(metrics.totalReportsShared).toBe(1);
+		expect(metrics.totalInstallCtaClicks).toBe(1);
+		expect(metrics.totalSitesRegistered).toBe(1);
+		expect(metrics.totalInstallsVerified).toBe(1);
+		expect(metrics.rates.overallFunnelConversion).toBe(1);
+	});
 });

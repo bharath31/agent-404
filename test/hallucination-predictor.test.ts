@@ -68,6 +68,46 @@ describe("Hallucination Predictor (BAT-40)", () => {
 		expect(paths).not.toContain("/");
 	});
 
+	it("bounds version-drift candidates for large bare numeric segments (years/IDs)", () => {
+		// /blog/2024 must not explode into thousands of version candidates.
+		const candidates = generateHallucinatedPaths(["/blog/2024"]);
+		const versionDrift = candidates.filter((c) => c.mutationType === "version_drift");
+
+		// A year-looking bare segment is not a version: no version drift at all.
+		expect(versionDrift.length).toBe(0);
+		// Total candidates stay small (other drift types only).
+		expect(candidates.length).toBeLessThan(30);
+	});
+
+	it("bounds version-drift candidates for prefixed large versions to adjacent values", () => {
+		const candidates = generateHallucinatedPaths(["/v2024/guide"]);
+		const versionDrift = candidates.filter((c) => c.mutationType === "version_drift");
+
+		// v2024-style: only adjacent (v2023, v2025, v2026) are plausible.
+		expect(versionDrift.length).toBeLessThanOrEqual(3);
+		const paths = versionDrift.map((c) => c.path);
+		expect(paths).toContain("/v2023/guide");
+		expect(paths).toContain("/v2025/guide");
+		// Must not contain a runaway middle version like /v1000/guide.
+		expect(paths).not.toContain("/v1000/guide");
+	});
+
+	it("keeps real small version segments (v2/v3) generating the full plausible range", () => {
+		const candidates = generateHallucinatedPaths(["/docs/v3/auth"]);
+		const versionDrift = candidates.filter((c) => c.mutationType === "version_drift");
+		const paths = versionDrift.map((c) => c.path);
+
+		expect(paths).toContain("/docs/v1/auth");
+		expect(paths).toContain("/docs/v2/auth");
+		expect(paths).toContain("/docs/v4/auth");
+	});
+
+	it("reports zero recovery rate when nothing was testable (no evidence, not perfect)", async () => {
+		const summary = await predictAndEvaluateHallucinations([], "example.com");
+		expect(summary.totalTested).toBe(0);
+		expect(summary.recoveryRate).toBe(0);
+	});
+
 	it("predicts and evaluates recovery against matcher", async () => {
 		const pages = [
 			{ url: "https://example.com/docs/v3/auth", title: "Authentication Guide" },

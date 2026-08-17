@@ -51,7 +51,8 @@ admin.get("/recovery-metrics", async (c) => {
 		return c.json({ error: "Unauthorized" }, 401);
 	}
 	const siteId = c.req.query("siteId");
-	const stats = getRecoveryRateStats(siteId);
+	const storage = c.get("storage");
+	const stats = await getRecoveryRateStats(storage, siteId);
 	return c.json(stats);
 });
 

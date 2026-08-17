@@ -6,6 +6,9 @@ import type {
 	MatchQualityStats,
 	FunnelStep,
 	FunnelConversionMetrics,
+	RecoveryEvent,
+	RecoveryRateStats,
+	AgentCategory,
 } from "../types.js";
 
 export interface StorageAdapter {
@@ -63,6 +66,34 @@ export interface StorageAdapter {
 	): Promise<void>;
 	/** Aggregate conversion metrics across all funnel stages, computed from durable storage. */
 	getFunnelMetrics(): Promise<FunnelConversionMetrics>;
+
+	/**
+	 * BAT-61: durable record of a 404 suggestion served to an agent/visitor,
+	 * backed by Postgres (`recovery_events`) so recovery metrics survive
+	 * isolate cold-starts — see `src/lib/recovery-tracker.ts`.
+	 */
+	recordRecoveryEvent(
+		siteId: string,
+		deadUrl: string,
+		suggestedUrls: string[],
+		agentCategory: AgentCategory,
+		userAgent?: string,
+		clientHash?: string,
+	): Promise<void>;
+	/**
+	 * BAT-61: correlate a follow-on page fetch with a recent unrecovered
+	 * suggestion for the same site, marking it recovered in durable storage.
+	 * Returns the updated event, or null when no recent unrecovered suggestion
+	 * matches the fetched URL.
+	 */
+	markRecoveryEventRecovered(
+		siteId: string,
+		fetchedUrl: string,
+		windowMs: number,
+		clientHash?: string,
+	): Promise<RecoveryEvent | null>;
+	/** BAT-61: aggregate recovery rate statistics from durable storage. */
+	getRecoveryRateStats(siteId?: string): Promise<RecoveryRateStats>;
 
 	/**
 	 * BAT-62: count of sites that are actually working — indexed a page AND

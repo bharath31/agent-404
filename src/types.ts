@@ -80,6 +80,41 @@ export interface DashboardData {
 	notice: string | null;
 }
 
+// Agent recovery tracking (BAT-61)
+export type AgentCategory = "crawler" | "browser_agent" | "human";
+
+export interface RecoveryEvent {
+	id: string;
+	siteId: string;
+	deadUrl: string;
+	suggestedUrls: string[];
+	agentCategory: AgentCategory;
+	userAgent: string;
+	clientHash?: string;
+	createdAt: string;
+	recovered: boolean;
+	recoveredUrl?: string;
+	recoveryLatencyMs?: number;
+}
+
+export interface RecoveryRateStats {
+	overall: {
+		totalSuggestions: number;
+		recoveredCount: number;
+		recoveryRate: number; // 0.0 - 1.0 (e.g. 0.75 = 75%)
+		medianLatencyMs: number | null;
+	};
+	byAgentCategory: Record<
+		AgentCategory,
+		{
+			totalSuggestions: number;
+			recoveredCount: number;
+			recoveryRate: number;
+			medianLatencyMs: number | null;
+		}
+	>;
+}
+
 // Audit-to-install conversion funnel (BAT-42)
 export type FunnelStep =
 	| "audit_started"
