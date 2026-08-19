@@ -1,0 +1,34 @@
+# Seed list for docs-404-audit.ts — ILLUSTRATIVE ONLY.
+#
+# This is a small (~25-site) example list, not the real top-1,000
+# documentation-sites dataset referenced in BAT-44 ("Publish the top-1,000
+# docs sites 404 study"). Before running the actual study, replace this
+# file with the real candidate list (one domain per line, no scheme/path,
+# lines starting with # are ignored).
+developer.mozilla.org
+docs.python.org
+docs.stripe.com
+developer.chrome.com
+docs.github.com
+docs.docker.com
+kubernetes.io
+react.dev
+nextjs.org
+tailwindcss.com
+docs.aws.amazon.com
+cloud.google.com
+learn.microsoft.com
+docs.npmjs.com
+nodejs.org
+go.dev
+doc.rust-lang.org
+docs.oracle.com
+developers.cloudflare.com
+supabase.com
+docs.vercel.com
+www.postgresql.org
+redis.io
+docs.djangoproject.com
+vuejs.org
+svelte.dev
+docs.gitlab.com
