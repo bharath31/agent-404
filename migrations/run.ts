@@ -62,6 +62,7 @@ async function run() {
 		"0009_recovery_events.sql",
 		"0011_install_probes.sql",
 		"0012_login_otp.sql",
+		"0013_suggestion_labels.sql",
 	];
 	for (const file of migrations) {
 		console.log(`\nRunning migration: ${file}`);

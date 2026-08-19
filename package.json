@@ -44,6 +44,7 @@
     "build:packages": "tsx script/build-packages.ts all",
     "prepublishOnly": "npm run build:script && npm run build:types",
     "db:migrate": "tsx migrations/run.ts",
+    "labels:sample": "tsx scripts/label-suggestions.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "vitest run --config vitest.e2e.config.ts",
