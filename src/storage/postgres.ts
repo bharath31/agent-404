@@ -516,7 +516,12 @@ export class PostgresStorage implements StorageAdapter {
 			id: String(row.id),
 			siteId: row.site_id as string,
 			deadUrl: row.dead_url as string,
-			suggestedUrls: (row.suggested_urls as string[] | string) ? JSON.parse(String(row.suggested_urls)) : [],
+			// Neon's type parsers hand JSONB columns back already parsed (an array,
+			// not a JSON string). Coercing with String() then JSON.parse would join
+			// the elements with commas and throw on the non-JSON result — coerce
+			// defensively through the shared helper instead (handles parsed array
+			// or raw-then-parsed text), falling back to [] for nullish data.
+			suggestedUrls: row.suggested_urls ? parseJsonColumn<string[]>(row.suggested_urls) : [],
 			agentCategory: row.agent_category as AgentCategory,
 			userAgent: (row.user_agent as string) || "",
 			clientHash: (row.client_hash as string) || undefined,
