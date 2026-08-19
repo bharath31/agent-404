@@ -1600,6 +1600,9 @@ export function dashboardHtml(data: DashboardData): string {
     display: flex;
     align-items: center;
     gap: 0.45rem;
+    /* A hint that doesn't fit beside its label drops onto its own line
+       inside the card instead of pushing text past the border. */
+    flex-wrap: wrap;
     background: var(--bg);
     border: 1px solid var(--border-subtle);
     border-radius: var(--radius-sm);
@@ -1618,7 +1621,10 @@ export function dashboardHtml(data: DashboardData): string {
     font-size: 0.72rem;
     font-weight: 500;
     color: var(--text-secondary);
-    white-space: nowrap;
+    /* Label may wrap and shrink so the line stays inside the card —
+       nothing is clipped or pushed past the border. */
+    min-width: 0;
+    overflow-wrap: anywhere;
   }
   .step-marker {
     font-size: 0.68rem;
@@ -1630,7 +1636,11 @@ export function dashboardHtml(data: DashboardData): string {
     font-family: var(--font-mono);
     font-size: 0.65rem;
     color: var(--text-muted);
-    white-space: nowrap;
+    /* Hint may wrap too; right-aligned so multi-line hints stay tidy
+       against the card's right edge instead of overflowing it. */
+    min-width: 0;
+    text-align: right;
+    overflow-wrap: anywhere;
   }
   .step-item.step-ok { border-color: rgba(16, 185, 129, 0.2); }
   .step-item.step-ok .step-label { color: var(--text); }

@@ -362,6 +362,24 @@ describe("dashboardHtml", () => {
 		expect(html).not.toContain("btn.closest('.live-check-grid')");
 	});
 
+	it("keeps lifecycle step text inside its card instead of overflowing the border", () => {
+		const html = dashboardHtml(data());
+		// The strip items may wrap their contents: long hints drop onto their
+		// own line inside the card, and labels/hints can shrink so text never
+		// bleeds past the bordered .step-item at narrow widths.
+		const itemBlock = html.slice(html.indexOf(".step-item {"), html.indexOf(".step-label {"));
+		expect(itemBlock).toContain("flex-wrap: wrap;");
+		// The label rule no longer forces nowrap — label may wrap and shrink.
+		const labelBlock = html.slice(html.indexOf(".step-label {"), html.indexOf(".step-marker {"));
+		expect(labelBlock).toContain("min-width: 0;");
+		expect(labelBlock).not.toContain("white-space: nowrap;");
+		// Same for the hint — no forced nowrap, must be able to wrap/shrink.
+		const hintBlock = html.slice(html.indexOf(".step-hint {"), html.indexOf(".step-item.step-ok {"));
+		expect(hintBlock).toContain("min-width: 0;");
+		expect(hintBlock).toContain("overflow-wrap: anywhere;");
+		expect(hintBlock).not.toContain("white-space: nowrap;");
+	});
+
 	it("points to the onboard agent button instead of duplicating a copy CTA in the warning alert box", () => {
 		const html = dashboardHtml(data());
 		expect(html).toContain("Copy AI setup prompt");
