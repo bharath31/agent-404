@@ -2587,7 +2587,11 @@ export function dashboardHtml(data: DashboardData): string {
   document.querySelectorAll('.btn-live-check').forEach((btn) => {
     btn.addEventListener('click', async () => {
       const siteId = btn.getAttribute('data-site-id');
-      const grid = btn.closest('.live-check-grid');
+      // The button lives in .section-title-row; the grid is its sibling inside
+      // the enclosing .live-check-block (not an ancestor of the button), so
+      // resolve the block first, then its own grid. Scoped per site panel.
+      const block = btn.closest('.live-check-block');
+      const grid = block ? block.querySelector('.live-check-grid') : null;
       if (!grid) return;
       const domain = grid.getAttribute('data-domain') || '';
       const body = grid.querySelector('.live-check-terminal');

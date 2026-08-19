@@ -347,6 +347,21 @@ describe("dashboardHtml", () => {
 		expect(html).toContain("Windsurf");
 	});
 
+	it("live-check button resolves the grid via its block, not as an ancestor", () => {
+		const html = dashboardHtml(
+			data({ sites: [site({ pageCount: 19, latestProbe: probe() })] }),
+		);
+		// The button sits in .section-title-row; the grid is a sibling of that
+		// row inside the same .live-check-block. It must be resolved through the
+		// enclosing block — never as an ancestor of the button, which would be
+		// null (closest('.live-check-grid') walks up and misses the sibling).
+		expect(html).toContain("const block = btn.closest('.live-check-block');");
+		expect(html).toContain(
+			"const grid = block ? block.querySelector('.live-check-grid') : null;",
+		);
+		expect(html).not.toContain("btn.closest('.live-check-grid')");
+	});
+
 	it("points to the onboard agent button instead of duplicating a copy CTA in the warning alert box", () => {
 		const html = dashboardHtml(data());
 		expect(html).toContain("Copy AI setup prompt");
