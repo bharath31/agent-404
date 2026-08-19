@@ -48,7 +48,7 @@ function pageError(error: unknown, fallback: string): string {
 }
 
 /** GET /auth/login — branded sign-in page. */
-loginRoutes.get(AUTH_LOGIN_PATH, (c) => {
+loginRoutes.get(AUTH_LOGIN_PATH, async (c) => {
 	const cfg = readAuth0Config(c.env as unknown as Record<string, string | undefined>);
 	if (!cfg) return authNotConfigured(c);
 
@@ -57,10 +57,8 @@ loginRoutes.get(AUTH_LOGIN_PATH, (c) => {
 	if (existing) return c.redirect("/dashboard", 302);
 	const legacy = c.var.auth0Client;
 	if (legacy) {
-		return legacy.getSession(c).then((session) => {
-			if (session?.user?.sub) return c.redirect("/dashboard", 302);
-			return c.html(loginPageHtml({ returnTo: safeReturnTo(c.req.query("return_to")) }));
-		});
+		const session = await legacy.getSession(c);
+		if (session?.user?.sub) return c.redirect("/dashboard", 302);
 	}
 	return c.html(loginPageHtml({ returnTo: safeReturnTo(c.req.query("return_to")) }));
 });
