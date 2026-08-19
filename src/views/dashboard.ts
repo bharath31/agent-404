@@ -149,6 +149,136 @@ function snippetHtml(site: Pick<DashboardSiteData, "id" | "publicKey">): string 
 	return escapeHtml(rawScriptSnippet(site));
 }
 
+// --- Diagnosis-specific fix guidance --------------------------------------
+//
+// The generic rawAgentPrompt() above assumes a from-scratch install. For a
+// site whose install is already present but failing (install_broken,
+// soft_404, probe_failed), an owner needs a diagnosis, not another copy of
+// the setup instructions. renderRemediationPanel() + rawFixPrompt() below
+// give a plain-language tip list and a tailored copy-paste agent prompt that
+// carries the actual observed evidence from the last live check.
+
+type RemediationStateId = "install_broken" | "soft_404" | "probe_failed";
+
+/** Plain-text curl exchange block, reused inside fix prompts (markdown, not HTML). */
+function rawProbeCurlBlock(site: DashboardSiteData): string {
+	const probe = site.latestProbe;
+	if (!probe) {
+		return `No live check has been run yet for ${site.domain}. Run one from the dashboard first, or run:\ncurl -sI https://${site.domain}/some-dead-path -A "ClaudeBot/1.0"`;
+	}
+	const lines: string[] = [];
+	lines.push(`$ curl -sI https://${site.domain}${probe.probePath} -A "ClaudeBot/1.0"`);
+	lines.push(`HTTP/2 ${probe.status}`);
+	if (probe.hasLinkHeaders && probe.linkHeader) {
+		lines.push(`link: ${probe.linkHeader}`);
+	} else {
+		lines.push(`(no Link header present)`);
+	}
+	lines.push(
+		probe.hasJsonLd
+			? `body: <script type="application/ld+json"> present — schema.org/ItemList`
+			: `(no JSON-LD <script> tag present in body)`,
+	);
+	if (probe.summary) {
+		lines.push(`# ${probe.summary}`);
+	}
+	return lines.join("\n");
+}
+
+const REMEDIATION_TIPS: Record<RemediationStateId, string[]> = {
+	install_broken: [
+		"Confirm the adapter/middleware is actually deployed to production — not just committed. Redeploy and re-run the check.",
+		"Confirm no CDN, edge, or reverse-proxy rule (Vercel rewrites, Cloudflare Page Rules, nginx) serves the 404 before your app's middleware runs.",
+		"Confirm the middleware's matcher/config isn't excluding the path you tested — a too-narrow `matcher` regex is the most common cause.",
+		"Confirm the snippet/adapter targets https://www.agent404.dev, not the apex domain — the apex redirect breaks CORS preflight.",
+	],
+	soft_404: [
+		"Your router/framework must return a real HTTP 404 status for unmatched routes — agent-404 can't intercept a 200.",
+		"Check your catch-all / not-found handler: many frameworks default to a 200 status unless you set it explicitly.",
+		"If this is a single-page app, check your hosting's rewrite rules — \"rewrite all paths to index.html\" is the most common cause of a soft 404, and needs a framework-level not-found route instead.",
+		"Re-run the live check after fixing to confirm the status code flips to 404.",
+	],
+	probe_failed: [
+		"This is usually transient — retry the live check first.",
+		"If it keeps failing, confirm the domain resolves and is publicly reachable (not just from your machine or VPN).",
+		"Check whether a WAF or bot-protection rule is blocking automated requests — the probe uses a ClaudeBot user agent and a datacenter IP, both of which WAFs sometimes challenge or block.",
+		"If the domain was reachable before, check your host/platform's status page for an outage.",
+	],
+};
+
+const REMEDIATION_TITLES: Record<RemediationStateId, string> = {
+	install_broken: "Install not detected — what to check",
+	soft_404: "Site returns 200 for missing paths — what to check",
+	probe_failed: "Live check couldn't reach your site — what to check",
+};
+
+function rawFixPrompt(site: DashboardSiteData, stateId: RemediationStateId): string {
+	const evidence = rawProbeCurlBlock(site);
+	const diagnosticSteps: Record<RemediationStateId, string> = {
+		install_broken: `1. Check whether the agent-404 adapter/middleware is actually present in the deployed build (not just in the repo) — confirm the latest deploy includes it, and redeploy if not.
+2. Check for any CDN, edge network, or reverse-proxy rule (Vercel rewrites/redirects, Cloudflare Page Rules, nginx \`try_files\`, etc.) that could be serving the 404 response before the app's own middleware runs.
+3. Inspect the middleware's route matcher/config (e.g. Next.js \`config.matcher\`) and confirm it isn't excluding the path that was probed above.
+4. Confirm the adapter is configured with API base \`https://www.agent404.dev\` (not the apex \`agent404.dev\`) — the apex redirect breaks the CORS preflight the client script depends on.`,
+		soft_404: `1. Find the route/handler that serves the path probed above and check what HTTP status it returns — it is very likely 200 when it should be 404.
+2. If this is a framework with file-based routing, confirm a proper not-found/catch-all route exists and explicitly sets the response status to 404 (many frameworks default to 200).
+3. If this is a static/SPA deployment, check the hosting config (e.g. Vercel \`rewrites\`, Netlify \`_redirects\`, S3/CloudFront) for a "serve index.html for all paths" rule — that's the most common cause, and it needs to be replaced with a real not-found route.
+4. After fixing, re-run the curl command above and confirm the status line changes from 200 to 404.`,
+		probe_failed: `1. Re-run the curl command above once or twice — this failure mode is frequently a transient network blip.
+2. If it fails consistently, confirm \`${site.domain}\` resolves via DNS and is reachable from outside your network (not just your machine/VPN).
+3. Check for a WAF, bot-protection layer, or rate limiter that could be blocking the request — it was made with a ClaudeBot user agent from a datacenter IP, a combination some WAFs challenge or block by default. Look for an allowlist rule you can add.
+4. Check your hosting provider's status page in case of a broader outage.`,
+	};
+
+	return `You are an AI coding assistant. agent-404 (https://www.agent404.dev) is already installed on this project for ${site.domain}, but the dashboard's live check flagged a problem. Diagnose and fix it — this is NOT a from-scratch install, the integration already exists somewhere in this codebase.
+
+### Project Credentials
+- **Domain:** ${site.domain}
+- **Site ID:** ${site.id}
+- **Public Key:** ${site.publicKey}
+- **Canonical API Base:** https://www.agent404.dev
+
+### Observed evidence (last live check)
+\`\`\`
+${evidence}
+\`\`\`
+
+### Diagnosis
+${REMEDIATION_TITLES[stateId]}
+
+### Instructions
+${diagnosticSteps[stateId]}
+
+### Verify the fix
+1. Run \`curl -sI https://${site.domain}/some-dead-path -A "ClaudeBot/1.0"\` and confirm the response now includes a \`Link:\` header and schema.org JSON-LD in the body (for install_broken/soft_404) or simply succeeds (for probe_failed).
+2. Re-run the **Live 404 check** on the dashboard at https://www.agent404.dev/dashboard to confirm the state updates.`;
+}
+
+function renderRemediationPanel(site: DashboardSiteData): string {
+	const stateId = site.installState.stateId;
+	if (stateId !== "install_broken" && stateId !== "soft_404" && stateId !== "probe_failed") {
+		return "";
+	}
+	const tips = REMEDIATION_TIPS[stateId];
+	const fixPrompt = rawFixPrompt(site, stateId);
+	const tipItems = tips.map((tip) => `<li>${escapeHtml(tip)}</li>`).join("\n");
+	return `
+  <!-- Remediation: actionable next steps for a broken/degraded install -->
+  <div class="section-block remediation-block tone-danger-block" id="remediation-${escapeHtml(site.id)}">
+    <div class="section-title-row">
+      <div>
+        <h3 class="section-title">${escapeHtml(REMEDIATION_TITLES[stateId])}</h3>
+        <p class="section-sub">Specific things to check in your codebase or hosting config — not a repeat of the status above.</p>
+      </div>
+    </div>
+    <ul class="remediation-tip-list">
+      ${tipItems}
+    </ul>
+    <div class="remediation-action-row">
+      <button type="button" class="copy-btn copy-btn-primary" data-copy-agent-prompt="${escapeHtml(fixPrompt)}">Copy fix prompt for Claude Code / Cursor / Copilot</button>
+    </div>
+  </div>`;
+}
+
 // --- Owner-facing lifecycle rendering ------------------------------------
 
 const AGENT_UA_NAMES: Array<[RegExp, string]> = [
@@ -304,6 +434,104 @@ function renderLifecycleStrip(site: DashboardSiteData): string {
 		})
 		.join("");
 	return `<div class="lifecycle-strip" role="list" aria-label="Install progress">${items}</div>`;
+}
+
+const CONFIRMED_WORKING_STATES = new Set(["install_live", "serving", "recovering"]);
+
+/**
+ * The install snippet tabs (Next.js / Cloudflare / Express / Script Tag /
+ * Agent Prompt). Once a fresh live-check probe confirms the install works
+ * (install_live, serving, recovering), this is no-longer-actionable
+ * boilerplate for the owner — collapse it behind a <details> instead of
+ * hiding it entirely, since it's still useful reference (e.g. adding a
+ * second framework, or copying the snippet for a teammate).
+ */
+function integrationPanelHtml(site: DashboardSiteData, index: number): string {
+	const body = `<div class="integration-panel">
+    <div class="integration-tabs-header">
+      <div class="integration-tabs" role="tablist">
+        <button type="button" class="tab-btn active" data-tab-target="tab-next-${index}">Next.js</button>
+        <button type="button" class="tab-btn" data-tab-target="tab-cf-${index}">Cloudflare</button>
+        <button type="button" class="tab-btn" data-tab-target="tab-express-${index}">Express</button>
+        <button type="button" class="tab-btn" data-tab-target="tab-script-${index}">Script Tag</button>
+        <button type="button" class="tab-btn tab-btn-agent" data-tab-target="tab-agent-${index}">
+          <span class="tab-agent-sparkle">✨</span> Agent Prompt
+        </button>
+      </div>
+    </div>
+
+    <div class="tab-content active" id="tab-next-${index}">
+      <div class="code-block">
+        <div class="code-block-header">
+          <span class="code-lang">middleware.ts (Edge / Node)</span>
+          <button type="button" class="copy-btn" data-copy="${escapeHtml(rawNextSnippet(site))}">Copy</button>
+        </div>
+        <pre class="snippet"><code>${escapeHtml(rawNextSnippet(site))}</code></pre>
+      </div>
+    </div>
+
+    <div class="tab-content" id="tab-cf-${index}">
+      <div class="code-block">
+        <div class="code-block-header">
+          <span class="code-lang">worker.ts (Cloudflare Workers)</span>
+          <button type="button" class="copy-btn" data-copy="${escapeHtml(rawCloudflareSnippet(site))}">Copy</button>
+        </div>
+        <pre class="snippet"><code>${escapeHtml(rawCloudflareSnippet(site))}</code></pre>
+      </div>
+    </div>
+
+    <div class="tab-content" id="tab-express-${index}">
+      <div class="code-block">
+        <div class="code-block-header">
+          <span class="code-lang">server.js (Express)</span>
+          <button type="button" class="copy-btn" data-copy="${escapeHtml(rawExpressSnippet(site))}">Copy</button>
+        </div>
+        <pre class="snippet"><code>${escapeHtml(rawExpressSnippet(site))}</code></pre>
+      </div>
+    </div>
+
+    <div class="tab-content" id="tab-script-${index}">
+      <div class="code-block">
+        <div class="code-block-header">
+          <span class="code-lang">HTML &lt;head&gt; or &lt;body&gt;</span>
+          <button type="button" class="copy-btn" data-copy="${escapeHtml(rawScriptSnippet(site))}">Copy</button>
+        </div>
+        <pre class="snippet"><code>${snippetHtml(site)}</code></pre>
+      </div>
+    </div>
+
+    <div class="tab-content" id="tab-agent-${index}">
+      <div class="code-block">
+        <div class="code-block-header">
+          <div class="agent-tab-badges">
+            <span class="code-lang">Prompt for Claude Code, Cursor, Windsurf, Copilot, &amp; Pi</span>
+            <a href="/skills/agent-404/SKILL.md" target="_blank" class="agent-skill-link" title="Open SKILL.md specification">SKILL.md &nearr;</a>
+          </div>
+          <button type="button" class="copy-btn copy-btn-primary" data-copy-agent-prompt="${escapeHtml(rawAgentPrompt(site))}">Copy</button>
+        </div>
+        <pre class="snippet snippet-markdown"><code>${escapeHtml(rawAgentPrompt(site))}</code></pre>
+        <div class="agent-helper-row">
+          <div class="agent-tip-pill"><strong>Claude Code:</strong> <code>claude "Install agent-404"</code></div>
+          <div class="agent-tip-pill"><strong>Cursor:</strong> Paste into Composer (<code>Cmd+I</code>)</div>
+          <div class="agent-tip-pill"><strong>Windsurf:</strong> Paste into Cascade (<code>Cmd+I</code>)</div>
+          <div class="agent-tip-pill"><strong>Copilot:</strong> Paste into Copilot Edits</div>
+        </div>
+      </div>
+    </div>
+  </div>`;
+
+	if (!CONFIRMED_WORKING_STATES.has(site.installState.stateId)) {
+		return `\n  <!-- Integration Snippets -->\n  ${body}`;
+	}
+
+	return `\n  <!-- Integration Snippets (confirmed working — collapsed) -->
+  <details class="integration-panel-details">
+    <summary class="integration-panel-summary">
+      <span class="integration-summary-check" aria-hidden="true">✓</span>
+      Integration confirmed working — view install snippets
+    </summary>
+    ${body}
+  </details>`;
 }
 
 function siteSection(site: DashboardSiteData, index: number): string {
@@ -484,79 +712,9 @@ function siteSection(site: DashboardSiteData, index: number): string {
 
   ${site.verified && site.pageCount > 0 ? renderLiveCheckPanel(site) : ""}
 
-  <!-- Integration Snippets -->
-  <div class="integration-panel">
-    <div class="integration-tabs-header">
-      <div class="integration-tabs" role="tablist">
-        <button type="button" class="tab-btn active" data-tab-target="tab-next-${index}">Next.js</button>
-        <button type="button" class="tab-btn" data-tab-target="tab-cf-${index}">Cloudflare</button>
-        <button type="button" class="tab-btn" data-tab-target="tab-express-${index}">Express</button>
-        <button type="button" class="tab-btn" data-tab-target="tab-script-${index}">Script Tag</button>
-        <button type="button" class="tab-btn tab-btn-agent" data-tab-target="tab-agent-${index}">
-          <span class="tab-agent-sparkle">✨</span> Agent Prompt
-        </button>
-      </div>
-    </div>
+  ${renderRemediationPanel(site)}
 
-    <div class="tab-content active" id="tab-next-${index}">
-      <div class="code-block">
-        <div class="code-block-header">
-          <span class="code-lang">middleware.ts (Edge / Node)</span>
-          <button type="button" class="copy-btn" data-copy="${escapeHtml(rawNextSnippet(site))}">Copy</button>
-        </div>
-        <pre class="snippet"><code>${escapeHtml(rawNextSnippet(site))}</code></pre>
-      </div>
-    </div>
-
-    <div class="tab-content" id="tab-cf-${index}">
-      <div class="code-block">
-        <div class="code-block-header">
-          <span class="code-lang">worker.ts (Cloudflare Workers)</span>
-          <button type="button" class="copy-btn" data-copy="${escapeHtml(rawCloudflareSnippet(site))}">Copy</button>
-        </div>
-        <pre class="snippet"><code>${escapeHtml(rawCloudflareSnippet(site))}</code></pre>
-      </div>
-    </div>
-
-    <div class="tab-content" id="tab-express-${index}">
-      <div class="code-block">
-        <div class="code-block-header">
-          <span class="code-lang">server.js (Express)</span>
-          <button type="button" class="copy-btn" data-copy="${escapeHtml(rawExpressSnippet(site))}">Copy</button>
-        </div>
-        <pre class="snippet"><code>${escapeHtml(rawExpressSnippet(site))}</code></pre>
-      </div>
-    </div>
-
-    <div class="tab-content" id="tab-script-${index}">
-      <div class="code-block">
-        <div class="code-block-header">
-          <span class="code-lang">HTML &lt;head&gt; or &lt;body&gt;</span>
-          <button type="button" class="copy-btn" data-copy="${escapeHtml(rawScriptSnippet(site))}">Copy</button>
-        </div>
-        <pre class="snippet"><code>${snippetHtml(site)}</code></pre>
-      </div>
-    </div>
-
-    <div class="tab-content" id="tab-agent-${index}">
-      <div class="code-block">
-        <div class="code-block-header">
-          <div class="agent-tab-badges">
-            <span class="code-lang">Prompt for Claude Code, Cursor, Windsurf, Copilot, &amp; Pi</span>
-            <a href="/skills/agent-404/SKILL.md" target="_blank" class="agent-skill-link" title="Open SKILL.md specification">SKILL.md &nearr;</a>
-          </div>
-          <button type="button" class="copy-btn copy-btn-primary" data-copy-agent-prompt="${escapeHtml(rawAgentPrompt(site))}">Copy</button>
-        </div>
-        <pre class="snippet snippet-markdown"><code>${escapeHtml(rawAgentPrompt(site))}</code></pre>
-        <div class="agent-helper-row">
-          <div class="agent-tip-pill"><strong>Claude Code:</strong> <code>claude "Install agent-404"</code></div>
-          <div class="agent-tip-pill"><strong>Cursor:</strong> Paste into Composer (<code>Cmd+I</code>)</div>
-          <div class="agent-tip-pill"><strong>Windsurf:</strong> Paste into Cascade (<code>Cmd+I</code>)</div>
-          <div class="agent-tip-pill"><strong>Copilot:</strong> Paste into Copilot Edits</div>
-        </div>
-      </div>
-    </div>
-  </div>
+  ${integrationPanelHtml(site, index)}
 
   <!-- Key Metrics -->
   <div class="stats-grid">
@@ -1556,6 +1714,109 @@ export function dashboardHtml(data: DashboardData): string {
     padding: 0.15rem 0.45rem;
     border-radius: 4px;
     border: 1px solid var(--border-subtle);
+  }
+
+  /* Remediation panel — actionable tips + fix prompt for broken/degraded installs */
+  .remediation-block {
+    background: var(--rose-subtle);
+    border: 1px solid rgba(244, 63, 94, 0.25);
+    border-top: 1px solid rgba(244, 63, 94, 0.25);
+    border-radius: var(--radius-md);
+    padding: 1.25rem 1.5rem;
+  }
+
+  .remediation-block .section-title {
+    color: #fda4af;
+  }
+
+  .remediation-block .section-sub {
+    font-size: 0.8125rem;
+    color: var(--text-secondary);
+    margin-top: 0.2rem;
+  }
+
+  .remediation-tip-list {
+    list-style: none;
+    margin: 0.9rem 0 1.1rem;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.55rem;
+  }
+
+  .remediation-tip-list li {
+    position: relative;
+    padding-left: 1.35rem;
+    font-size: 0.85rem;
+    line-height: 1.55;
+    color: var(--text-secondary);
+  }
+
+  .remediation-tip-list li::before {
+    content: '→';
+    position: absolute;
+    left: 0;
+    color: var(--rose);
+    font-weight: 600;
+  }
+
+  .remediation-action-row {
+    display: flex;
+    justify-content: flex-start;
+  }
+
+  .remediation-action-row .copy-btn-primary {
+    padding: 0.5rem 0.9rem;
+  }
+
+  /* Collapsed integration snippets once install is confirmed working */
+  .integration-panel-details {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    margin-bottom: 1.75rem;
+    overflow: hidden;
+  }
+
+  .integration-panel-details .integration-panel {
+    border: none;
+    border-radius: 0;
+    margin-bottom: 0;
+    border-top: 1px solid var(--border);
+  }
+
+  .integration-panel-summary {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.85rem 1.1rem;
+    background: var(--surface-elevated);
+    color: var(--text-secondary);
+    font-size: 0.825rem;
+    font-weight: 600;
+    cursor: pointer;
+    list-style: none;
+    user-select: none;
+  }
+
+  .integration-panel-summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .integration-panel-summary:hover {
+    color: var(--text);
+  }
+
+  .integration-summary-check {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: var(--emerald-subtle);
+    color: var(--emerald);
+    font-size: 0.65rem;
+    flex-shrink: 0;
   }
 
   /* Code Tabs & Snippets */
