@@ -11,7 +11,7 @@ import { admin } from "../src/api/routes/admin.js";
 import { requireOwnerApi } from "../src/auth/owner.js";
 import type { StorageAdapter } from "../src/storage/interface.js";
 import type { PostgresStorage } from "../src/storage/postgres.js";
-import type { SiteRecord, PageRecord, FunnelStep, FunnelConversionMetrics, AgentCategory, RecoveryEvent, RecoveryRateStats, StandingAuditReport } from "../src/types.js";
+import type { SiteRecord, PageRecord, FunnelStep, FunnelConversionMetrics, AgentCategory, RecoveryEvent, RecoveryRateStats, StandingAuditReport, InstallProbe } from "../src/types.js";
 import { countLiveInstalls, LIVE_INSTALL_WINDOW_DAYS } from "../src/lib/live-installs.js";
 
 // In-memory storage for testing — no database needed
@@ -22,6 +22,7 @@ class MemoryStorage implements StorageAdapter {
 		[];
 	funnelEvents: { step: FunnelStep; domain?: string; metadata?: Record<string, unknown> }[] = [];
 	recoveryEvents: RecoveryEvent[] = [];
+	installProbes: InstallProbe[] = [];
 	auditReports = new Map<string, StandingAuditReport>();
 	private nextPageId = 1;
 
@@ -350,6 +351,40 @@ class MemoryStorage implements StorageAdapter {
 
 	async getAuditReport(id: string): Promise<StandingAuditReport | null> {
 		return this.auditReports.get(id) ?? null;
+	}
+
+	// --- Install liveness probes ---
+
+	async saveInstallProbe(probe: InstallProbe): Promise<void> {
+		this.installProbes.push({ ...probe, id: String(this.installProbes.length + 1) });
+	}
+
+	async getLatestInstallProbe(siteId: string): Promise<InstallProbe | null> {
+		const rows = this.installProbes.filter((p) => p.siteId === siteId);
+		return rows.length > 0
+			? rows.reduce((a, b) => (new Date(a.probedAt) > new Date(b.probedAt) ? a : b))
+			: null;
+	}
+
+	async getRecentRecoveryEvents(siteId: string, limit: number): Promise<RecoveryEvent[]> {
+		return this.recoveryEvents
+			.filter((e) => e.siteId === siteId)
+			.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+			.slice(0, limit);
+	}
+
+	async listSitesNeedingProbe(limit: number, maxAgeHours: number): Promise<{ id: string; domain: string }[]> {
+		const cutoff = Date.now() - maxAgeHours * 60 * 60 * 1000;
+		return this.sites
+			.filter((s) => !/\.example\.com$/i.test(s.domain) && !/^smoke-/i.test(s.domain))
+			.filter((s) => {
+				const latest = this.installProbes.filter((p) => p.siteId === s.id).reduce<InstallProbe | null>(
+					(acc, p) => (acc === null || new Date(p.probedAt) > new Date(acc.probedAt) ? p : acc),
+					null,
+				);
+				return latest === null || new Date(latest.probedAt).getTime() < cutoff;
+			})
+			.slice(0, limit);
 	}
 }
 

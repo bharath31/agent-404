@@ -16,6 +16,7 @@ import { funnel } from "./api/routes/funnel.js";
 import { cron } from "./api/routes/cron.js";
 import { admin } from "./api/routes/admin.js";
 import { dashboard } from "./api/routes/dashboard.js";
+import { dashboardProbe } from "./api/routes/dashboard-probe.js";
 import { apiKeyAuth, requireVerified, type KeyType } from "./api/middleware/auth.js";
 import { rateLimiter } from "./api/middleware/rate-limit.js";
 import { landingPageHtml } from "./landing.js";
@@ -203,6 +204,12 @@ app.route("/api/funnel", funnel);
 app.use("/api/sites", requireOwnerApi());
 app.use("/api/sites/*", requireOwnerApi());
 app.route("/api/sites", sites);
+
+// Owner dashboard APIs (live 404 check). Session auth via requireOwnerApi;
+// probes fetch customer sites, so keep them strictly rate-limited.
+app.use("/api/dashboard/*", requireOwnerApi());
+app.use("/api/dashboard/probe", rateLimiter({ windowMs: 60_000, max: 5 }));
+app.route("/api/dashboard", dashboardProbe);
 
 // Protected routes (require x-api-key)
 app.use("/api/register", apiKeyAuth("write"));

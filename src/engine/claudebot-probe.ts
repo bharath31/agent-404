@@ -29,12 +29,23 @@ export interface ClaudeBotProbeResult {
 const CLAUDEBOT_UA = "Mozilla/5.0 (compatible; ClaudeBot/1.0; +https://www.anthropic.com/claudebot)";
 
 /**
+ * Build a dead path that is almost certainly 404 on any site, so the probe
+ * exercises the real 404 response rather than a cached or special route.
+ * A random segment also defeats any per-path CDN/browser caching of the
+ * probe URL itself. `seed` exists for tests (deterministic output).
+ */
+export function deriveProbePath(seed?: string): string {
+	const token = (seed ?? crypto.randomUUID().replace(/-/g, "")).slice(0, 10);
+	return `/agent404-probe-${token}`;
+}
+
+/**
  * Probe what a dead URL on a domain returns to ClaudeBot today (BAT-39).
  * Tests if the site returns recovery signals (Link headers, schema.org JSON-LD).
  */
 export async function probeClaudeBotResponse(
 	domain: string,
-	path = "/non-existent-probe-agent-404",
+	path = deriveProbePath(),
 ): Promise<ClaudeBotProbeResult> {
 	const cleanDomain = domain.replace(/^https?:\/\//, "").replace(/\/+$/, "").toLowerCase();
 	if (isBlockedInternalHost(cleanDomain)) {

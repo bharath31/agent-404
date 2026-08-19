@@ -77,6 +77,14 @@ export interface DashboardSiteData {
 		dnsTxt: { name: string; value: string };
 		wellKnown: { url: string; body: string };
 	};
+	/** Latest install-liveness probe, or null if never probed. */
+	latestProbe: InstallProbe | null;
+	/** Recent 404 events with agent + recovery outcome (BAT-61), newest first. */
+	recentRecoveryEvents: RecoveryEvent[];
+	/** Site-level recovery rate (BAT-61). */
+	recovery: { total: number; recovered: number; rate: number };
+	/** Derived lifecycle state driving the badge, status line, and checklist. */
+	installState: InstallStateView;
 }
 
 export interface DashboardData {
@@ -89,6 +97,55 @@ export interface DashboardData {
 
 // Agent recovery tracking (BAT-61)
 export type AgentCategory = "crawler" | "browser_agent" | "human";
+
+// Install liveness probes (dashboard rework)
+export type InstallProbeVerdict = "unrecovered_404" | "recovered_404" | "non_404" | "error";
+
+export interface InstallProbe {
+	id: string;
+	siteId: string;
+	probedAt: string;
+	probePath: string;
+	status: number;
+	verdict: InstallProbeVerdict;
+	hasLinkHeaders: boolean;
+	hasJsonLd: boolean;
+	/** Actual `Link:` header value from the response, when present. */
+	linkHeader: string | null;
+	summary: string | null;
+	source: "manual" | "cron";
+}
+
+// Lifecycle states derived by lib/install-state.ts — the dashboard's answer
+// to "is this working?" for each site.
+export type InstallStateId =
+	| "unverified"
+	| "indexing"
+	| "install_unknown"
+	| "install_broken"
+	| "soft_404"
+	| "probe_failed"
+	| "install_live"
+	| "serving"
+	| "recovering";
+
+export interface InstallStepView {
+	id: "verify" | "index" | "live_check" | "catch_404s" | "recovery";
+	label: string;
+	done: boolean;
+	hint: string;
+	tone: "ok" | "pending" | "problem";
+}
+
+export interface InstallStateView {
+	stateId: InstallStateId;
+	/** Header badge label, e.g. "Serving 404s". */
+	badge: string;
+	badgeTone: "success" | "warning" | "danger" | "neutral";
+	/** One-sentence answer to "is this working?" */
+	statusLine: string;
+	steps: InstallStepView[];
+}
 
 export interface RecoveryEvent {
 	id: string;

@@ -4,6 +4,7 @@ import { crawlSitemap } from "../../engine/sitemap.js";
 import { pruneStalePages } from "../../engine/indexer.js";
 import { buildEmbeddingText, generateBatchEmbeddings } from "../../engine/embeddings.js";
 import { invalidateSuggestCache } from "../../engine/suggest-cache.js";
+import { probeClaudeBotResponse, deriveProbePath } from "../../engine/claudebot-probe.js";
 import { isCronAuthorized } from "./admin.js";
 
 type Env = {
@@ -117,6 +118,45 @@ cron.get("/", async (c) => {
 		if (stoppedForBudget) break;
 	}
 
+	// Install-liveness probes (dashboard rework): independently budgeted from
+	// the crawl pass — each probe is a live cross-origin fetch with a 6s
+	// timeout, so it must never starve the sitemap/embedding work. Stalest
+	// sites first; 48h cadence is plenty for an onboarding diagnostic.
+	const PROBE_BUDGET_MS = 12_000;
+	const probeStarted = Date.now();
+	let probesRan = 0;
+	let probesBroken = 0;
+	try {
+		const staleSites = await storage.listSitesNeedingProbe(3, 48);
+		for (const s of staleSites) {
+			if (Date.now() - probeStarted > PROBE_BUDGET_MS) break;
+			const probePath = deriveProbePath();
+			const probe = await probeClaudeBotResponse(s.domain, probePath);
+			await sql.query(
+				`INSERT INTO install_probes (site_id, probe_path, status, verdict, has_link_headers, has_json_ld, link_header, summary, source)
+				 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'cron')`,
+				[
+					s.id,
+					probePath,
+					probe.status,
+					probe.verdict,
+					probe.hasLinkHeaders,
+					probe.hasJsonLd,
+					probe.comparison.current.headers[0] ?? null,
+					probe.summary,
+				],
+			);
+			probesRan++;
+			if (probe.verdict === "unrecovered_404") probesBroken++;
+			console.log(
+				JSON.stringify({ msg: "install_probe", domain: s.domain, verdict: probe.verdict, status: probe.status }),
+			);
+		}
+	} catch (err) {
+		// Probes are a diagnostic; they must never fail the cron.
+		console.error("install_probe_pass failed:", err instanceof Error ? err.message : err);
+	}
+
 	// BAT-62: computed once per cron run (not per shard site) so the north-star
 	// number — live installs against the 1,000-instance goal — is durable in
 	// logs even without hitting /api/admin/metrics.
@@ -133,6 +173,8 @@ cron.get("/", async (c) => {
 			stoppedForBudget,
 			elapsedMs: Date.now() - started,
 			platform: process.env.VERCEL ? "vercel-daily" : "hourly-capable",
+			probesRan,
+			probesBroken,
 			liveInstalls,
 			totalSites,
 			goalTarget: 1000,

@@ -29,8 +29,9 @@ function rawScriptSnippet(site: Pick<DashboardSiteData, "id" | "publicKey">): st
 function rawNextSnippet(site: Pick<DashboardSiteData, "id" | "publicKey">): string {
 	return `import { agent404 } from "@agent404/next";
 
+// The public key is safe to commit — it can only read suggestions.
 export const middleware = agent404({
-  apiKey: process.env.AGENT404_PUBLIC_KEY || "${site.publicKey}",
+  apiKey: process.env.AGENT404_PUBLIC_KEY ?? "${site.publicKey}",
 });
 
 export const config = {
@@ -41,10 +42,11 @@ export const config = {
 function rawCloudflareSnippet(site: Pick<DashboardSiteData, "id" | "publicKey">): string {
 	return `import { agent404Worker } from "@agent404/cloudflare";
 
-export default agent404Worker({
-  apiKey: "${site.publicKey}",
-  origin: "https://your-origin.example.com",
-});`;
+const agent404 = agent404Worker({
+  apiKey: "${site.publicKey}", // public key — safe to commit
+});
+
+export default { fetch: agent404.fetch };`;
 }
 
 function rawExpressSnippet(site: Pick<DashboardSiteData, "id" | "publicKey">): string {
@@ -65,7 +67,7 @@ app.use(async (req, res) => {
  * Tailored with the site's domain, siteId, and publicKey (never secret key).
  */
 function rawAgentPrompt(site: Pick<DashboardSiteData, "id" | "publicKey" | "domain">): string {
-	return `You are an AI coding assistant. Install and configure agent-404 (https://www.agent404.dev) in this project so that all dead links and 404 responses automatically self-heal and return semantic Link headers for AI assistants (Cursor, Claude, ChatGPT, Perplexity) and human users.
+	return `You are an AI coding assistant. Install and configure agent-404 (https://www.agent404.dev) in this project so that all dead links and 404 responses automatically self-heal and return semantic Link headers + JSON-LD for AI assistants (Claude, GPT, Perplexity) and human users.
 
 ### Project Credentials
 - **Domain:** ${site.domain}
@@ -79,64 +81,60 @@ function rawAgentPrompt(site: Pick<DashboardSiteData, "id" | "publicKey" | "doma
    - Next.js: run \`npm install @agent404/next\` (or pnpm/yarn/bun)
    - Cloudflare Workers: run \`npm install @agent404/cloudflare\`
    - Express: run \`npm install @agent404/express\`
-   - Static HTML: insert the \`<script>\` tag in <head> or <body>
-3. Configure the middleware/adapter:
+   - Static HTML: insert the \`<script>\` tag from step 3
+3. Configure the adapter. The public key is safe to commit — it can only read suggestions.
    - **Next.js (\`middleware.ts\`):**
-     \`\`\`typescript
-     import { agent404 } from "@agent404/next";
+   \`\`\`typescript
+   import { agent404 } from "@agent404/next";
 
-     export const middleware = agent404({
-       apiKey: process.env.AGENT404_PUBLIC_KEY || "${site.publicKey}",
-       siteId: "${site.id}",
-     });
+   export const middleware = agent404({
+     apiKey: process.env.AGENT404_PUBLIC_KEY ?? "${site.publicKey}",
+   });
 
-     export const config = {
-       matcher: ["/((?!api|_next/static|_next/image|favicon.ico).*)"],
-     };
-     \`\`\`
+   export const config = {
+     matcher: ["/((?!api|_next/static|_next/image|favicon.ico).*)"],
+   };
+   \`\`\`
    - **Cloudflare Worker (\`worker.ts\`):**
-     \`\`\`typescript
-     import { agent404Worker } from "@agent404/cloudflare";
+   \`\`\`typescript
+   import { agent404Worker } from "@agent404/cloudflare";
 
-     export default {
-       async fetch(req: Request, env: any, ctx: any) {
-         return agent404Worker(req, env, {
-           publicKey: env.AGENT404_PUBLIC_KEY || "${site.publicKey}",
-           siteId: "${site.id}",
-         });
-       },
-     };
-     \`\`\`
+   const agent404 = agent404Worker({
+     apiKey: "${site.publicKey}", // public key — safe to commit
+   });
+
+   export default { fetch: agent404.fetch };
+   \`\`\`
    - **Express (\`server.js\` / \`app.ts\`):**
-     \`\`\`javascript
-     import { agent404Express } from "@agent404/express";
+   \`\`\`javascript
+   import { recoverExpress404 } from "@agent404/express";
 
-     app.use(agent404Express({
-       publicKey: process.env.AGENT404_PUBLIC_KEY || "${site.publicKey}",
-       siteId: "${site.id}",
-     }));
-     \`\`\`
-   - **HTML Script Tag:**
-     \`\`\`html
-     <script
-       src="${CANONICAL_SCRIPT_URL}"
-       data-site-id="${site.id}"
-       data-public-key="${site.publicKey}"
-       defer
-     ></script>
-     \`\`\`
-4. Set environment variables in \`.env\` or \`.env.local\`:
+   app.use(async (req, res) => {
+     const recovered = await recoverExpress404(req, "<h1>Not Found</h1>", {
+       apiKey: process.env.AGENT404_PUBLIC_KEY ?? "${site.publicKey}",
+     });
+     res.status(404);
+     recovered.headers.forEach((v, k) => res.setHeader(k, v));
+     res.send(await recovered.text());
+   });
+   \`\`\`
+   - **HTML Script Tag (browser-only — AI crawlers don't run JavaScript):**
+   \`\`\`html
+   <script
+     src="${CANONICAL_SCRIPT_URL}"
+     data-site-id="${site.id}"
+     data-public-key="${site.publicKey}"
+     defer
+   ></script>
+   \`\`\`
+4. Set the environment variable in \`.env\` (or your host's env config):
    \`\`\`env
    AGENT404_PUBLIC_KEY="${site.publicKey}"
-   AGENT404_SITE_ID="${site.id}"
    \`\`\`
 5. Verify the installation:
-   - Request a non-existent route (e.g. \`curl -I http://localhost:3000/non-existent-test\`) and confirm that \`Link: </suggested-path>; rel="alternate"\` is present.
-   - Confirm indexing status with:
-     \`\`\`bash
-     curl "https://www.agent404.dev/api/install/status?domain=${site.domain}&apiKey=${site.publicKey}"
-     \`\`\`
-   - Always ensure requests use \`https://www.agent404.dev\` (not apex) to avoid CORS preflight issues.`;
+   - Run \`curl -sI https://${site.domain}/some-dead-path -A "ClaudeBot/1.0"\` and confirm the 404 response includes a \`Link:\` header and schema.org JSON-LD in the body.
+   - Or re-run the **Live 404 check** on the dashboard at https://www.agent404.dev/dashboard.
+   - Always use \`https://www.agent404.dev\` (not the apex) as the API base to avoid CORS preflight failures.`;
 }
 
 function agentOnboardButtonHtml(site: Pick<DashboardSiteData, "id" | "publicKey" | "domain">): string {
@@ -151,6 +149,163 @@ function snippetHtml(site: Pick<DashboardSiteData, "id" | "publicKey">): string 
 	return escapeHtml(rawScriptSnippet(site));
 }
 
+// --- Owner-facing lifecycle rendering ------------------------------------
+
+const AGENT_UA_NAMES: Array<[RegExp, string]> = [
+	[/claudebot|anthropic/i, "ClaudeBot"],
+	[/gptbot/i, "GPTBot"],
+	[/perplexitybot/i, "PerplexityBot"],
+	[/google-extended/i, "Google-Extended"],
+	[/applebot-extended/i, "Applebot-Extended"],
+	[/ccbot/i, "CCBot"],
+	[/bytespider/i, "Bytespider"],
+	[/cohere-ai/i, "Cohere"],
+	[/diffbot/i, "Diffbot"],
+	[/omgili/i, "Omgili"],
+	[/facebookexternalhit/i, "Facebook"],
+	[/slackbot/i, "Slack"],
+	[/twitterbot/i, "X (Twitter)"],
+	[/discordbot/i, "Discord"],
+	[/telegrambot/i, "Telegram"],
+	[/youbot/i, "YouBot"],
+	[/googlebot/i, "Googlebot"],
+	[/bingbot/i, "Bingbot"],
+	[/yandex/i, "Yandex"],
+];
+
+function agentLabel(ev: { userAgent: string; agentCategory: string }): string {
+	const ua = ev.userAgent || "";
+	for (const [re, name] of AGENT_UA_NAMES) {
+		if (re.test(ua)) return name;
+	}
+	switch (ev.agentCategory) {
+		case "crawler":
+			return "Crawler";
+		case "browser_agent":
+			return "Browser agent";
+		default:
+			return "Human";
+	}
+}
+
+function timeAgo(iso: string): string {
+	const ms = Date.now() - new Date(iso).getTime();
+	if (Number.isNaN(ms)) return "";
+	const m = Math.floor(ms / 60_000);
+	if (m < 1) return "just now";
+	if (m < 60) return `${m}m ago`;
+	const h = Math.floor(m / 60);
+	if (h < 24) return `${h}h ago`;
+	const d = Math.floor(h / 24);
+	if (d < 30) return `${d}d ago`;
+	return `${Math.floor(d / 30)}mo ago`;
+}
+
+function probeVerdictLabel(verdict: string): string {
+	switch (verdict) {
+		case "recovered_404":
+			return "Recovery served";
+		case "unrecovered_404":
+			return "Bare 404 — no recovery";
+		case "non_404":
+			return "Soft 404 (site returned 200)";
+		default:
+			return "Could not reach site";
+	}
+}
+
+function probeVerdictTone(verdict: string): string {
+	switch (verdict) {
+		case "recovered_404":
+			return "success";
+		case "unrecovered_404":
+			return "danger";
+		case "non_404":
+			return "warning";
+		default:
+			return "warning";
+	}
+}
+
+/** The terminal body for a stored probe — the raw HTTP exchange, verbatim. */
+function terminalProbeLines(site: DashboardSiteData): string {
+	const probe = site.latestProbe;
+	if (!probe) {
+		return `<div class="term-line term-muted">Run a live check to fetch a dead URL on ${escapeHtml(site.domain)} as ClaudeBot and see the response.</div>`;
+	}
+	const lines: string[] = [];
+	lines.push(
+		`<div class="term-line"><span class="term-prompt">$</span> curl -sI <span class="term-dim">https://${escapeHtml(site.domain)}</span>${escapeHtml(probe.probePath)} <span class="term-dim">-A "ClaudeBot/1.0"</span></div>`,
+	);
+	lines.push(
+		`<div class="term-line ${probe.status === 404 ? "" : "term-amber"}">HTTP/2 ${probe.status}</div>`,
+	);
+	if (probe.hasLinkHeaders && probe.linkHeader) {
+		lines.push(`<div class="term-line term-green">link: ${escapeHtml(probe.linkHeader)}</div>`);
+	}
+	if (probe.hasJsonLd) {
+		lines.push(`<div class="term-line term-green">body: &lt;script type="application/ld+json"&gt; — schema.org/ItemList</div>`);
+	}
+	if (probe.verdict === "unrecovered_404") {
+		lines.push(`<div class="term-line term-rose">↳ no Link header, no JSON-LD — the agent gets nothing</div>`);
+	}
+	if (probe.verdict === "error") {
+		lines.push(`<div class="term-line term-rose">↳ ${escapeHtml(probe.summary || "connection error")}</div>`);
+	}
+	return lines.join("\n");
+}
+
+function renderLiveCheckPanel(site: DashboardSiteData): string {
+	const probe = site.latestProbe;
+	const tone = probe ? probeVerdictTone(probe.verdict) : "neutral";
+	const label = probe ? probeVerdictLabel(probe.verdict) : "Not checked yet";
+	const text = probe ? probe.summary || probeVerdictLabel(probe.verdict) : "No live check recorded for this domain yet.";
+	const meta = probe
+		? `checked ${timeAgo(probe.probedAt)} · ${probe.source === "cron" ? "automatic" : "manual"}`
+		: "";
+	return `
+  <!-- Live 404 check: the raw HTTP exchange, as ClaudeBot sees it -->
+  <div class="section-block live-check-block" id="live-check-${escapeHtml(site.id)}">
+    <div class="section-title-row">
+      <div>
+        <h3 class="section-title">Live 404 check</h3>
+        <p class="section-sub">What ClaudeBot actually receives when it hits a missing page on your domain.</p>
+      </div>
+      <button type="button" class="btn btn-secondary btn-live-check" data-site-id="${escapeHtml(site.id)}">Run live check</button>
+    </div>
+    <div class="live-check-grid" data-domain="${escapeHtml(site.domain)}">
+      <div class="terminal-mock">
+        <div class="terminal-bar">
+          <span class="term-dot"></span><span class="term-dot"></span><span class="term-dot"></span>
+          <span class="term-title">probe — claudebot@${escapeHtml(site.domain)}</span>
+        </div>
+        <div class="terminal-body live-check-terminal">${terminalProbeLines(site)}</div>
+      </div>
+      <div class="live-check-verdict">
+        <div class="live-check-verdict-label tone-${tone}">${escapeHtml(label)}</div>
+        <p class="live-check-verdict-text">${escapeHtml(text)}</p>
+        ${meta ? `<div class="live-check-meta">${escapeHtml(meta)}</div>` : ""}
+        <p class="live-check-note">Browser-only script-tag installs won't appear here — crawlers don't execute JavaScript. The HTTP-layer middleware is what reaches them. If the check fails, also confirm the snippet points at <code>https://www.agent404.dev</code> (the apex redirect breaks CORS preflight).</p>
+      </div>
+    </div>
+  </div>`;
+}
+
+function renderLifecycleStrip(site: DashboardSiteData): string {
+	const items = site.installState.steps
+		.map((step, i) => {
+			const marker = step.done ? "\u2713" : step.tone === "problem" ? "\u2715" : "\u25CB";
+			return `<div class="step-item step-${step.tone}" role="listitem">
+      <span class="step-num" aria-hidden="true">${i + 1}</span>
+      <span class="step-label">${escapeHtml(step.label)}</span>
+      <span class="step-marker" aria-hidden="true">${marker}</span>
+      <span class="step-hint">${escapeHtml(step.hint)}</span>
+    </div>`;
+		})
+		.join("");
+	return `<div class="lifecycle-strip" role="list" aria-label="Install progress">${items}</div>`;
+}
+
 function siteSection(site: DashboardSiteData, index: number): string {
 	const mq = site.matchQuality;
 	const total =
@@ -161,6 +316,17 @@ function siteSection(site: DashboardSiteData, index: number): string {
 	const movedPct = pct(mq.matchTypeDistribution.moved);
 	const similarPct = pct(mq.matchTypeDistribution.similar);
 	const relatedPct = pct(mq.matchTypeDistribution.related);
+
+	// Plain-language read of the resolution bar — the numbers only mean
+	// something once interpreted for the owner.
+	const distNoteText =
+		total === 0
+			? ""
+			: relatedPct >= 60
+				? "Most dead URLs resolve to section pages (like /docs), not a specific page. Adding an llms.txt or more descriptive page titles makes matches more precise."
+				: movedPct + similarPct >= 80
+					? "Most dead URLs resolve to a specific page — that's the match quality you want."
+					: "A mix of specific-page and section-page matches — see below for what lifts precision.";
 
 	const recentRows = site.recentLogs
 		.map((log) => {
@@ -192,38 +358,37 @@ function siteSection(site: DashboardSiteData, index: number): string {
 		})
 		.join("\n");
 
-	const verificationNeededWarning = !site.verified
-		? `<div class="alert-box alert-warning" role="alert">
-  <div class="alert-header">
-    <svg class="alert-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-    <strong>Domain not verified — indexing is paused</strong>
-  </div>
-  <p class="alert-desc">
-    ${escapeHtml(site.domain)} has not proven ownership yet, so agent-404 will not crawl its sitemap or index pages.
-    <code>0 indexed pages</code> is expected until verification completes — it is not a sign of a broken script.
-    Add the DNS TXT record below and click <strong>Verify now</strong>.
-  </p>
-</div>`
-		: "";
+	const recoveryRows = site.recentRecoveryEvents
+		.map((ev) => {
+			const top = ev.suggestedUrls[0] || "\u2014";
+			const time = new Date(ev.createdAt).toLocaleString("en-US", {
+				month: "short",
+				day: "numeric",
+				hour: "2-digit",
+				minute: "2-digit",
+			});
+			const latency =
+				ev.recoveryLatencyMs != null
+					? ` in ${(ev.recoveryLatencyMs / 1000).toFixed(1)}s`
+					: "";
+			const outcome = ev.recovered
+				? `<span class="outcome-pill outcome-yes">\u2713 followed${latency}</span>`
+				: `<span class="outcome-pill outcome-no">served \u00B7 not followed</span>`;
+			return `<tr>
+				<td class="cell-time">${time}</td>
+				<td><span class="agent-chip">${escapeHtml(agentLabel(ev))}</span></td>
+				<td class="cell-mono cell-url" title="${escapeHtml(ev.deadUrl)}"><span class="url-text">${escapeHtml(truncate(ev.deadUrl, 46))}</span></td>
+				<td class="cell-mono cell-url" title="${escapeHtml(top)}"><span class="url-text">${escapeHtml(truncate(top, 46))}</span></td>
+				<td>${outcome}</td>
+			</tr>`;
+		})
+		.join("\n");
 
-	const noBeaconsWarning =
-		site.verified && site.pageCount === 0
-			? `<div class="alert-box alert-warning" role="alert">
-  <div class="alert-header">
-    <svg class="alert-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-    <strong>No beacons received</strong>
-  </div>
-  <p class="alert-desc">
-    This site has not indexed any pages yet. The install is not working — an empty page count is not a quiet success.
-    Confirm the snippet uses <code>https://www.agent404.dev</code> (not the apex; redirects break CORS preflight),
-    then open a live page and check the browser console for <code>[agent-404]</code> warnings.
-    You can also call <code>GET /api/install/status</code> with your API key,
-    or use <strong>Copy AI setup prompt</strong> above to have a coding agent finish this for you.
-  </p>
-</div>`
-			: "";
-
-	const warning = verificationNeededWarning || noBeaconsWarning;
+	// Owner-facing state: the status line + lifecycle strip in the header
+	// answer "is this working?" directly, and the live check panel supplies
+	// the evidence. The old alert boxes (domain unverified / no beacons)
+	// are superseded by the state machine, which says the same thing with
+	// the install context attached.
 
 	const verificationPanel = !site.verified
 		? `<div class="section-block" id="verify-${escapeHtml(site.id)}">
@@ -275,20 +440,27 @@ function siteSection(site: DashboardSiteData, index: number): string {
   </div>`
 		: "";
 
+	const state = site.installState;
+
 	return `
 <section class="site-card" id="site-${escapeHtml(site.id)}">
   <div class="site-card-header">
     <div class="site-title-group">
       <div class="site-domain-row">
         <h2 class="site-domain">${escapeHtml(site.domain)}</h2>
-        <span class="badge ${site.pageCount > 0 ? "badge-success" : "badge-neutral"}">
-          <span class="dot"></span> ${site.pageCount > 0 ? "Active" : "Awaiting Beacons"}
+        <span class="badge badge-${state.badgeTone}">
+          <span class="dot"></span> ${escapeHtml(state.badge)}
         </span>
         <span class="badge ${site.verified ? "badge-success" : "badge-warning"}">
           <span class="dot"></span> ${site.verified ? "Domain Verified" : "Verification Needed"}
         </span>
         ${agentOnboardButtonHtml(site)}
       </div>
+      <p class="site-status-line tone-${state.badgeTone}">
+        <span class="status-dot" aria-hidden="true"></span>
+        <span class="status-text">${escapeHtml(state.statusLine)}</span>
+      </p>
+      ${renderLifecycleStrip(site)}
       <div class="site-meta-keys">
         <div class="meta-item">
           <span class="meta-label">Site ID</span>
@@ -308,9 +480,9 @@ function siteSection(site: DashboardSiteData, index: number): string {
     </div>
   </div>
 
-  ${warning}
-
   ${verificationPanel}
+
+  ${site.verified && site.pageCount > 0 ? renderLiveCheckPanel(site) : ""}
 
   <!-- Integration Snippets -->
   <div class="integration-panel">
@@ -391,22 +563,22 @@ function siteSection(site: DashboardSiteData, index: number): string {
     <div class="stat-card">
       <span class="stat-label">Indexed Pages</span>
       <div class="stat-value">${site.pageCount.toLocaleString()}</div>
-      <span class="stat-hint">${site.pageCount > 0 ? "Continuous sitemap sync" : site.verified ? "No pages yet" : "Paused — verify domain to start indexing"}</span>
+      <span class="stat-hint">Pages we can recommend — synced from your sitemap</span>
+    </div>
+    <div class="stat-card">
+      <span class="stat-label">404s · Last 30 Days</span>
+      <div class="stat-value">${mq.last30d.toLocaleString()}</div>
+      <span class="stat-hint">${mq.last7d.toLocaleString()} in the last 7 days</span>
     </div>
     <div class="stat-card">
       <span class="stat-label">Suggestions Served</span>
       <div class="stat-value">${site.suggestionsServed.toLocaleString()}</div>
-      <span class="stat-hint">Total 404 recoveries</span>
+      <span class="stat-hint">All-time 404s where recovery was returned</span>
     </div>
     <div class="stat-card">
-      <span class="stat-label">Last 24 Hours</span>
-      <div class="stat-value">${mq.last24h.toLocaleString()}</div>
-      <span class="stat-hint">Active bot queries</span>
-    </div>
-    <div class="stat-card">
-      <span class="stat-label">Last 7 Days</span>
-      <div class="stat-value">${mq.last7d.toLocaleString()}</div>
-      <span class="stat-hint">${mq.last30d.toLocaleString()} in 30d</span>
+      <span class="stat-label">Agents Recovered</span>
+      <div class="stat-value">${site.recovery.total > 0 ? `${Math.round(site.recovery.rate * 100)}%` : "\u2014"}</div>
+      <span class="stat-hint">${site.recovery.recovered.toLocaleString()} of ${site.recovery.total.toLocaleString()} served suggestions followed through</span>
     </div>
   </div>
 
@@ -414,7 +586,7 @@ function siteSection(site: DashboardSiteData, index: number): string {
   <div class="section-block">
     <div class="section-title-row">
       <h3 class="section-title">Resolution Breakdown</h3>
-      <span class="section-meta">${total > 0 ? `${total} evaluated requests` : "Awaiting traffic"}</span>
+      <span class="section-meta">${total > 0 ? `${total} 404s evaluated` : "Awaiting traffic"}</span>
     </div>
     <div class="dist-bar-container">
       <div class="dist-bar">
@@ -428,19 +600,20 @@ function siteSection(site: DashboardSiteData, index: number): string {
       <div class="dist-item"><span class="dist-dot dot-similar"></span> Semantic Similar <span class="dist-pct">${similarPct}%</span></div>
       <div class="dist-item"><span class="dist-dot dot-related"></span> Related Section <span class="dist-pct">${relatedPct}%</span></div>
     </div>
+    ${distNoteText ? `<p class="dist-note">${escapeHtml(distNoteText)}</p>` : ""}
   </div>
 
-  <!-- Live 404 Sandbox -->
+  <!-- Matcher dry run -->
   <div class="section-block">
     <div class="section-title-row">
-      <h3 class="section-title">Test 404 Resolution</h3>
-      <span class="section-meta">Query the matcher for this domain</span>
+      <h3 class="section-title">Matcher dry run</h3>
+      <span class="section-meta">Simulates a match against your index — doesn't touch your live site</span>
     </div>
     <div class="tester-form" data-domain="${escapeHtml(site.domain)}" data-key="${escapeHtml(site.publicKey)}">
       <div class="tester-input-group">
         <span class="tester-prefix">https://${escapeHtml(site.domain)}</span>
-        <input type="text" class="tester-path-input" placeholder="/docs/v1/auth" value="/v1/authentication" spellcheck="false" />
-        <button type="button" class="btn btn-secondary btn-test-match">Test Match</button>
+        <input type="text" class="tester-path-input" placeholder="/docs/v1/auth" spellcheck="false" />
+        <button type="button" class="btn btn-secondary btn-test-match">Test match</button>
       </div>
       <div class="tester-result" hidden></div>
     </div>
@@ -450,11 +623,31 @@ function siteSection(site: DashboardSiteData, index: number): string {
   <div class="section-block">
     <div class="section-title-row">
       <h3 class="section-title">Recent 404 Activity</h3>
-      <span class="section-meta">${site.recentLogs.length} recent queries</span>
+      <span class="section-meta">${
+			site.recentRecoveryEvents.length > 0
+				? `${site.recentRecoveryEvents.length} recent 404s`
+				: `${site.recentLogs.length} recent queries`
+		}</span>
     </div>
     ${
-			site.recentLogs.length > 0
+			site.recentRecoveryEvents.length > 0
 				? `<div class="table-container">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>When</th>
+            <th>Agent</th>
+            <th>Dead URL</th>
+            <th>Served</th>
+            <th>Outcome</th>
+          </tr>
+        </thead>
+        <tbody>${recoveryRows}</tbody>
+      </table>
+    </div>
+    <p class="table-note">“Followed” means the agent fetched the suggested page within 60 seconds of the 404. Outcome is only measurable while the suggested page reports its loads back (script-tag installs); HTTP-layer-only installs show what was served to which agent.</p>`
+				: site.recentLogs.length > 0
+					? `<div class="table-container">
       <table class="data-table">
         <thead>
           <tr>
@@ -470,6 +663,7 @@ function siteSection(site: DashboardSiteData, index: number): string {
 				: `<div class="empty-table-state">
       <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
       <p>No 404 queries recorded yet for this domain.</p>
+      <p class="empty-table-hint">Crawlers find dead links on their own schedule — this table fills in as they arrive.</p>
     </div>`
 		}
   </div>
@@ -1184,6 +1378,110 @@ export function dashboardHtml(data: DashboardData): string {
   }
   .badge-warning .dot { width: 5px; height: 5px; border-radius: 50%; background: var(--amber); }
 
+  .badge-danger {
+    background: var(--rose-subtle);
+    border-color: rgba(244, 63, 94, 0.3);
+    color: var(--rose);
+  }
+  .badge-danger .dot { width: 5px; height: 5px; border-radius: 50%; background: var(--rose); }
+
+  /* Status line — the one-sentence answer to "is this working?" */
+  .site-status-line {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.55rem;
+    font-size: 0.875rem;
+    line-height: 1.55;
+    margin-top: 0.65rem;
+    padding: 0.6rem 0.85rem;
+    border-radius: var(--radius-md);
+    border: 1px solid;
+  }
+  .site-status-line .status-dot {
+    flex-shrink: 0;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    margin-top: 0.42rem;
+  }
+  .site-status-line.tone-success {
+    background: var(--emerald-subtle);
+    border-color: rgba(16, 185, 129, 0.25);
+    color: #a7f3d0;
+  }
+  .site-status-line.tone-success .status-dot { background: var(--emerald); }
+  .site-status-line.tone-warning {
+    background: var(--amber-subtle);
+    border-color: rgba(245, 158, 11, 0.25);
+    color: #fde68a;
+  }
+  .site-status-line.tone-warning .status-dot { background: var(--amber); }
+  .site-status-line.tone-danger {
+    background: var(--rose-subtle);
+    border-color: rgba(244, 63, 94, 0.3);
+    color: #fda4af;
+  }
+  .site-status-line.tone-danger .status-dot { background: var(--rose); }
+  .site-status-line.tone-neutral {
+    background: rgba(255, 255, 255, 0.03);
+    border-color: var(--border);
+    color: var(--text-secondary);
+  }
+  .site-status-line.tone-neutral .status-dot { background: var(--text-muted); }
+
+  /* Lifecycle strip — the install funnel, in order */
+  .lifecycle-strip {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    margin-top: 0.9rem;
+  }
+  .step-item {
+    flex: 1 1 160px;
+    min-width: 150px;
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    background: var(--bg);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    padding: 0.45rem 0.6rem;
+  }
+  .step-num {
+    font-family: var(--font-mono);
+    font-size: 0.6rem;
+    color: var(--text-muted);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 0.05rem 0.3rem;
+    flex-shrink: 0;
+  }
+  .step-label {
+    font-size: 0.72rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+    white-space: nowrap;
+  }
+  .step-marker {
+    font-size: 0.68rem;
+    color: var(--text-muted);
+    flex-shrink: 0;
+  }
+  .step-hint {
+    margin-left: auto;
+    font-family: var(--font-mono);
+    font-size: 0.65rem;
+    color: var(--text-muted);
+    white-space: nowrap;
+  }
+  .step-item.step-ok { border-color: rgba(16, 185, 129, 0.2); }
+  .step-item.step-ok .step-label { color: var(--text); }
+  .step-item.step-ok .step-marker { color: var(--emerald); }
+  .step-item.step-problem { border-color: rgba(244, 63, 94, 0.3); }
+  .step-item.step-problem .step-label { color: var(--rose); }
+  .step-item.step-problem .step-marker { color: var(--rose); }
+  .step-item.step-problem .step-hint { color: #fda4af; }
+
   /* Domain Verification Panel */
   .verify-instructions {
     display: grid;
@@ -1720,6 +2018,129 @@ export function dashboardHtml(data: DashboardData): string {
   }
   .empty-table-state svg { color: var(--text-muted); }
 
+  /* Live 404 check — the raw HTTP exchange as ClaudeBot sees it */
+  .section-sub {
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    margin-top: 0.15rem;
+  }
+
+  .live-check-grid {
+    display: grid;
+    grid-template-columns: 1.1fr 1fr;
+    gap: 1.25rem;
+    margin-top: 1rem;
+  }
+  @media (max-width: 768px) {
+    .live-check-grid { grid-template-columns: 1fr; }
+  }
+
+  .live-check-grid .terminal-mock {
+    max-width: none;
+    font-size: 0.73rem;
+  }
+
+  .term-dim { color: var(--text-muted); }
+  .term-amber { color: var(--amber); }
+  .term-rose { color: var(--rose); }
+
+  .live-check-verdict {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 1rem 1.15rem;
+  }
+  .live-check-verdict-label {
+    font-family: var(--font-mono);
+    font-size: 0.68rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 0.4rem;
+  }
+  .live-check-verdict-label.tone-success { color: var(--emerald); }
+  .live-check-verdict-label.tone-warning { color: var(--amber); }
+  .live-check-verdict-label.tone-danger { color: var(--rose); }
+  .live-check-verdict-label.tone-neutral { color: var(--text-muted); }
+  .live-check-verdict-text {
+    font-size: 0.83rem;
+    color: var(--text-secondary);
+    line-height: 1.55;
+  }
+  .live-check-meta {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    margin-top: 0.5rem;
+  }
+  .live-check-note {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    margin-top: 0.8rem;
+    padding-top: 0.65rem;
+    border-top: 1px solid var(--border-subtle);
+    line-height: 1.55;
+  }
+  .live-check-note code {
+    font-family: var(--font-mono);
+    background: rgba(0, 0, 0, 0.3);
+    padding: 0.1rem 0.3rem;
+    border-radius: 3px;
+    font-size: 0.9em;
+    color: #fff;
+  }
+
+  /* Interpretation line under the resolution bar */
+  .dist-note {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    margin-top: 0.75rem;
+    line-height: 1.5;
+  }
+
+  /* Agent chips + outcome pills in the activity table */
+  .agent-chip {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    background: var(--surface-elevated);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 0.15rem 0.55rem;
+    color: var(--text-secondary);
+    white-space: nowrap;
+  }
+
+  .outcome-pill {
+    font-family: var(--font-mono);
+    font-size: 0.7rem;
+    border-radius: 999px;
+    padding: 0.15rem 0.55rem;
+    white-space: nowrap;
+  }
+  .outcome-yes {
+    background: var(--emerald-subtle);
+    color: var(--emerald);
+    border: 1px solid rgba(16, 185, 129, 0.25);
+  }
+  .outcome-no {
+    background: rgba(255, 255, 255, 0.03);
+    color: var(--text-muted);
+    border: 1px solid var(--border);
+  }
+
+  .table-note {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    margin-top: 0.6rem;
+    line-height: 1.5;
+  }
+
+  .empty-table-hint {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    max-width: 320px;
+  }
+
   /* Toast Notification */
   .toast {
     position: fixed;
@@ -1778,7 +2199,7 @@ export function dashboardHtml(data: DashboardData): string {
     <div class="dashboard-heading-row">
       <div class="dashboard-title-group">
         <h1>Overview</h1>
-        <p class="dashboard-subtitle">Active sites and HTTP-layer 404 recovery status</p>
+        <p class="dashboard-subtitle">When an AI crawler hits a missing page, agent-404 puts the closest real page inside the 404 response itself — Link headers + JSON-LD, no JavaScript. Below: whether each of your sites is doing that, and what's left.</p>
       </div>
 
       <button type="button" class="btn btn-secondary" id="btn-open-register-modal">
@@ -2148,7 +2569,94 @@ export function dashboardHtml(data: DashboardData): string {
         resultBox.innerHTML = '<div style="color:var(--rose)">Could not query matcher: ' + err.message + '</div>';
       } finally {
         btn.disabled = false;
-        btn.textContent = 'Test Match';
+        btn.textContent = 'Test match';
+      }
+    });
+  });
+
+  // Live 404 check — fetch a dead URL on the owner's own domain as
+  // ClaudeBot and render the real HTTP exchange in the terminal block.
+  function clientEscape(str) {
+    return String(str == null ? '' : str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  document.querySelectorAll('.btn-live-check').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const siteId = btn.getAttribute('data-site-id');
+      const grid = btn.closest('.live-check-grid');
+      if (!grid) return;
+      const domain = grid.getAttribute('data-domain') || '';
+      const body = grid.querySelector('.live-check-terminal');
+      const verdictCard = grid.querySelector('.live-check-verdict');
+      const label = verdictCard.querySelector('.live-check-verdict-label');
+      const text = verdictCard.querySelector('.live-check-verdict-text');
+      const meta = verdictCard.querySelector('.live-check-meta');
+
+      btn.disabled = true;
+      btn.textContent = 'Probing…';
+      body.innerHTML = '<div class="term-line term-muted">Fetching a dead URL as ClaudeBot…</div>';
+      if (label) {
+        label.textContent = 'Checking';
+        label.className = 'live-check-verdict-label tone-neutral';
+      }
+      if (text) text.textContent = 'Talking to your site from our servers. This takes a couple of seconds.';
+      if (meta) meta.textContent = '';
+
+      try {
+        const res = await fetch('/api/dashboard/probe', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ siteId }),
+        });
+        const data = await res.json().catch(() => ({}));
+        const p = data.probe;
+        if (!res.ok || !p) {
+          throw new Error(data.error || 'probe failed');
+        }
+
+        const lines = [];
+        lines.push('<div class="term-line"><span class="term-prompt">$</span> curl -sI <span class="term-dim">https://' + clientEscape(domain) + '</span>' + clientEscape(p.probePath) + ' <span class="term-dim">-A "ClaudeBot/1.0"</span></div>');
+        lines.push('<div class="term-line' + (p.status === 404 ? '' : ' term-amber') + '">HTTP/2 ' + p.status + '</div>');
+        if (p.linkHeader) {
+          lines.push('<div class="term-line term-green">link: ' + clientEscape(p.linkHeader) + '</div>');
+        }
+        if (p.hasJsonLd) {
+          lines.push('<div class="term-line term-green">body: &lt;script type="application/ld+json"&gt; — schema.org/ItemList</div>');
+        }
+        if (p.verdict === 'unrecovered_404') {
+          lines.push('<div class="term-line term-rose">↳ no Link header, no JSON-LD — the agent gets nothing</div>');
+        }
+        body.innerHTML = lines.join('');
+
+        const LABELS = {
+          recovered_404: 'Recovery served',
+          unrecovered_404: 'Bare 404 — no recovery',
+          non_404: 'Soft 404 (site returned 200)',
+          error: 'Could not reach site',
+        };
+        const TONES = {
+          recovered_404: 'success',
+          unrecovered_404: 'danger',
+          non_404: 'warning',
+          error: 'warning',
+        };
+        label.textContent = LABELS[p.verdict] || p.verdict;
+        label.className = 'live-check-verdict-label tone-' + (TONES[p.verdict] || 'warning');
+        text.textContent = p.summary || '';
+        if (meta) meta.textContent = 'checked just now · manual';
+      } catch (err) {
+        body.innerHTML = '<div class="term-line term-rose">↳ ' + clientEscape(err.message || 'network error') + '</div>';
+        label.textContent = 'Check failed';
+        label.className = 'live-check-verdict-label tone-warning';
+        text.textContent = 'Could not reach your site from our servers. Try again in a moment.';
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Run live check';
       }
     });
   });
