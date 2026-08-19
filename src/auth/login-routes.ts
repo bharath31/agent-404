@@ -34,6 +34,22 @@ import { rateLimiter } from "../api/middleware/rate-limit.js";
 
 export const loginRoutes = new Hono<Env>();
 
+/**
+ * Read an application/x-www-form-urlencoded body as { [key]: string }.
+ *
+ * Deliberately NOT c.req.parseBody(): on Vercel's Node runtime, Hono's
+ * parseBody → request.formData() hangs forever on POSTs with a body
+ * (same bug family as the new Request() issue documented in api/index.ts).
+ * Reading the body as text mirrors c.req.json(), which works fine.
+ */
+async function readForm(c: Context<Env>): Promise<Record<string, string>> {
+	const text = await c.req.text().catch(() => "");
+	const params = new URLSearchParams(text);
+	const out: Record<string, string> = {};
+	for (const [key, value] of params.entries()) out[key] = value;
+	return out;
+}
+
 function authNotConfigured(c: Context<Env>): Response {
 	return c.html(
 		`<!DOCTYPE html><html><body style="font-family:system-ui;background:#09090b;color:#f4f4f5;display:grid;place-items:center;min-height:100vh;margin:0"><div style="max-width:440px;padding:2rem;text-align:center;border:1px solid #27272a;border-radius:14px;background:#121215"><h1 style="font-size:1.1rem;margin:0 0 0.75rem">Sign-in is not configured</h1><p style="font-size:0.85rem;color:#a1a1aa;line-height:1.6;margin:0">Set AUTH0_DOMAIN, AUTH0_CLIENT_ID, AUTH0_CLIENT_SECRET, and AUTH0_SESSION_ENCRYPTION_KEY to enable owner sign-in.</p></div></body></html>`,
@@ -70,9 +86,9 @@ loginRoutes.post(
 	async (c) => {
 		const cfg = readAuth0Config(c.env as unknown as Record<string, string | undefined>);
 		if (!cfg) return authNotConfigured(c);
-		const body = await c.req.parseBody();
-		const returnTo = safeReturnTo(body?.return_to);
-		const email = normalizeEmail(body?.email);
+		const body = await readForm(c);
+		const returnTo = safeReturnTo(body.return_to);
+		const email = normalizeEmail(body.email);
 		if (!email) {
 			return c.html(
 				loginPageHtml({
@@ -102,10 +118,10 @@ loginRoutes.post(
 loginRoutes.post("/auth/login/verify", async (c) => {
 	const cfg = readAuth0Config(c.env as unknown as Record<string, string | undefined>);
 	if (!cfg) return authNotConfigured(c);
-	const body = await c.req.parseBody();
-	const email = normalizeEmail(body?.email);
-	const code = normalizeCode(body?.code);
-	const returnTo = safeReturnTo(body?.return_to);
+	const body = await readForm(c);
+	const email = normalizeEmail(body.email);
+	const code = normalizeCode(body.code);
+	const returnTo = safeReturnTo(body.return_to);
 
 	if (!email || !code) {
 		return c.html(
@@ -142,9 +158,9 @@ loginRoutes.post(
 	async (c) => {
 		const cfg = readAuth0Config(c.env as unknown as Record<string, string | undefined>);
 		if (!cfg) return authNotConfigured(c);
-		const body = await c.req.parseBody();
-		const email = normalizeEmail(body?.email);
-		const returnTo = safeReturnTo(body?.return_to);
+		const body = await readForm(c);
+		const email = normalizeEmail(body.email);
+		const returnTo = safeReturnTo(body.return_to);
 		if (!email) {
 			return c.html(loginPageHtml({ state: "email", returnTo }));
 		}
