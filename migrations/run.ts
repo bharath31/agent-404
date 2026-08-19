@@ -9,12 +9,44 @@ import { fileURLToPath } from "url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
+const DOLLAR_TAG_RE = /^\$[A-Za-z0-9_]*\$/;
+
 function splitStatements(text: string): string[] {
 	const results: string[] = [];
 	let current = "";
 	let depth = 0;
+	// Tracks an open dollar-quoted string (e.g. the body of a `DO $$ ... $$`
+	// block). Semicolons and parens inside it must NOT affect statement
+	// splitting — PL/pgSQL bodies routinely contain their own `;`-terminated
+	// statements.
+	let dollarTag: string | null = null;
 
-	for (const char of text) {
+	let i = 0;
+	while (i < text.length) {
+		const char = text[i];
+
+		if (dollarTag) {
+			current += char;
+			if (char === "$" && text.startsWith(dollarTag, i)) {
+				current += dollarTag.slice(1);
+				i += dollarTag.length;
+				dollarTag = null;
+				continue;
+			}
+			i++;
+			continue;
+		}
+
+		if (char === "$") {
+			const match = DOLLAR_TAG_RE.exec(text.slice(i));
+			if (match) {
+				dollarTag = match[0];
+				current += dollarTag;
+				i += dollarTag.length;
+				continue;
+			}
+		}
+
 		if (char === "(") depth++;
 		if (char === ")") depth--;
 		if (char === ";" && depth === 0) {
@@ -23,9 +55,12 @@ function splitStatements(text: string): string[] {
 				results.push(trimmed);
 			}
 			current = "";
-		} else {
-			current += char;
+			i++;
+			continue;
 		}
+
+		current += char;
+		i++;
 	}
 
 	const trimmed = current.trim();
@@ -63,6 +98,7 @@ async function run() {
 		"0011_install_probes.sql",
 		"0012_login_otp.sql",
 		"0013_suggestion_labels.sql",
+		"0014_partition_vector_index.sql",
 	];
 	for (const file of migrations) {
 		console.log(`\nRunning migration: ${file}`);
