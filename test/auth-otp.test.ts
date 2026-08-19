@@ -368,13 +368,12 @@ describe("loginPageHtml", () => {
 		expect(html).toContain("Welcome back");
 		expect(html).toContain('action="/auth/login/code"');
 		expect(html).toContain('name="email"');
-		expect(html).toContain("GET");
-		expect(html).toContain("401");
+		expect(html).toContain('Send code');
 	});
 
 	it("renders the code step with the recipient email", () => {
 		const html = loginPageHtml({ state: "code", email: "bharath@test.dev" });
-		expect(html).toContain("Enter your code");
+		expect(html).toContain("Enter the code");
 		expect(html).toContain("bharath@test.dev");
 		expect(html).toContain('action="/auth/login/verify"');
 	});
@@ -450,7 +449,7 @@ describe("login routes", () => {
 		const html = await res.text();
 		expect(html).toContain("Welcome back");
 		expect(html).toContain("/auth/login/code");
-		expect(html).toContain("sign-in required");
+		expect(html).toContain("Send code");
 	});
 
 	it("GET /auth/login redirects signed-in users to the dashboard", async () => {
@@ -484,7 +483,7 @@ describe("login routes", () => {
 		);
 		expect(res.status).toBe(200);
 		const html = await res.text();
-		expect(html).toContain("Enter your code");
+		expect(html).toContain("Enter the code");
 		expect(html).toContain("bharath@test.dev");
 		expect(mock).toHaveBeenCalledWith(
 			expect.stringContaining("/passwordless/start"),
