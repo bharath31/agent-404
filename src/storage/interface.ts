@@ -10,6 +10,7 @@ import type {
 	RecoveryRateStats,
 	AgentCategory,
 	StandingAuditReport,
+	InstallProbe,
 } from "../types.js";
 
 export interface StorageAdapter {
@@ -95,6 +96,22 @@ export interface StorageAdapter {
 	): Promise<RecoveryEvent | null>;
 	/** BAT-61: aggregate recovery rate statistics from durable storage. */
 	getRecoveryRateStats(siteId?: string): Promise<RecoveryRateStats>;
+	/** Recent 404 events for the dashboard activity table, newest first. */
+	getRecentRecoveryEvents(siteId: string, limit: number): Promise<RecoveryEvent[]>;
+
+	/**
+	 * Dashboard rework: durable install-liveness probes. A probe fetches a
+	 * dead URL on the customer's own domain with a crawler UA and records
+	 * what the live 404 response contains — the only way to tell whether the
+	 * install is actually serving recovery. See migrations/0011_install_probes.sql.
+	 */
+	saveInstallProbe(probe: InstallProbe): Promise<void>;
+	getLatestInstallProbe(siteId: string): Promise<InstallProbe | null>;
+	/** Sites whose latest probe is missing or older than maxAgeHours, stalest first. */
+	listSitesNeedingProbe(
+		limit: number,
+		maxAgeHours: number,
+	): Promise<{ id: string; domain: string }[]>;
 
 	/**
 	 * BAT-62: count of sites that are actually working — indexed a page AND

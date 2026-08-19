@@ -5,6 +5,7 @@ import type { PostgresStorage } from "../../storage/postgres.js";
 import { requireOwnerPage } from "../../auth/owner.js";
 import { normalizeDomain } from "../domain.js";
 import { dashboardHtml } from "../../dashboard.js";
+import { deriveInstallState } from "../../lib/install-state.js";
 import type { DashboardSiteData } from "../../types.js";
 import { verificationInstructions } from "./sites.js";
 
@@ -53,11 +54,28 @@ dashboard.get("/", requireOwnerPage(), async (c) => {
 	const owned = await storage.listSitesByOwner(ownerSub);
 	const sitesData: DashboardSiteData[] = await Promise.all(
 		owned.map(async (site) => {
-			const [stats, recentLogs, matchQuality] = await Promise.all([
-				storage.getStats(site.id),
-				storage.getSuggestionLogs(site.id, 20),
-				storage.getMatchQualityStats(site.id),
-			]);
+			const [stats, recentLogs, matchQuality, latestProbe, recentRecoveryEvents, recoveryStats] =
+				await Promise.all([
+					storage.getStats(site.id),
+					storage.getSuggestionLogs(site.id, 20),
+					storage.getMatchQualityStats(site.id),
+					storage.getLatestInstallProbe(site.id),
+					storage.getRecentRecoveryEvents(site.id, 20),
+					storage.getRecoveryRateStats(site.id),
+				]);
+
+			const recovery = recoveryStats.overall;
+			const installState = deriveInstallState({
+				verified: Boolean(site.verifiedAt),
+				pageCount: stats.pageCount,
+				latestProbe,
+				fourOhFoursLast30d: matchQuality.last30d,
+				recovery: {
+					total: recovery.totalSuggestions,
+					recovered: recovery.recoveredCount,
+					rate: recovery.recoveryRate,
+				},
+			});
 
 			return {
 				id: site.id,
@@ -71,6 +89,14 @@ dashboard.get("/", requireOwnerPage(), async (c) => {
 				matchQuality,
 				verified: Boolean(site.verifiedAt),
 				verification: verificationInstructions(site.domain, site.verificationToken),
+				latestProbe,
+				recentRecoveryEvents,
+				recovery: {
+					total: recovery.totalSuggestions,
+					recovered: recovery.recoveredCount,
+					rate: recovery.recoveryRate,
+				},
+				installState,
 			};
 		}),
 	);

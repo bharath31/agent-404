@@ -11,6 +11,7 @@ import type {
 	RecoveryRateStats,
 	AgentCategory,
 	StandingAuditReport,
+	InstallProbe,
 } from "../types.js";
 import type { StorageAdapter } from "./interface.js";
 import { getDatabaseUrl } from "../config.js";
@@ -523,6 +524,88 @@ export class PostgresStorage implements StorageAdapter {
 			recovered: Boolean(row.recovered),
 			recoveredUrl: (row.recovered_url as string) || undefined,
 			recoveryLatencyMs: row.recovery_latency_ms != null ? Number(row.recovery_latency_ms) : undefined,
+		};
+	}
+
+	async getRecentRecoveryEvents(siteId: string, limit: number): Promise<RecoveryEvent[]> {
+		const { rows } = await this.sql`
+			SELECT * FROM recovery_events
+			WHERE site_id = ${siteId}
+			ORDER BY created_at DESC
+			LIMIT ${limit}
+		`;
+		return rows.map((row) => this.mapRecoveryEventRow(row));
+	}
+
+	// --- Install liveness probes (dashboard rework) ---
+
+	async saveInstallProbe(probe: InstallProbe): Promise<void> {
+		await this.sql`
+			INSERT INTO install_probes (site_id, probe_path, status, verdict, has_link_headers, has_json_ld, link_header, summary, source)
+			VALUES (
+				${probe.siteId},
+				${probe.probePath},
+				${probe.status},
+				${probe.verdict},
+				${probe.hasLinkHeaders},
+				${probe.hasJsonLd},
+				${probe.linkHeader ?? null},
+				${probe.summary ?? null},
+				${probe.source}
+			)
+		`;
+	}
+
+	async getLatestInstallProbe(siteId: string): Promise<InstallProbe | null> {
+		const { rows } = await this.sql`
+			SELECT * FROM install_probes
+			WHERE site_id = ${siteId}
+			ORDER BY probed_at DESC
+			LIMIT 1
+		`;
+		return rows[0] ? this.mapInstallProbeRow(rows[0]) : null;
+	}
+
+	async listSitesNeedingProbe(
+		limit: number,
+		maxAgeHours: number,
+	): Promise<{ id: string; domain: string }[]> {
+		// Mirror of the reporting filter in lib/live-installs.ts (isTestDomain):
+		// RFC 2666-reserved example.com hosts and legacy smoke-* prefixes are
+		// CI artifacts, not real installs — probing them burns budget.
+		const { rows } = await this.sql`
+			SELECT s.id, s.domain FROM sites s
+			WHERE s.domain NOT ILIKE '%.example.com'
+				AND s.domain NOT LIKE 'smoke-%'
+				AND NOT EXISTS (
+					SELECT 1 FROM install_probes p
+					WHERE p.site_id = s.id
+						AND p.probed_at > NOW() - ${maxAgeHours} * INTERVAL '1 hour'
+				)
+			ORDER BY (
+				SELECT MAX(p.probed_at) FROM install_probes p WHERE p.site_id = s.id
+			) NULLS FIRST
+			LIMIT ${limit}
+		`;
+		return rows.map((row) => ({
+			id: row.id as string,
+			domain: row.domain as string,
+		}));
+	}
+
+	private mapInstallProbeRow(row: Record<string, unknown>): InstallProbe {
+		return {
+			id: String(row.id),
+			siteId: row.site_id as string,
+			probedAt: String(row.probed_at),
+			probePath: row.probe_path as string,
+			status: Number(row.status ?? 0),
+			verdict: row.verdict as InstallProbe["verdict"],
+			hasLinkHeaders: Boolean(row.has_link_headers),
+			hasJsonLd: Boolean(row.has_json_ld),
+			linkHeader: (row.link_header as string) || null,
+			summary: (row.summary as string) || null,
+			source: (row.source as InstallProbe["source"]) || "manual",
 		};
 	}
 
