@@ -204,6 +204,19 @@ export class PostgresStorage implements StorageAdapter {
 		}
 	}
 
+	/**
+	 * hnsw.ef_search controls the size of the dynamic candidate list HNSW
+	 * walks at query time — higher values trade latency for recall (see
+	 * pgvector's HNSW docs). pgvector's own default is 40, which is tuned
+	 * for a single flat index. Since BAT-53 (migrations/0013) partitions
+	 * `pages` by site_id, each query only ever searches one (much smaller)
+	 * per-site partition, so we can afford a higher ef_search than the
+	 * default for meaningfully better recall at a small, bounded latency
+	 * cost. Re-tune this against scripts/benchmark-recall.ts if partition
+	 * count or per-tenant row counts change materially.
+	 */
+	private static readonly EF_SEARCH = 100;
+
 	async searchByEmbedding(
 		siteId: string,
 		embedding: number[],
@@ -211,13 +224,20 @@ export class PostgresStorage implements StorageAdapter {
 	): Promise<PageRecord[]> {
 		const embeddingStr = this.validateEmbedding(embedding);
 		if (!embeddingStr) return [];
-		const { rows } = await this.sql.query(
-			`SELECT * FROM pages
-			WHERE site_id = $1 AND embedding IS NOT NULL
-			ORDER BY embedding <=> $2::vector
-			LIMIT $3`,
-			[siteId, embeddingStr, limit],
-		);
+
+		// SET LOCAL only applies for the lifetime of a transaction, and SET
+		// doesn't accept a bind parameter for its value — so this runs as a
+		// two-statement transaction with the (constant, non-user-controlled)
+		// ef_search value inlined via sql.unsafe rather than interpolated as
+		// a query parameter.
+		const results = await this.sql.transaction([
+			this.sql`SET LOCAL hnsw.ef_search = ${this.sql.unsafe(String(PostgresStorage.EF_SEARCH))}`,
+			this.sql`SELECT * FROM pages
+				WHERE site_id = ${siteId} AND embedding IS NOT NULL
+				ORDER BY embedding <=> ${embeddingStr}::vector
+				LIMIT ${limit}`,
+		]);
+		const rows = results[1]?.rows ?? [];
 		return rows.map(this.mapPageRow);
 	}
 
