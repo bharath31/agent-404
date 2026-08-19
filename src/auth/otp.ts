@@ -14,6 +14,7 @@
 
 import { createHash, createHmac, randomInt, timingSafeEqual } from "node:crypto";
 import type { Context } from "hono";
+import { getCookie } from "hono/cookie";
 import { AUTH_SESSION_COOKIE, SESSION_ABSOLUTE_SECONDS, SESSION_INACTIVITY_SECONDS } from "./config.js";
 
 /* ------------------------------------------------------------------ */
@@ -201,7 +202,7 @@ export function readSessionCookie(
 	secret: string,
 	now: number = Math.floor(Date.now() / 1000),
 ): ParsedSession | null {
-	const token = c.req.header(AUTH_SESSION_COOKIE);
+	const token = getCookie(c, AUTH_SESSION_COOKIE);
 	if (!token) return null;
 	const raw = verifyHs256(token, secret);
 	if (!raw) return null;

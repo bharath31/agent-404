@@ -40,9 +40,14 @@ function authCfg(overrides: Record<string, string | undefined> = {}) {
 	});
 }
 
-function fakeContext(headerValue: string | null): Context {
+function fakeContext(cookieValue: string | null): Context {
+	const headers = new Headers();
+	if (cookieValue) headers.set("Cookie", `a404_session=${cookieValue}`);
 	return {
-		req: { header: (name: string) => (name === "a404_session" ? (headerValue ?? undefined) : undefined) },
+		req: {
+			raw: { headers },
+			header: (name: string) => headers.get(name) ?? undefined,
+		},
 	} as unknown as Context;
 }
 
@@ -459,7 +464,7 @@ describe("login routes", () => {
 		const { value } = issueSessionCookie(identity, SESSION_SECRET);
 		const res = await loginRoutes.request(
 			"/auth/login",
-			{ headers: { a404_session: value } },
+			{ headers: { Cookie: `a404_session=${value}` } },
 			routeEnv,
 		);
 		expect(res.status).toBe(302);
@@ -529,6 +534,61 @@ describe("login routes", () => {
 		expect(
 			mock.mock.calls.some(([u]) => String(u).endsWith("/api/v2/users") && String(u) !== "/api/v2/users-by-email"),
 		).toBe(false);
+	});
+
+	it("the issued session cookie is recognized on the next request (regression)", async () => {
+		const mock = authFetchMock({ userExists: true });
+		globalThis.fetch = mock as unknown as typeof fetch;
+		await loginRoutes.request(
+			"/auth/login/code",
+			{ method: "POST", headers: routeIp(7), body: new URLSearchParams({ email: "bharath@test.dev" }) },
+			routeEnv,
+		);
+		const code = codeFromResend(mock);
+		const verifyRes = await loginRoutes.request(
+			"/auth/login/verify",
+			{
+				method: "POST",
+				body: new URLSearchParams({ email: "bharath@test.dev", code, return_to: "/dashboard" }),
+			},
+			routeEnv,
+		);
+		const match = /a404_session=([^;]+)/.exec(verifyRes.headers.get("Set-Cookie") ?? "");
+		expect(match).toBeTruthy();
+
+		// The cookie must be readable from the Cookie header on the next request.
+		const next = await loginRoutes.request(
+			"/auth/login",
+			{ headers: { Cookie: `a404_session=${match![1]}` } },
+			routeEnv,
+		);
+		expect(next.status).toBe(302);
+		expect(next.headers.get("Location")).toBe("/dashboard");
+	});
+
+	it("POST /auth/login/code respects a 30s cooldown (friendly message, no JSON 429)", async () => {
+		const mock = authFetchMock();
+		globalThis.fetch = mock as unknown as typeof fetch;
+		const first = await loginRoutes.request(
+			"/auth/login/code",
+			{ method: "POST", headers: routeIp(8), body: new URLSearchParams({ email: "bharath@test.dev" }) },
+			routeEnv,
+		);
+		expect(first.status).toBe(200);
+		expect(await first.text()).toContain("Enter the code");
+
+		const second = await loginRoutes.request(
+			"/auth/login/code",
+			{ method: "POST", headers: routeIp(8), body: new URLSearchParams({ email: "bharath@test.dev" }) },
+			routeEnv,
+		);
+		const html = await second.text();
+		expect(html).toContain("Please wait");
+		expect(html).not.toContain("Too many requests");
+		// Resend was only called once.
+		expect(
+			mock.mock.calls.filter(([u]) => String(u) === "https://api.resend.com/emails"),
+		).toHaveLength(1);
 	});
 
 	it("creates a new Auth0 user on first sign-in", async () => {

@@ -12,6 +12,7 @@ export interface PendingOtp {
 	codeHash: string;
 	expiresAt: Date;
 	attempts: number;
+	createdAt: Date;
 }
 
 export interface OtpStore {
@@ -44,18 +45,19 @@ export class PostgresOtpStore implements OtpStore {
 
 	async getOtp(email: string): Promise<PendingOtp | null> {
 		const { rows } = await this.sql`
-			SELECT code_hash, expires_at, attempts
+			SELECT code_hash, expires_at, attempts, created_at
 			FROM login_otp
 			WHERE email = ${email}
 		`;
 		const row = rows[0] as
-			| { code_hash: string; expires_at: Date | string; attempts: number }
+			| { code_hash: string; expires_at: Date | string; attempts: number; created_at: Date | string }
 			| undefined;
 		if (!row) return null;
 		return {
 			codeHash: row.code_hash,
 			expiresAt: new Date(row.expires_at),
 			attempts: Number(row.attempts),
+			createdAt: new Date(row.created_at),
 		};
 	}
 
@@ -79,11 +81,11 @@ export class PostgresOtpStore implements OtpStore {
 export class MemoryOtpStore implements OtpStore {
 	private map = new Map<
 		string,
-		{ codeHash: string; expiresAt: Date; attempts: number }
+		{ codeHash: string; expiresAt: Date; attempts: number; createdAt: Date }
 	>();
 
 	async saveOtp(email: string, codeHash: string, expiresAt: Date): Promise<void> {
-		this.map.set(email, { codeHash, expiresAt, attempts: 0 });
+		this.map.set(email, { codeHash, expiresAt, attempts: 0, createdAt: new Date() });
 	}
 	async getOtp(email: string): Promise<PendingOtp | null> {
 		const v = this.map.get(email);
