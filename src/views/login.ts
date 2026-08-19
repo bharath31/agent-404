@@ -2,13 +2,12 @@
  * Branded sign-in page for the embedded passwordless flow.
  *
  * Reuses the site design system (dark, Inter + JetBrains Mono) so the login
- * experience matches the rest of agent404.dev instead of the Auth0 default
- * Universal Login card.
+ * experience matches agent404.dev instead of the Auth0 default Universal
+ * Login card.
  *
- * Signature element: a mono HTTP status line (`GET /dashboard → 401`) — this
- * page only exists because the dashboard answered 401, so the card states
- * that in the product's own language instead of a generic "secure sign-in"
- * badge.
+ * Signature: the emerald "404" brand mark (the site favicon as a glowing
+ * status lamp). Everything else stays quiet and disciplined — no pills,
+ * no footers, no decorative gimmicks.
  *
  * Two states:
  *   - email: ask for the email address, send the one-time code
@@ -47,7 +46,6 @@ export function loginPageHtml(opts: LoginPageOptions): string {
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Sign in — agent-404</title>
   <meta name="description" content="Sign in to the agent-404 dashboard.">
-  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='20' fill='%2310b981'/%3E%3Ctext x='50' y='58' font-family='system-ui,sans-serif' font-size='48' font-weight='800' fill='white' text-anchor='middle' dominant-baseline='middle'%3E404%3C/text%3E%3C/svg%3E">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -56,34 +54,29 @@ export function loginPageHtml(opts: LoginPageOptions): string {
 
     :root {
       --bg: #09090b;
-      --bg-subtle: #0f0f12;
       --surface: #121215;
-      --surface-elevated: #18181c;
-      --surface-hover: #1f1f24;
-      --border: #27272a;
-      --border-subtle: #1e1e22;
-      --border-focus: #52525b;
+      --surface-hover: #1a1a1f;
+      --border: #26262b;
+      --border-focus: #3f3f46;
       --text: #f4f4f5;
       --text-secondary: #a1a1aa;
-      --text-muted: #71717a;
+      --text-muted: #6b6b74;
       --accent: #3b82f6;
-      --accent-subtle: rgba(59, 130, 246, 0.14);
+      --accent-subtle: rgba(59, 130, 246, 0.16);
       --emerald: #10b981;
-      --amber: #f59e0b;
-      --amber-subtle: rgba(245, 158, 11, 0.14);
+      --emerald-glow: rgba(16, 185, 129, 0.28);
       --rose: #f43f5e;
-      --rose-subtle: rgba(244, 63, 94, 0.12);
+      --rose-subtle: rgba(244, 63, 94, 0.10);
       --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       --font-mono: 'JetBrains Mono', SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-      --radius-sm: 6px;
-      --radius-md: 10px;
-      --radius-lg: 14px;
+      --radius-sm: 8px;
+      --radius-lg: 16px;
     }
 
     body {
       font-family: var(--font-sans);
       background:
-        radial-gradient(640px 320px at 50% -120px, rgba(16, 185, 129, 0.07), transparent 70%),
+        radial-gradient(560px 300px at 50% -80px, rgba(16, 185, 129, 0.05), transparent 70%),
         var(--bg);
       color: var(--text);
       min-height: 100vh;
@@ -96,12 +89,12 @@ export function loginPageHtml(opts: LoginPageOptions): string {
     a { color: var(--text-secondary); text-decoration: none; transition: color 0.15s; }
     a:hover { color: var(--text); }
 
-    /* Top bar */
+    /* Slim top bar */
     .top-bar {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 1.1rem 1.5rem;
+      padding: 1.15rem 1.6rem;
     }
     .logo {
       font-family: var(--font-mono);
@@ -125,7 +118,7 @@ export function loginPageHtml(opts: LoginPageOptions): string {
       display: flex;
       align-items: flex-start;
       justify-content: center;
-      padding: 4rem 1.25rem 3rem;
+      padding: 3.5rem 1.25rem 4rem;
     }
     .card {
       width: 100%;
@@ -133,60 +126,40 @@ export function loginPageHtml(opts: LoginPageOptions): string {
       background: var(--surface);
       border: 1px solid var(--border);
       border-radius: var(--radius-lg);
-      padding: 2.25rem 2.25rem 2rem;
-      box-shadow: 0 24px 64px rgba(0, 0, 0, 0.45);
+      padding: 2.75rem 2.5rem 2.25rem;
+      text-align: center;
     }
     @media (min-width: 640px) {
       .card { margin-top: 1.5rem; }
     }
 
-    /* Signature: the HTTP status line that made this page necessary */
-    .status-line {
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-      font-family: var(--font-mono);
-      font-size: 0.72rem;
-      letter-spacing: 0.01em;
-      color: var(--text-muted);
-      margin-bottom: 1.9rem;
-      flex-wrap: wrap;
+    /* The brand mark — the memorable thing */
+    .mark {
+      width: 52px;
+      height: 52px;
+      margin: 0 auto 1.6rem;
+      border-radius: 13px;
+      filter: drop-shadow(0 0 14px var(--emerald-glow));
     }
-    .status-line .method { color: var(--text-secondary); font-weight: 600; }
-    .status-line .path { color: var(--text-secondary); }
-    .status-code {
-      font-weight: 600;
-      color: var(--amber);
-      background: var(--amber-subtle);
-      border: 1px solid rgba(245, 158, 11, 0.25);
-      border-radius: 4px;
-      padding: 0.05rem 0.4rem;
-    }
-    .status-note { color: var(--text-muted); }
+    .mark svg { display: block; width: 100%; height: 100%; }
 
     h1 {
-      font-size: 1.55rem;
+      font-size: 1.5rem;
       font-weight: 700;
-      letter-spacing: -0.025em;
-      margin-bottom: 0.45rem;
+      letter-spacing: -0.02em;
+      margin-bottom: 0.5rem;
     }
     .lede {
       font-size: 0.9rem;
       color: var(--text-secondary);
-      margin-bottom: 1.6rem;
+      margin-bottom: 1.75rem;
       line-height: 1.55;
-    }
-    .lede code {
-      font-family: var(--font-mono);
-      font-size: 0.82em;
-      color: var(--text);
-      background: var(--surface-elevated);
-      border: 1px solid var(--border);
-      border-radius: 4px;
-      padding: 0.05em 0.35em;
       overflow-wrap: anywhere;
     }
 
+    .form {
+      text-align: left;
+    }
     label {
       display: block;
       font-size: 0.78rem;
@@ -198,7 +171,7 @@ export function loginPageHtml(opts: LoginPageOptions): string {
     input[type="email"],
     input[type="text"] {
       width: 100%;
-      background: var(--bg-subtle);
+      background: #0e0e11;
       border: 1px solid var(--border);
       border-radius: var(--radius-sm);
       color: var(--text);
@@ -216,15 +189,15 @@ export function loginPageHtml(opts: LoginPageOptions): string {
 
     .code-input {
       font-family: var(--font-mono);
-      font-size: 1.3rem;
+      font-size: 1.35rem;
       font-weight: 600;
       letter-spacing: 0.45em;
       text-indent: 0.45em;
       text-align: center;
-      padding: 0.8rem 0.5rem;
+      padding: 0.8rem 0.4rem;
     }
     @media (max-width: 380px) {
-      .code-input { letter-spacing: 0.28em; text-indent: 0.28em; font-size: 1.15rem; }
+      .code-input { letter-spacing: 0.28em; text-indent: 0.28em; font-size: 1.2rem; }
     }
 
     .btn {
@@ -234,9 +207,9 @@ export function loginPageHtml(opts: LoginPageOptions): string {
       gap: 0.5rem;
       width: 100%;
       margin-top: 1.15rem;
-      padding: 0.72rem 1.15rem;
+      padding: 0.74rem 1.15rem;
       border-radius: var(--radius-sm);
-      font-size: 0.92rem;
+      font-size: 0.93rem;
       font-weight: 600;
       cursor: pointer;
       transition: all 0.15s ease;
@@ -248,28 +221,23 @@ export function loginPageHtml(opts: LoginPageOptions): string {
       color: #09090b;
       border-color: #f4f4f5;
     }
-    .btn-primary:hover {
-      background: #ffffff;
-      border-color: #ffffff;
-    }
-    .btn:focus-visible {
-      outline: 2px solid var(--accent);
-      outline-offset: 2px;
-    }
+    .btn-primary:hover { background: #ffffff; border-color: #ffffff; }
+    .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
     .btn:disabled { opacity: 0.55; cursor: not-allowed; }
 
     .field-error {
       display: flex;
       align-items: flex-start;
       gap: 0.5rem;
+      text-align: left;
       background: var(--rose-subtle);
-      border: 1px solid rgba(244, 63, 94, 0.25);
+      border: 1px solid rgba(244, 63, 94, 0.22);
       border-radius: var(--radius-sm);
       color: #fda4af;
       font-size: 0.8rem;
       line-height: 1.45;
       padding: 0.6rem 0.75rem;
-      margin-bottom: 1rem;
+      margin: 0 0 1rem;
     }
     .field-error::before {
       content: "!";
@@ -288,32 +256,15 @@ export function loginPageHtml(opts: LoginPageOptions): string {
       margin-top: 0.1em;
     }
 
-    .meta {
+    .helper {
       margin-top: 1.4rem;
       font-size: 0.78rem;
       color: var(--text-muted);
-      text-align: center;
     }
+    .helper a { color: var(--text-secondary); }
+    .helper a:hover { color: var(--text); }
 
-    .divider {
-      display: flex;
-      align-items: center;
-      gap: 0.75rem;
-      margin: 1.4rem 0 0.8rem;
-      font-size: 0.68rem;
-      font-family: var(--font-mono);
-      color: var(--text-muted);
-      text-transform: uppercase;
-      letter-spacing: 0.06em;
-    }
-    .divider::before,
-    .divider::after {
-      content: "";
-      flex: 1;
-      height: 1px;
-      background: var(--border-subtle);
-    }
-    .switch-form { text-align: center; }
+    .switch-form { margin-top: 1.1rem; }
     .switch-form button {
       background: none;
       border: none;
@@ -321,11 +272,10 @@ export function loginPageHtml(opts: LoginPageOptions): string {
       font-family: inherit;
       font-size: 0.8rem;
       cursor: pointer;
-      padding: 0.25rem 0.5rem;
+      padding: 0.2rem 0.4rem;
       border-radius: var(--radius-sm);
     }
-    .switch-form button:hover { color: var(--text); background: var(--surface-elevated); }
-    .switch-form a { font-size: 0.8rem; }
+    .switch-form button:hover { color: var(--text); background: var(--surface-hover); }
 
     @media (prefers-reduced-motion: reduce) {
       * { transition: none !important; }
@@ -340,43 +290,42 @@ export function loginPageHtml(opts: LoginPageOptions): string {
 
   <main>
     <div class="card">
-      <div class="status-line">
-        <span class="method">GET</span>
-        <span class="path">/dashboard</span>
-        <span class="status-code">401</span>
-        <span class="status-note">${state === "email" ? "sign-in required" : "code required"}</span>
+      <div class="mark" aria-hidden="true">
+        <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+          <rect width="100" height="100" rx="24" fill="#10b981"/>
+          <text x="50" y="60" font-family="'JetBrains Mono', monospace" font-size="46" font-weight="800" fill="#ffffff" text-anchor="middle" dominant-baseline="middle">404</text>
+        </svg>
       </div>
 
       ${
 		state === "email"
 			? `
       <h1>Welcome back</h1>
-      <p class="lede">Sign in to your dashboard with a one-time code sent to your email.</p>
+      <p class="lede">Enter your email and we&rsquo;ll send you a one-time code.</p>
       ${error ? `<div class="field-error" role="alert">${safeError}</div>` : ""}
-      <form method="POST" action="/auth/login/code">
+      <form class="form" method="POST" action="/auth/login/code">
         <input type="hidden" name="return_to" value="${safeReturnTo}">
         <label for="email">Email address</label>
         <input type="email" id="email" name="email" value="${safeEmail}" placeholder="you@example.com" autocomplete="email" required autofocus>
         <button type="submit" class="btn btn-primary">Send code</button>
       </form>
-      <p class="meta">First time here? We&rsquo;ll create your account automatically.</p>`
+      <p class="helper">First time here? We&rsquo;ll create your account automatically.</p>`
 			: `
-      <h1>Enter your code</h1>
-      <p class="lede">We sent a one-time code to <code>${safeEmail}</code>. It expires in 5 minutes.</p>
+      <h1>Enter the code</h1>
+      <p class="lede">We emailed a one-time code to <b>${safeEmail}</b>. It expires in 5 minutes.</p>
       ${error ? `<div class="field-error" role="alert">${safeError}</div>` : ""}
-      <form method="POST" action="/auth/login/verify">
+      <form class="form" method="POST" action="/auth/login/verify">
         <input type="hidden" name="email" value="${safeEmail}">
         <input type="hidden" name="return_to" value="${safeReturnTo}">
         <label for="code">One-time code</label>
         <input type="text" id="code" name="code" class="code-input" inputmode="numeric" autocomplete="one-time-code" autocapitalize="off" placeholder="000000" maxlength="8" pattern="[0-9\\s-]*" required autofocus>
         <button type="submit" class="btn btn-primary">Sign in</button>
       </form>
-      <div class="divider">didn&rsquo;t get it?</div>
-      <form method="POST" action="/auth/login/resend" class="switch-form">
+      <form class="form switch-form" method="POST" action="/auth/login/resend" style="text-align:center">
         <input type="hidden" name="email" value="${safeEmail}">
         <input type="hidden" name="return_to" value="${safeReturnTo}">
         <button type="submit" id="resend-btn">Resend code</button>
-        <span style="color:var(--text-muted);font-size:0.72rem"> &middot; or </span>
+        <span style="color:var(--text-muted);font-size:0.78rem"> &middot; </span>
         <a href="/auth/login?return_to=${encodeURIComponent(returnTo)}">use a different email</a>
       </form>`
       }
