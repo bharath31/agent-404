@@ -1,16 +1,20 @@
 /**
- * Routes for the embedded passwordless sign-in flow.
+ * Routes for the embedded one-time-code sign-in flow (app-owned).
  *
  *   GET  /auth/login          → branded sign-in page (email step)
- *   POST /auth/login/code     → send the one-time code (code step)
- *   POST /auth/login/verify   → exchange the code, set the session cookie
+ *   POST /auth/login/code     → generate a code, persist its hash, email it via Resend
+ *   POST /auth/login/verify   → verify the code, resolve the Auth0 user, set the session
  *   POST /auth/login/resend   → re-send the code (rate-limited)
  *   GET  /auth/logout         → clear app session + legacy Auth0 session
  *
  * The auth0-hono middleware is configured with customRoutes: ["login",
  * "logout"] so these routes take over from the default Universal Login
  * redirect. /auth/callback stays mounted by the middleware for backwards
- * compatibility (existing sessions, magic links, direct /authorize links).
+ * compatibility (legacy sessions, magic links, direct /authorize links).
+ *
+ * Nothing here touches the tenant's email provider, templates, or shared
+ * connections — the code is generated, delivered (Resend), and verified by
+ * the app itself.
  */
 
 import { Hono } from "hono";
@@ -18,21 +22,58 @@ import type { Context } from "hono";
 import type { Env } from "../index.js";
 import { AUTH_LOGIN_PATH, AUTH_LOGOUT_PATH, readAuth0Config } from "./config.js";
 import {
+	OTP_MAX_ATTEMPTS,
+	OTP_TTL_MS,
 	OtpFlowError,
 	clearSessionCookieString,
-	exchangeOtpCode,
+	generateOtp,
+	hashOtp,
 	issueSessionCookie,
 	normalizeCode,
 	normalizeEmail,
 	readSessionCookie,
 	safeReturnTo,
-	sendOtpCode,
 	sessionCookieString,
+	verifyOtp,
+	type OtpIdentity,
 } from "./otp.js";
+import { readResendConfig, sendOtpEmail } from "../lib/email.js";
+import { findOrCreateUser } from "./mgmt.js";
 import { loginPageHtml } from "../views/login.js";
 import { rateLimiter } from "../api/middleware/rate-limit.js";
+import { getDatabaseUrl } from "../config.js";
+import { PostgresOtpStore, type OtpStore } from "../storage/otp.js";
 
 export const loginRoutes = new Hono<Env>();
+
+/* ---- OTP store resolution (test seam: __setOtpStoreForTests) ---- */
+
+let injectedOtpStore: OtpStore | null = null;
+
+export function __setOtpStoreForTests(store: OtpStore | null): void {
+	injectedOtpStore = store;
+}
+
+function storeFor(c: Context<Env>): OtpStore | null {
+	if (injectedOtpStore) return injectedOtpStore;
+	const dbUrl = getDatabaseUrl(c.env as unknown as Record<string, unknown>);
+	return dbUrl ? new PostgresOtpStore(dbUrl) : null;
+}
+
+/* ---- helpers ---- */
+
+function authNotConfigured(c: Context<Env>): Response {
+	return c.html(
+		`<!DOCTYPE html><html><body style="font-family:system-ui;background:#09090b;color:#f4f4f5;display:grid;place-items:center;min-height:100vh;margin:0"><div style="max-width:440px;padding:2rem;text-align:center;border:1px solid #27272a;border-radius:14px;background:#121215"><h1 style="font-size:1.1rem;margin:0 0 0.75rem">Sign-in is not configured</h1><p style="font-size:0.85rem;color:#a1a1aa;line-height:1.6;margin:0">Set AUTH0_DOMAIN, AUTH0_CLIENT_ID, AUTH0_CLIENT_SECRET, AUTH0_SESSION_ENCRYPTION_KEY, RESEND_API_KEY, and RESEND_FROM to enable owner sign-in.</p></div></body></html>`,
+		503,
+	);
+}
+
+function pageError(error: unknown, fallback: string): string {
+	if (error instanceof OtpFlowError) return error.userMessage;
+	console.error("[login] unexpected error:", error);
+	return fallback;
+}
 
 /**
  * Read an application/x-www-form-urlencoded body as { [key]: string }.
@@ -50,18 +91,17 @@ async function readForm(c: Context<Env>): Promise<Record<string, string>> {
 	return out;
 }
 
-function authNotConfigured(c: Context<Env>): Response {
+function signInUnavailable(c: Context<Env>): Response {
 	return c.html(
-		`<!DOCTYPE html><html><body style="font-family:system-ui;background:#09090b;color:#f4f4f5;display:grid;place-items:center;min-height:100vh;margin:0"><div style="max-width:440px;padding:2rem;text-align:center;border:1px solid #27272a;border-radius:14px;background:#121215"><h1 style="font-size:1.1rem;margin:0 0 0.75rem">Sign-in is not configured</h1><p style="font-size:0.85rem;color:#a1a1aa;line-height:1.6;margin:0">Set AUTH0_DOMAIN, AUTH0_CLIENT_ID, AUTH0_CLIENT_SECRET, and AUTH0_SESSION_ENCRYPTION_KEY to enable owner sign-in.</p></div></body></html>`,
-		503,
+		loginPageHtml({
+			state: "email",
+			error: "Sign-in is temporarily unavailable. Try again in a moment.",
+		}),
+		502,
 	);
 }
 
-function pageError(error: unknown, fallback: string): string {
-	if (error instanceof OtpFlowError) return error.userMessage;
-	console.error("[login] unexpected error:", error);
-	return fallback;
-}
+/* ---- routes ---- */
 
 /** GET /auth/login — branded sign-in page. */
 loginRoutes.get(AUTH_LOGIN_PATH, async (c) => {
@@ -79,13 +119,15 @@ loginRoutes.get(AUTH_LOGIN_PATH, async (c) => {
 	return c.html(loginPageHtml({ returnTo: safeReturnTo(c.req.query("return_to")) }));
 });
 
-/** POST /auth/login/code — send the one-time code to the email. */
+/** POST /auth/login/code — generate + email a one-time code. */
 loginRoutes.post(
 	"/auth/login/code",
 	rateLimiter({ windowMs: 60_000, max: 5 }),
 	async (c) => {
 		const cfg = readAuth0Config(c.env as unknown as Record<string, string | undefined>);
-		if (!cfg) return authNotConfigured(c);
+		const emailCfg = readResendConfig(c.env as unknown as Record<string, string | undefined>);
+		if (!cfg || !emailCfg) return authNotConfigured(c);
+
 		const body = await readForm(c);
 		const returnTo = safeReturnTo(body.return_to);
 		const email = normalizeEmail(body.email);
@@ -98,9 +140,18 @@ loginRoutes.post(
 				}),
 			);
 		}
+
+		const store = storeFor(c);
+		if (!store) return signInUnavailable(c);
+
+		const code = generateOtp();
+		const expiresAt = new Date(Date.now() + OTP_TTL_MS);
 		try {
-			await sendOtpCode(cfg, email);
+			await store.saveOtp(email, hashOtp(code), expiresAt);
+			await sendOtpEmail(emailCfg, email, code);
 		} catch (error) {
+			// Don't leave a pending code we couldn't deliver.
+			await store.deleteOtp(email).catch(() => undefined);
 			return c.html(
 				loginPageHtml({
 					state: "email",
@@ -114,10 +165,11 @@ loginRoutes.post(
 	},
 );
 
-/** POST /auth/login/verify — exchange the code and start the session. */
+/** POST /auth/login/verify — check the code, resolve the user, sign in. */
 loginRoutes.post("/auth/login/verify", async (c) => {
 	const cfg = readAuth0Config(c.env as unknown as Record<string, string | undefined>);
 	if (!cfg) return authNotConfigured(c);
+
 	const body = await readForm(c);
 	const email = normalizeEmail(body.email);
 	const code = normalizeCode(body.code);
@@ -134,21 +186,85 @@ loginRoutes.post("/auth/login/verify", async (c) => {
 		);
 	}
 
+	const store = storeFor(c);
+	if (!store) return signInUnavailable(c);
+
+	const pending = await store.getOtp(email);
+	if (!pending) {
+		return c.html(
+			loginPageHtml({
+				state: "code",
+				email,
+				error:
+					"That code has expired or was already used. Request a new code if needed.",
+				returnTo,
+			}),
+		);
+	}
+	if (pending.expiresAt.getTime() <= Date.now()) {
+		await store.deleteOtp(email).catch(() => undefined);
+		return c.html(
+			loginPageHtml({
+				state: "code",
+				email,
+				error: "That code has expired. Request a new code.",
+				returnTo,
+			}),
+		);
+	}
+
+	if (!verifyOtp(code, pending.codeHash)) {
+		const attempts = await store.incrementAttempts(email);
+		if (attempts >= OTP_MAX_ATTEMPTS) {
+			await store.deleteOtp(email).catch(() => undefined);
+			return c.html(
+				loginPageHtml({
+					state: "code",
+					email,
+					error:
+						"Too many incorrect attempts. Request a new code to try again.",
+					returnTo,
+				}),
+			);
+		}
+		return c.html(
+			loginPageHtml({
+				state: "code",
+				email,
+				error: "That code isn't right. Check the email and try again.",
+				returnTo,
+			}),
+		);
+	}
+
+	await store.deleteOtp(email).catch(() => undefined);
+
+	let identity: OtpIdentity;
 	try {
-		const identity = await exchangeOtpCode(cfg, email, code);
-		const cookie = issueSessionCookie(identity, cfg.sessionSecret);
-		c.header("Set-Cookie", sessionCookieString(cookie.value, cookie.maxAge));
-		return c.redirect(returnTo, 302);
+		const user = await findOrCreateUser(cfg, email);
+		identity = {
+			sub: user.sub,
+			email: user.email,
+			name: user.name,
+			iss: `https://${cfg.domain}`,
+		};
 	} catch (error) {
 		return c.html(
 			loginPageHtml({
 				state: "code",
 				email,
-				error: pageError(error, "That code isn't right or has expired."),
+				error: pageError(
+					error,
+					"We couldn't finish signing you in. Try again.",
+				),
 				returnTo,
 			}),
 		);
 	}
+
+	const cookie = issueSessionCookie(identity, cfg.sessionSecret);
+	c.header("Set-Cookie", sessionCookieString(cookie.value, cookie.maxAge));
+	return c.redirect(returnTo, 302);
 });
 
 /** POST /auth/login/resend — re-send the code (same page). */
@@ -157,17 +273,26 @@ loginRoutes.post(
 	rateLimiter({ windowMs: 60_000, max: 5 }),
 	async (c) => {
 		const cfg = readAuth0Config(c.env as unknown as Record<string, string | undefined>);
-		if (!cfg) return authNotConfigured(c);
+		const emailCfg = readResendConfig(c.env as unknown as Record<string, string | undefined>);
+		if (!cfg || !emailCfg) return authNotConfigured(c);
+
 		const body = await readForm(c);
 		const email = normalizeEmail(body.email);
 		const returnTo = safeReturnTo(body.return_to);
 		if (!email) {
 			return c.html(loginPageHtml({ state: "email", returnTo }));
 		}
+
+		const store = storeFor(c);
+		if (!store) return signInUnavailable(c);
+
+		const code = generateOtp();
+		const expiresAt = new Date(Date.now() + OTP_TTL_MS);
 		try {
-			await sendOtpCode(cfg, email);
-			return c.html(loginPageHtml({ state: "code", email, returnTo }));
+			await store.saveOtp(email, hashOtp(code), expiresAt);
+			await sendOtpEmail(emailCfg, email, code);
 		} catch (error) {
+			await store.deleteOtp(email).catch(() => undefined);
 			return c.html(
 				loginPageHtml({
 					state: "code",
@@ -177,6 +302,7 @@ loginRoutes.post(
 				}),
 			);
 		}
+		return c.html(loginPageHtml({ state: "code", email, returnTo }));
 	},
 );
 

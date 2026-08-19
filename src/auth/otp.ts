@@ -1,33 +1,20 @@
 /**
- * Embedded passwordless email-OTP login.
+ * Embedded one-time-code sign-in (app-owned, no Auth0 OTP involvement).
  *
- * The app owns the entire sign-in UI (see src/views/login.ts) and talks to
- * Auth0 server-to-server with two documented endpoints:
+ * The app generates the 6-digit code, emails it itself via Resend (see
+ * src/lib/email.ts), stores only its SHA-256 hash in Postgres (see
+ * src/storage/otp.ts), and verifies it here. Once the code checks out, the
+ * Auth0 Management API maps the verified email to a stable `sub`
+ * (src/auth/mgmt.ts), which is stored in a short-lived HMAC-signed session
+ * cookie. Sessions roll: 14 days of inactivity, 30 days absolute from login.
  *
- *   1. POST /passwordless/start            → sends the one-time code email
- *   2. POST /oauth/token (passwordless-otp) → exchanges the code for tokens
- *
- * Both calls target a *dedicated* passwordless connection (AUTH0_OTP_CONNECTION,
- * default "agent404-email") that is only used by this app — so its email
- * template and brute-force settings never affect other apps in the shared
- * tenant. The @auth0/auth0-* SDKs hardcode the built-in "email" connection
- * name, which is shared across the tenant, so we call the endpoints directly
- * using the same wire protocol the SDKs use.
- *
- * The resulting id_token is verified against the tenant JWKS (RS256), and the
- * verified claims are stored in a short-lived HMAC-signed session cookie
- * (AUTH0_SESSION_ENCRYPTION_KEY doubles as the HMAC key). Sessions roll:
- * 14 days of inactivity, 30 days absolute from login.
+ * The tenant's email provider, email templates, and connections are never
+ * involved — nothing in the shared Auth0 tenant changes.
  */
 
-import {
-	createHmac,
-	createPublicKey,
-	timingSafeEqual,
-	verify as cryptoVerify,
-} from "node:crypto";
+import { createHash, createHmac, randomInt, timingSafeEqual } from "node:crypto";
 import type { Context } from "hono";
-import type { Auth0AppConfig } from "./config.js";
+import { AUTH_SESSION_COOKIE, SESSION_ABSOLUTE_SECONDS, SESSION_INACTIVITY_SECONDS } from "./config.js";
 
 /* ------------------------------------------------------------------ */
 /* Errors                                                              */
@@ -82,289 +69,45 @@ export function safeReturnTo(raw: unknown, fallback = "/dashboard"): string {
 }
 
 /* ------------------------------------------------------------------ */
-/* 1. Send the one-time code                                           */
+/* OTP generation + verification                                       */
 /* ------------------------------------------------------------------ */
 
-type FetchImpl = typeof fetch;
+export const OTP_LENGTH = 6;
+export const OTP_TTL_MS = 5 * 60 * 1000;
+export const OTP_MAX_ATTEMPTS = 5;
 
-export async function sendOtpCode(
-	cfg: Auth0AppConfig,
-	email: string,
-	fetchImpl: FetchImpl = fetch,
-): Promise<void> {
-	const url = `https://${cfg.domain}/passwordless/start`;
-	let res: Response;
-	try {
-		res = await fetchImpl(url, {
-			method: "POST",
-			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({
-				client_id: cfg.clientID,
-				client_secret: cfg.clientSecret,
-				connection: cfg.otpConnection,
-				email,
-				send: "code",
-			}),
-		});
-	} catch (err) {
-		console.error("[otp] passwordless/start network error:", err);
-		throw new OtpFlowError(
-			"We couldn't reach the sign-in service. Try again in a moment.",
-			502,
-		);
-	}
+export function generateOtp(): string {
+	// randomInt with a range that is a multiple of 10 keeps digits uniform.
+	return String(randomInt(0, 10 ** OTP_LENGTH)).padStart(OTP_LENGTH, "0");
+}
 
-	if (res.ok) return;
+export function hashOtp(code: string): string {
+	return createHash("sha256").update(code).digest("hex");
+}
 
-	const body = await res.json().catch(() => null) as
-		| { error?: string; error_description?: string }
-		| null;
-	const detail = body?.error_description || body?.error || `HTTP ${res.status}`;
-	console.error(`[otp] passwordless/start failed (${res.status}):`, detail);
-
-	if (res.status === 429) {
-		throw new OtpFlowError(
-			"Too many sign-in attempts. Wait a minute, then try again.",
-			429,
-		);
-	}
-	if (res.status === 404) {
-		throw new OtpFlowError(
-			"Sign-in isn't configured for this app yet. Check AUTH0_OTP_CONNECTION.",
-			503,
-		);
-	}
-	throw new OtpFlowError("We couldn't send the code. Try again.", 502);
+/** Constant-time comparison of the entered code against the stored hash. */
+export function verifyOtp(code: string, storedHash: string): boolean {
+	const candidate = createHash("sha256").update(code).digest();
+	const expected = Buffer.from(storedHash, "hex");
+	if (candidate.length !== expected.length) return false;
+	return timingSafeEqual(candidate, expected);
 }
 
 /* ------------------------------------------------------------------ */
-/* 2. Exchange the code for tokens + verify the id_token               */
+/* Session identity (from the Auth0 Management API user)               */
 /* ------------------------------------------------------------------ */
 
 export interface OtpIdentity {
 	sub: string;
 	email?: string;
 	name?: string;
-	sid?: string;
 	iss: string;
-}
-
-export async function exchangeOtpCode(
-	cfg: Auth0AppConfig,
-	email: string,
-	code: string,
-	fetchImpl: FetchImpl = fetch,
-): Promise<OtpIdentity> {
-	const params = new URLSearchParams({
-		grant_type: "http://auth0.com/oauth/grant-type/passwordless/otp",
-		client_id: cfg.clientID,
-		client_secret: cfg.clientSecret,
-		realm: cfg.otpConnection,
-		username: email,
-		otp: code,
-		scope: "openid profile email",
-	});
-
-	let res: Response;
-	try {
-		res = await fetchImpl(`https://${cfg.domain}/oauth/token`, {
-			method: "POST",
-			headers: { "Content-Type": "application/x-www-form-urlencoded" },
-			body: params.toString(),
-		});
-	} catch (err) {
-		console.error("[otp] token endpoint network error:", err);
-		throw new OtpFlowError(
-			"We couldn't reach the sign-in service. Try again in a moment.",
-			502,
-		);
-	}
-
-	const body = (await res.json().catch(() => null)) as
-		| {
-				access_token?: string;
-				id_token?: string;
-				error?: string;
-				error_description?: string;
-		  }
-		| null;
-
-	if (!res.ok || !body?.id_token) {
-		const detail = body?.error_description || body?.error || `HTTP ${res.status}`;
-		console.error(`[otp] code exchange failed (${res.status}):`, detail);
-		if (res.status === 429) {
-			throw new OtpFlowError(
-				"Too many sign-in attempts. Wait a minute, then try again.",
-				429,
-			);
-		}
-		throw new OtpFlowError(
-			"That code isn't right or has expired. Request a new code if needed.",
-			401,
-		);
-	}
-
-	const claims = await verifyIdToken(
-		body.id_token,
-		cfg.domain,
-		cfg.clientID,
-		fetchImpl,
-	);
-	return {
-		sub: claims.sub,
-		email: claims.email,
-		name: claims.name,
-		sid: typeof claims.sid === "string" ? claims.sid : undefined,
-		iss: claims.iss,
-	};
-}
-
-/* ---- id_token verification (JWKS / RS256) ---- */
-
-interface Jwk {
-	kid?: string;
-	kty?: string;
-	use?: string;
-	n?: string;
-	e?: string;
-	[claim: string]: unknown;
-}
-
-interface JwksCache {
-	domain: string;
-	keys: Jwk[];
-	fetchedAt: number;
-}
-
-const JWKS_TTL_MS = 10 * 60 * 1000;
-let jwksCache: JwksCache | null = null;
-
-async function getJwks(
-	domain: string,
-	fetchImpl: FetchImpl,
-): Promise<Jwk[]> {
-	if (
-		jwksCache &&
-		jwksCache.domain === domain &&
-		Date.now() - jwksCache.fetchedAt < JWKS_TTL_MS
-	) {
-		return jwksCache.keys;
-	}
-	let lastError: unknown;
-	for (let attempt = 0; attempt < 2; attempt++) {
-		try {
-			const res = await fetchImpl(`https://${domain}/.well-known/jwks.json`);
-			if (!res.ok) throw new Error(`JWKS HTTP ${res.status}`);
-			const data = (await res.json()) as { keys?: Jwk[] };
-			if (!Array.isArray(data.keys) || data.keys.length === 0) {
-				throw new Error("JWKS has no keys");
-			}
-			jwksCache = { domain, keys: data.keys, fetchedAt: Date.now() };
-			return data.keys;
-		} catch (err) {
-			lastError = err;
-			if (attempt === 0) await new Promise((r) => setTimeout(r, 150));
-		}
-	}
-	console.error("[otp] JWKS fetch failed:", lastError);
-	throw new OtpFlowError(
-		"We couldn't verify your sign-in. Try again in a moment.",
-		502,
-	);
-}
-
-function decodeSegment(segment: string): Record<string, unknown> {
-	return JSON.parse(Buffer.from(segment, "base64url").toString("utf8")) as Record<
-		string,
-		unknown
-	>;
-}
-
-export async function verifyIdToken(
-	token: string,
-	domain: string,
-	expectedAud: string,
-	fetchImpl: FetchImpl = fetch,
-): Promise<OtpIdentity> {
-	const parts = token.split(".");
-	if (parts.length !== 3) {
-		throw new OtpFlowError("We couldn't verify your sign-in. Try again.", 502);
-	}
-	const [headerSeg, payloadSeg, signatureSeg] = parts;
-
-	const header = decodeSegment(headerSeg);
-	if (header.alg !== "RS256") {
-		throw new OtpFlowError("We couldn't verify your sign-in. Try again.", 502);
-	}
-
-	const keys = await getJwks(domain, fetchImpl);
-	const kid = typeof header.kid === "string" ? header.kid : undefined;
-	const jwk =
-		kid !== undefined
-			? keys.find((k) => k.kid === kid)
-			: keys.length === 1
-			  ? keys[0]
-			  : undefined;
-	if (!jwk || jwk.kty !== "RSA") {
-		throw new OtpFlowError("We couldn't verify your sign-in. Try again.", 502);
-	}
-
-	let publicKey;
-	try {
-		publicKey = createPublicKey({ key: jwk, format: "jwk" });
-	} catch (err) {
-		console.error("[otp] bad JWK:", err);
-		throw new OtpFlowError("We couldn't verify your sign-in. Try again.", 502);
-	}
-
-	const valid = cryptoVerify(
-		"sha256",
-		Buffer.from(`${headerSeg}.${payloadSeg}`, "utf8"),
-		publicKey,
-		Buffer.from(signatureSeg, "base64url"),
-	);
-	if (!valid) {
-		throw new OtpFlowError("We couldn't verify your sign-in. Try again.", 502);
-	}
-
-	const claims = decodeSegment(payloadSeg);
-	const now = Math.floor(Date.now() / 1000);
-	if (claims.iss !== `https://${domain}`) {
-		throw new OtpFlowError("We couldn't verify your sign-in. Try again.", 502);
-	}
-	const auds = Array.isArray(claims.aud)
-		? (claims.aud as string[])
-		: [claims.aud as string];
-	if (!auds.includes(expectedAud)) {
-		throw new OtpFlowError("We couldn't verify your sign-in. Try again.", 502);
-	}
-	if (typeof claims.exp !== "number" || claims.exp <= now) {
-		throw new OtpFlowError("We couldn't verify your sign-in. Try again.", 502);
-	}
-	if (typeof claims.sub !== "string" || claims.sub.length === 0) {
-		throw new OtpFlowError("We couldn't verify your sign-in. Try again.", 502);
-	}
-
-	const str = (v: unknown): string | undefined =>
-		typeof v === "string" && v.length > 0 ? v : undefined;
-	return {
-		sub: claims.sub as string,
-		email: str(claims.email),
-		name: str(claims.name),
-		sid: str(claims.sid),
-		iss: claims.iss as string,
-	};
+	sid?: string;
 }
 
 /* ------------------------------------------------------------------ */
-/* 3. App-owned session cookie (HMAC-signed JWT, HS256)                */
+/* App-owned session cookie (HMAC-signed JWT, HS256)                   */
 /* ------------------------------------------------------------------ */
-
-import {
-	AUTH_SESSION_COOKIE,
-	SESSION_ABSOLUTE_SECONDS,
-	SESSION_INACTIVITY_SECONDS,
-} from "./config.js";
 
 export interface SessionClaims {
 	sub: string;
@@ -415,7 +158,10 @@ function verifyHs256(
 }
 
 export function computeSessionExpiry(loginAt: number, now: number): number {
-	return Math.min(loginAt + SESSION_ABSOLUTE_SECONDS, now + SESSION_INACTIVITY_SECONDS);
+	return Math.min(
+		loginAt + SESSION_ABSOLUTE_SECONDS,
+		now + SESSION_INACTIVITY_SECONDS,
+	);
 }
 
 /** Re-issue when less than half the inactivity window remains. */
