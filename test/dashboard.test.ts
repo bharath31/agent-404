@@ -368,4 +368,106 @@ describe("dashboardHtml", () => {
 		expect(html).not.toContain("alert-agent-row");
 		expect(html).not.toContain("btn-alert-copy-prompt");
 	});
+
+	it("shows a diagnosis-specific remediation panel with a tailored fix prompt for a broken install", () => {
+		const html = dashboardHtml(
+			data({
+				sites: [
+					site({
+						pageCount: 19,
+						latestProbe: probe(), // unrecovered_404 -> install_broken
+					}),
+				],
+			}),
+		);
+		expect(html).toContain("remediation-block");
+		expect(html).toContain("Install not detected");
+		expect(html).toContain("remediation-tip-list");
+		expect(html).toContain("Copy fix prompt");
+		// The fix prompt is diagnosis-oriented, not a from-scratch install prompt.
+		expect(html).toContain("already installed on this project");
+		expect(html).toContain("NOT a from-scratch install");
+		// It carries the real observed evidence.
+		expect(html).toContain("curl -sI https://example.com/agent404-probe-abc123");
+		// Three copy-agent-prompt CTAs now: onboard button, Agent Prompt tab, fix prompt.
+		expect(html.match(/data-copy-agent-prompt="/g)?.length).toBe(3);
+	});
+
+	it("shows a soft-404-specific remediation panel", () => {
+		const html = dashboardHtml(
+			data({
+				sites: [
+					site({
+						pageCount: 19,
+						latestProbe: probe({ verdict: "non_404", status: 200 }),
+					}),
+				],
+			}),
+		);
+		expect(html).toContain("remediation-block");
+		expect(html).toContain("returns 200 for missing paths");
+		expect(html).toContain("rewrite all paths to index.html");
+	});
+
+	it("shows a probe-failed-specific remediation panel", () => {
+		const html = dashboardHtml(
+			data({
+				sites: [
+					site({
+						pageCount: 19,
+						latestProbe: probe({ verdict: "error", status: 0, summary: "connection timed out" }),
+					}),
+				],
+			}),
+		);
+		expect(html).toContain("remediation-block");
+		expect(html).toContain("couldn't reach your site");
+	});
+
+	it("does not show a remediation panel for install_unknown, unverified, or indexing", () => {
+		const noEvidence = dashboardHtml(data({ sites: [site({ pageCount: 19 })] }));
+		expect(noEvidence).not.toContain('id="remediation-');
+
+		const unverified = dashboardHtml(data({ sites: [site({ verified: false, pageCount: 0 })] }));
+		expect(unverified).not.toContain('id="remediation-');
+
+		const indexing = dashboardHtml(data({ sites: [site({ pageCount: 0 })] }));
+		expect(indexing).not.toContain('id="remediation-');
+	});
+
+	it("does not show a remediation panel once the install is confirmed working", () => {
+		const html = dashboardHtml(
+			data({
+				sites: [
+					site({
+						pageCount: 19,
+						latestProbe: probe({ verdict: "recovered_404", hasLinkHeaders: true }),
+					}),
+				],
+			}),
+		);
+		expect(html).not.toContain('id="remediation-');
+	});
+
+	it("collapses the integration snippet tabs once install is confirmed working", () => {
+		const html = dashboardHtml(
+			data({
+				sites: [
+					site({
+						pageCount: 19,
+						latestProbe: probe({ verdict: "recovered_404", hasLinkHeaders: true }),
+					}),
+				],
+			}),
+		);
+		expect(html).toContain('<details class="integration-panel-details">');
+		expect(html).toContain("Integration confirmed working");
+	});
+
+	it("keeps the integration snippet tabs visible (not collapsed) when install isn't confirmed working", () => {
+		const html = dashboardHtml(data()); // indexing state
+		expect(html).not.toContain('<details class="integration-panel-details">');
+		expect(html).not.toContain("Integration confirmed working");
+		expect(html).toContain('<div class="integration-panel">');
+	});
 });
