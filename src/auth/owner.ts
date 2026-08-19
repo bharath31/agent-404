@@ -1,6 +1,11 @@
 import type { Context, Next } from "hono";
 import type { ServerClient } from "@auth0/auth0-server-js";
-import { AUTH_LOGIN_PATH } from "./config.js";
+import { AUTH_LOGIN_PATH, readAuth0Config } from "./config.js";
+import {
+	readSessionCookie,
+	rollSessionCookie,
+	sessionCookieString,
+} from "./otp.js";
 import { normalizeDomain } from "../api/domain.js";
 import { isDisposableSmokeDomain } from "../lib/disposable-smoke-domain.js";
 
@@ -13,6 +18,27 @@ export async function sessionOwnerSub(c: Context): Promise<string | null> {
 	const vars = c.var as AuthVars;
 	if (vars.ownerSub) return vars.ownerSub;
 
+	// 1) App-owned session cookie (embedded OTP login flow).
+	//    Verified against the session secret; rolled when the inactivity
+	//    window is running out (14 days idle / 30 days absolute).
+	const cfg = readAuth0Config(c.env as unknown as Record<string, string | undefined>);
+	if (cfg) {
+		const parsed = readSessionCookie(c, cfg.sessionSecret);
+		if (parsed) {
+			if (parsed.roll) {
+				const rolled = rollSessionCookie(parsed.claims, cfg.sessionSecret);
+				if (rolled) {
+					c.header(
+						"Set-Cookie",
+						sessionCookieString(rolled.value, rolled.maxAge),
+					);
+				}
+			}
+			return parsed.claims.sub;
+		}
+	}
+
+	// 2) Legacy Auth0 middleware session (existing logins, magic links, callback).
 	const client = vars.auth0Client;
 	if (!client) return null;
 

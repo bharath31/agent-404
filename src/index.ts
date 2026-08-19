@@ -26,8 +26,11 @@ import {
 	AUTH_LOGIN_PATH,
 	AUTH_LOGOUT_PATH,
 	readAuth0Config,
+	SESSION_ABSOLUTE_SECONDS,
+	SESSION_INACTIVITY_SECONDS,
 } from "./auth/config.js";
 import { requireOwnerApi, sessionOwnerSub } from "./auth/owner.js";
+import { loginRoutes } from "./auth/login-routes.js";
 import { getDatabaseUrl } from "./config.js";
 import { AGENT_404_SKILL_MD } from "./skills/agent-404.js";
 import type { SiteRecord } from "./types.js";
@@ -79,7 +82,16 @@ app.use("*", async (c, next) => {
 			baseURL: cfg.baseURL,
 			authRequired: false,
 			idpLogout: true,
-			session: { secret: cfg.sessionSecret },
+			// The embedded sign-in flow (src/auth/login-routes.ts) owns the
+			// /auth/login and /auth/logout paths; the middleware keeps the
+			// /auth/callback route for backwards-compatible sessions.
+			customRoutes: ["login", "logout"],
+			session: {
+				secret: cfg.sessionSecret,
+				rolling: true,
+				inactivityDuration: SESSION_INACTIVITY_SECONDS,
+				absoluteDuration: SESSION_ABSOLUTE_SECONDS,
+			},
 			routes: {
 				login: AUTH_LOGIN_PATH,
 				logout: AUTH_LOGOUT_PATH,
@@ -195,6 +207,10 @@ app.get("/skills/agent-404/SKILL.md", (c) =>
 
 // Demo discovery route
 app.route("/api/demo", demo);
+
+// Embedded passwordless sign-in (branded pages; replaces the Auth0 Universal
+// Login redirect for this app only — see src/auth/login-routes.ts)
+app.route("/", loginRoutes);
 
 // BAT-42 funnel telemetry beacons (public, fire-and-forget)
 app.route("/api/funnel", funnel);
