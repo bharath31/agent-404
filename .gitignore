@@ -7,3 +7,4 @@ test-results/
 .screenshots/
 .env*
 node_modules
+.vercel

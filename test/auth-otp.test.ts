@@ -1,24 +1,29 @@
-import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";
-import * as nodeCrypto from "node:crypto";
-import type { Context } from "hono";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { createHmac } from "node:crypto";
+import { loginRoutes, __setOtpStoreForTests } from "../src/auth/login-routes.js";
+import { MemoryOtpStore } from "../src/storage/otp.js";
 import {
 	OtpFlowError,
 	computeSessionExpiry,
-	exchangeOtpCode,
+	generateOtp,
+	hashOtp,
 	issueSessionCookie,
 	normalizeCode,
 	normalizeEmail,
 	readSessionCookie,
 	safeReturnTo,
-	sendOtpCode,
+	sendOtpEmail as sendOtpEmailDirect,
 	sessionCookieString,
 	sessionNeedsRoll,
 	rollSessionCookie,
+	verifyOtp,
 	type OtpIdentity,
 } from "../src/auth/otp.js";
 import { readAuth0Config, DEFAULT_OTP_CONNECTION } from "../src/auth/config.js";
+import { findOrCreateUser, __resetMgmtCache } from "../src/auth/mgmt.js";
+import { sendOtpEmail } from "../src/lib/email.js";
 import { loginPageHtml } from "../src/views/login.js";
-import { loginRoutes } from "../src/auth/login-routes.js";
+import type { Context } from "hono";
 
 const SESSION_SECRET = "0123456789abcdef0123456789abcdef"; // 32 chars
 const DOMAIN = "tenant.test";
@@ -35,9 +40,14 @@ function authCfg(overrides: Record<string, string | undefined> = {}) {
 	});
 }
 
-function fakeContext(headerValue: string | null): Context {
+function fakeContext(cookieValue: string | null): Context {
+	const headers = new Headers();
+	if (cookieValue) headers.set("Cookie", `a404_session=${cookieValue}`);
 	return {
-		req: { header: (name: string) => (name === "a404_session" ? (headerValue ?? undefined) : undefined) },
+		req: {
+			raw: { headers },
+			header: (name: string) => headers.get(name) ?? undefined,
+		},
 	} as unknown as Context;
 }
 
@@ -65,8 +75,8 @@ describe("normalizeCode", () => {
 	});
 	it("rejects non-digits", () => {
 		expect(normalizeCode("12ab")).toBeNull();
-		expect(normalizeCode("12")).toBeNull(); // too short
-		expect(normalizeCode("123456789")).toBeNull(); // too long
+		expect(normalizeCode("12")).toBeNull();
+		expect(normalizeCode("123456789")).toBeNull();
 	});
 });
 
@@ -88,6 +98,31 @@ describe("safeReturnTo", () => {
 });
 
 /* ------------------------------------------------------------------ */
+/* OTP generation + verification                                       */
+/* ------------------------------------------------------------------ */
+
+describe("otp generation + verification", () => {
+	it("generates 6-digit codes", () => {
+		for (let i = 0; i < 50; i++) {
+			const code = generateOtp();
+			expect(code).toMatch(/^\d{6}$/);
+		}
+	});
+	it("hashes and verifies codes (constant-time)", () => {
+		const code = "482913";
+		const hash = hashOtp(code);
+		expect(hash).toMatch(/^[0-9a-f]{64}$/);
+		expect(verifyOtp(code, hash)).toBe(true);
+		expect(verifyOtp("482914", hash)).toBe(false);
+		expect(verifyOtp("000000", hash)).toBe(false);
+	});
+	it("never stores the plaintext code", () => {
+		const code = "123456";
+		expect(hashOtp(code)).not.toContain(code);
+	});
+});
+
+/* ------------------------------------------------------------------ */
 /* Session cookie (HMAC JWT)                                           */
 /* ------------------------------------------------------------------ */
 
@@ -95,7 +130,6 @@ const identity: OtpIdentity = {
 	sub: "auth0|test123",
 	email: "bharath@test.dev",
 	name: "Bharath",
-	sid: "sess-1",
 	iss: `https://${DOMAIN}`,
 };
 
@@ -133,10 +167,8 @@ describe("session cookie", () => {
 	it("enforces the 30-day absolute cap even if exp is forged higher", () => {
 		const { value } = issueSessionCookie(identity, SESSION_SECRET, 1_700_000_000);
 		const [h, b, s] = value.split(".");
-		// Re-sign with a legitimate secret but an impossible exp (past absolute cap).
 		const claims = JSON.parse(Buffer.from(b, "base64url").toString("utf8"));
 		claims.exp = 1_700_000_000 + 60 * 86400;
-		const { createHmac } = nodeCrypto;
 		const body = Buffer.from(JSON.stringify(claims)).toString("base64url");
 		const sig = createHmac("sha256", SESSION_SECRET).update(`${h}.${body}`).digest("base64url");
 		const forged = `${h}.${body}.${sig}`;
@@ -146,14 +178,13 @@ describe("session cookie", () => {
 	it("rolls before the inactivity window runs out", () => {
 		const now = 1_700_000_000;
 		const { value } = issueSessionCookie(identity, SESSION_SECRET, now);
-		// 8 days later: 6 days left → needs a roll.
 		const later = now + 8 * 86400;
 		const parsed = readSessionCookie(fakeContext(value), SESSION_SECRET, later)!;
 		expect(parsed.roll).toBe(true);
 		const rolled = rollSessionCookie(parsed.claims, SESSION_SECRET, later)!;
 		const re = readSessionCookie(fakeContext(rolled.value), SESSION_SECRET, later)!;
 		expect(re.roll).toBe(false);
-		expect(re.claims.login_at).toBe(now); // absolute anchor preserved
+		expect(re.claims.login_at).toBe(now);
 	});
 
 	it("does not roll when plenty of inactivity remains", () => {
@@ -166,7 +197,7 @@ describe("session cookie", () => {
 	it("computeSessionExpiry caps at the absolute duration", () => {
 		const login = 1_700_000_000;
 		expect(computeSessionExpiry(login, login + 20 * 86400)).toBe(login + 30 * 86400);
-		expect(computeSessionExpiry(login, login + 1 * 86400)).toBe(login + 15 * 86400); // 1d used + 14d inactivity
+		expect(computeSessionExpiry(login, login + 1 * 86400)).toBe(login + 15 * 86400);
 	});
 
 	it("cookie string has the right attributes", () => {
@@ -183,12 +214,8 @@ describe("session cookie", () => {
 /* ------------------------------------------------------------------ */
 
 describe("readAuth0Config", () => {
-	it("defaults the OTP connection to the dedicated app connection", () => {
-		expect(authCfg()?.otpConnection).toBe(DEFAULT_OTP_CONNECTION);
+	it("defaults the OTP connection for legacy flows", () => {
 		expect(DEFAULT_OTP_CONNECTION).toBe("agent404-email");
-	});
-	it("honours AUTH0_OTP_CONNECTION", () => {
-		expect(authCfg({ AUTH0_OTP_CONNECTION: "custom-conn" })?.otpConnection).toBe("custom-conn");
 	});
 	it("returns null without secrets", () => {
 		expect(readAuth0Config({ AUTH0_DOMAIN: DOMAIN })).toBeNull();
@@ -196,165 +223,140 @@ describe("readAuth0Config", () => {
 });
 
 /* ------------------------------------------------------------------ */
-/* Auth0 wire calls (mocked fetch)                                     */
+/* Resend delivery                                                     */
 /* ------------------------------------------------------------------ */
 
-const rsa = nodeCrypto.generateKeyPairSync("rsa", { modulusLength: 2048 });
-const jwk = rsa.publicKey.export({ format: "jwk" }) as { kty: string; n: string; e: string };
-const JWKS = { keys: [{ ...jwk, kid: "test-key-1", alg: "RS256", use: "sig" }] };
+describe("sendOtpEmail (Resend)", () => {
+	const resendCfg = { apiKey: "re_testkey", from: "agent-404 <no-reply@test.dev>" };
 
-function makeIdToken(overrides: Record<string, unknown> = {}, key = rsa.privateKey): string {
-	const now = Math.floor(Date.now() / 1000);
-	const header = Buffer.from(
-		JSON.stringify({ alg: "RS256", typ: "JWT", kid: "test-key-1" }),
-	).toString("base64url");
-	const payload = Buffer.from(
-		JSON.stringify({
-			iss: `https://${DOMAIN}`,
-			aud: CLIENT_ID,
-			sub: "auth0|test123",
-			email: "bharath@test.dev",
-			name: "Bharath",
-			sid: "sess-1",
-			iat: now,
-			exp: now + 3600,
-			...overrides,
-		}),
-	).toString("base64url");
-	const signature = nodeCrypto
-		.sign("sha256", Buffer.from(`${header}.${payload}`), key)
-		.toString("base64url");
-	return `${header}.${payload}.${signature}`;
-}
-
-describe("sendOtpCode", () => {
-	it("POSTs /passwordless/start with the dedicated connection", async () => {
-		const calls: { url: string; body: Record<string, unknown> }[] = [];
+	it("POSTs a branded email to Resend", async () => {
+		const calls: { url: string; body: Record<string, unknown>; auth: string | null }[] = [];
 		const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
-			calls.push({ url: String(url), body: JSON.parse(String(init?.body)) });
-			return new Response(null, { status: 204 });
+			calls.push({
+				url: String(url),
+				body: JSON.parse(String(init?.body)),
+				auth: (init?.headers as Record<string, string> | undefined)?.Authorization ?? null,
+			});
+			return new Response(JSON.stringify({ id: "email_1" }), { status: 200 });
 		});
-		await sendOtpCode(authCfg()!, "bharath@test.dev", fetchMock as unknown as typeof fetch);
+		await sendOtpEmail(resendCfg, "bharath@test.dev", "482913", fetchMock as unknown as typeof fetch);
 		expect(calls).toHaveLength(1);
-		expect(calls[0].url).toBe(`https://${DOMAIN}/passwordless/start`);
+		expect(calls[0].url).toBe("https://api.resend.com/emails");
+		expect(calls[0].auth).toBe("Bearer re_testkey");
 		expect(calls[0].body).toMatchObject({
-			client_id: CLIENT_ID,
-			connection: "agent404-email",
-			email: "bharath@test.dev",
-			send: "code",
+			from: "agent-404 <no-reply@test.dev>",
+			to: ["bharath@test.dev"],
+			subject: "Your agent-404 sign-in code",
 		});
+		const text = calls[0].body.text as string;
+		expect(text).toContain("482913");
+		const html = calls[0].body.html as string;
+		expect(html).toContain("482913");
+		expect(html).toContain("#10b981"); // brand mark
 	});
 
-	it("maps 429 to a friendly rate-limit error", async () => {
+	it("maps Resend failures to a friendly error", async () => {
 		const fetchMock = vi.fn(async () =>
-			new Response(JSON.stringify({ error: "too_many_requests" }), { status: 429 }),
+			new Response(JSON.stringify({ name: "validation_error", message: "bad sender" }), { status: 422 }),
 		);
 		await expect(
-			sendOtpCode(authCfg()!, "bharath@test.dev", fetchMock as unknown as typeof fetch),
-		).rejects.toMatchObject({
-			status: 429,
-			message: expect.stringContaining("Too many"),
-		});
-	});
-
-	it("maps network failures to a 502-friendly error", async () => {
-		const fetchMock = vi.fn(async () => {
-			throw new TypeError("fetch failed");
-		});
-		await expect(
-			sendOtpCode(authCfg()!, "bharath@test.dev", fetchMock as unknown as typeof fetch),
-		).rejects.toMatchObject({ status: 502 });
+			sendOtpEmail(resendCfg, "bharath@test.dev", "482913", fetchMock as unknown as typeof fetch),
+		).rejects.toBeInstanceOf(OtpFlowError);
 	});
 });
 
-describe("exchangeOtpCode", () => {
-	it("exchanges a valid code and returns verified identity", async () => {
-		const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+/* ------------------------------------------------------------------ */
+/* Auth0 Management API                                                */
+/* ------------------------------------------------------------------ */
+
+describe("findOrCreateUser (Management API)", () => {
+	beforeEach(() => __resetMgmtCache());
+	afterEach(() => __resetMgmtCache());
+
+	function mgmtFetchMock(opts: { existing?: boolean } = {}) {
+		const calls: string[] = [];
+		const fn = vi.fn(async (url: string, init?: RequestInit) => {
 			const u = String(url);
-			if (u.endsWith("/.well-known/jwks.json")) {
-				return new Response(JSON.stringify(JWKS), { status: 200 });
-			}
+			calls.push(u);
 			if (u.endsWith("/oauth/token")) {
-				const body = new URLSearchParams(String(init?.body));
-				expect(body.get("grant_type")).toBe("http://auth0.com/oauth/grant-type/passwordless/otp");
-				expect(body.get("realm")).toBe("agent404-email");
-				expect(body.get("username")).toBe("bharath@test.dev");
-				expect(body.get("otp")).toBe("123456");
+				return new Response(JSON.stringify({ access_token: "mgmt-token", expires_in: 3600 }), {
+					status: 200,
+				});
+			}
+			if (u.includes("/api/v2/users-by-email")) {
 				return new Response(
-					JSON.stringify({ access_token: "at", id_token: makeIdToken() }),
+					JSON.stringify(
+						opts.existing
+							? [
+									{
+										user_id: "auth0|placeholder",
+										email: "bharath@test.dev",
+										email_verified: false,
+										identities: [{ connection: "Username-Password-Authentication" }],
+									},
+									{
+										user_id: "email|6a81a7ac",
+										email: "bharath@test.dev",
+										name: "Bharath",
+										email_verified: true,
+										identities: [{ connection: "email" }],
+										created_at: "2026-08-16T00:00:00.000Z",
+									},
+									{
+										user_id: "email|test-artifact",
+										email: "bharath@test.dev",
+										email_verified: true,
+										identities: [{ connection: "agent404-email" }],
+										created_at: "2026-08-19T00:00:00.000Z",
+									},
+								]
+							: [],
+					),
 					{ status: 200 },
 				);
 			}
-			return new Response("nope", { status: 404 });
-		});
-		const identity = await exchangeOtpCode(
-			authCfg()!,
-			"bharath@test.dev",
-			"123456",
-			fetchMock as unknown as typeof fetch,
-		);
-		expect(identity.sub).toBe("auth0|test123");
-		expect(identity.email).toBe("bharath@test.dev");
-	});
-
-	it("rejects a token signed by the wrong key", async () => {
-		const otherKey = nodeCrypto.generateKeyPairSync("rsa", { modulusLength: 2048 });
-		const fetchMock = vi.fn(async (url: string) => {
-			const u = String(url);
-			if (u.endsWith("/.well-known/jwks.json")) {
-				return new Response(JSON.stringify(JWKS), { status: 200 });
-			}
-			if (u.endsWith("/oauth/token")) {
+			if (u.endsWith("/api/v2/users")) {
 				return new Response(
-					JSON.stringify({ access_token: "at", id_token: makeIdToken({}, otherKey.privateKey) }),
-					{ status: 200 },
+					JSON.stringify({ user_id: "auth0|newuser", email: "bharath@test.dev" }),
+					{ status: 201 },
 				);
 			}
 			return new Response("nope", { status: 404 });
 		});
-		await expect(
-			exchangeOtpCode(authCfg()!, "bharath@test.dev", "123456", fetchMock as unknown as typeof fetch),
-		).rejects.toBeInstanceOf(OtpFlowError);
+		return { fn, calls };
+	}
+
+	it("picks the verified passwordless-email user, not an unverified placeholder", async () => {
+		const { fn } = mgmtFetchMock({ existing: true });
+		const user = await findOrCreateUser(authCfg()!, "bharath@test.dev", fn as unknown as typeof fetch);
+		// The response lists the unverified UPA stub first; the canonical user
+		// is the verified one on the historical "email" connection.
+		expect(user.sub).toBe("email|6a81a7ac");
+		expect(user.name).toBe("Bharath");
 	});
 
-	it("rejects a token with the wrong audience", async () => {
-		const fetchMock = vi.fn(async (url: string) => {
-			const u = String(url);
-			if (u.endsWith("/.well-known/jwks.json")) {
-				return new Response(JSON.stringify(JWKS), { status: 200 });
-			}
-			if (u.endsWith("/oauth/token")) {
-				return new Response(
-					JSON.stringify({
-						access_token: "at",
-						id_token: makeIdToken({ aud: "some-other-client" }),
-					}),
-					{ status: 200 },
-				);
-			}
-			return new Response("nope", { status: 404 });
-		});
-		await expect(
-			exchangeOtpCode(authCfg()!, "bharath@test.dev", "123456", fetchMock as unknown as typeof fetch),
-		).rejects.toBeInstanceOf(OtpFlowError);
+	it("creates a user when none exists (email_verified: true)", async () => {
+		const { fn, calls } = mgmtFetchMock();
+		const user = await findOrCreateUser(authCfg()!, "bharath@test.dev", fn as unknown as typeof fetch);
+		expect(user.sub).toBe("auth0|newuser");
+		const createCall = calls.find((u) => u.endsWith("/api/v2/users"));
+		expect(createCall).toBeTruthy();
+		// Verify the create body included email_verified + a connection.
+		const init = fn.mock.calls.find(([u]) => String(u).endsWith("/api/v2/users"))?.[1];
+		const body = JSON.parse(String(init?.body));
+		expect(body.email_verified).toBe(true);
+		expect(body.connection).toBe("Username-Password-Authentication");
 	});
 
-	it("maps an invalid code to a friendly error", async () => {
-		const fetchMock = vi.fn(async (url: string) => {
-			if (String(url).endsWith("/oauth/token")) {
-				return new Response(
-					JSON.stringify({ error: "invalid_grant", error_description: "invalid code" }),
-					{ status: 401 },
-				);
-			}
-			return new Response("nope", { status: 404 });
-		});
-		await expect(
-			exchangeOtpCode(authCfg()!, "bharath@test.dev", "999999", fetchMock as unknown as typeof fetch),
-		).rejects.toMatchObject({
-			status: 401,
-			message: expect.stringContaining("isn't right or has expired"),
-		});
+	it("requests a token with the Management API audience", async () => {
+		const { fn, calls } = mgmtFetchMock();
+		await findOrCreateUser(authCfg()!, "bharath@test.dev", fn as unknown as typeof fetch);
+		const tokenCall = calls.find((u) => u.endsWith("/oauth/token"));
+		expect(tokenCall).toBeTruthy();
+		const init = fn.mock.calls.find(([u]) => String(u).endsWith("/oauth/token"))?.[1];
+		const body = new URLSearchParams(String(init?.body));
+		expect(body.get("grant_type")).toBe("client_credentials");
+		expect(body.get("audience")).toBe(`https://${DOMAIN}/api/v2/`);
 	});
 });
 
@@ -368,7 +370,7 @@ describe("loginPageHtml", () => {
 		expect(html).toContain("Welcome back");
 		expect(html).toContain('action="/auth/login/code"');
 		expect(html).toContain('name="email"');
-		expect(html).toContain('Send code');
+		expect(html).toContain("Send code");
 	});
 
 	it("renders the code step with the recipient email", () => {
@@ -397,7 +399,7 @@ describe("loginPageHtml", () => {
 });
 
 /* ------------------------------------------------------------------ */
-/* Route-level tests (mocked Auth0 fetch)                              */
+/* Route-level tests (mocked Resend + Management API + memory store)   */
 /* ------------------------------------------------------------------ */
 
 const routeEnv = {
@@ -406,41 +408,79 @@ const routeEnv = {
 	AUTH0_CLIENT_SECRET: "test-client-secret",
 	AUTH0_SESSION_ENCRYPTION_KEY: SESSION_SECRET,
 	APP_BASE_URL: "http://localhost:3000",
+	RESEND_API_KEY: "re_testkey",
+	RESEND_FROM: "agent-404 <no-reply@test.dev>",
 } as never;
 
-function authFetchMock(opts: { validCode?: string } = {}) {
-	const validCode = opts.validCode ?? "123456";
+function authFetchMock(opts: { userExists?: boolean } = {}) {
 	return vi.fn(async (url: string, init?: RequestInit) => {
 		const u = String(url);
-		if (u.endsWith("/.well-known/jwks.json")) {
-			return new Response(JSON.stringify(JWKS), { status: 200 });
+		if (u === "https://api.resend.com/emails") {
+			return new Response(JSON.stringify({ id: "email_1" }), { status: 200 });
 		}
 		if (u.endsWith("/oauth/token")) {
-			const body = new URLSearchParams(String(init?.body));
-			if (body.get("otp") !== validCode) {
-				return new Response(
-					JSON.stringify({ error: "invalid_grant", error_description: "invalid code" }),
-					{ status: 401 },
-				);
-			}
-			return new Response(JSON.stringify({ access_token: "at", id_token: makeIdToken() }), {
+			return new Response(JSON.stringify({ access_token: "mgmt-token", expires_in: 3600 }), {
 				status: 200,
 			});
 		}
-		if (u.endsWith("/passwordless/start")) {
-			return new Response(null, { status: 204 });
+		if (u.includes("/api/v2/users-by-email")) {
+			return new Response(
+				JSON.stringify(
+					opts.userExists
+						? [
+								{
+									user_id: "email|6a81a7ac",
+									email: "bharath@test.dev",
+									name: "Bharath",
+									email_verified: true,
+									identities: [{ connection: "email" }],
+									created_at: "2026-08-16T00:00:00.000Z",
+								},
+							]
+						: [],
+				),
+				{ status: 200 },
+			);
+		}
+		if (u.endsWith("/api/v2/users")) {
+			return new Response(
+				JSON.stringify({ user_id: "auth0|newuser", email: "bharath@test.dev" }),
+				{ status: 201 },
+			);
 		}
 		return new Response("not found", { status: 404 });
 	});
 }
 
+/** Unique per-test IP so the shared in-memory rate limiter doesn't throttle tests. */
+function routeIp(n: number): { "x-forwarded-for": string } {
+	return { "x-forwarded-for": `10.1.0.${n}` };
+}
+
+/** Extract the code from the Resend email text body. */
+function codeFromResend(mock: ReturnType<typeof vi.fn>): string {
+	const call = mock.mock.calls.find(([u]) => String(u) === "https://api.resend.com/emails");
+	expect(call).toBeTruthy();
+	const body = JSON.parse(String(call![1]?.body));
+	const match = /^  (\d{6})$/m.exec(String(body.text));
+	if (!match) throw new Error("code not found in email body");
+	return match[1];
+}
+
 describe("login routes", () => {
 	let originalFetch: typeof fetch;
+	let store: MemoryOtpStore;
+
 	beforeEach(() => {
 		originalFetch = globalThis.fetch;
+		store = new MemoryOtpStore();
+		__setOtpStoreForTests(store);
+		__resetMgmtCache();
 	});
 	afterEach(() => {
 		globalThis.fetch = originalFetch;
+		__setOtpStoreForTests(null);
+		__resetMgmtCache();
 	});
 
 	it("GET /auth/login renders the branded sign-in page", async () => {
@@ -456,7 +496,7 @@ describe("login routes", () => {
 		const { value } = issueSessionCookie(identity, SESSION_SECRET);
 		const res = await loginRoutes.request(
 			"/auth/login",
-			{ headers: { a404_session: value } },
+			{ headers: { Cookie: `a404_session=${value}` } },
 			routeEnv,
 		);
 		expect(res.status).toBe(302);
@@ -466,19 +506,19 @@ describe("login routes", () => {
 	it("POST /auth/login/code rejects invalid emails", async () => {
 		const res = await loginRoutes.request(
 			"/auth/login/code",
-			{ method: "POST", body: new URLSearchParams({ email: "not-an-email" }) },
+			{ method: "POST", headers: routeIp(1), body: new URLSearchParams({ email: "not-an-email" }) },
 			routeEnv,
 		);
 		expect(res.status).toBe(200);
 		expect(await res.text()).toContain("Enter a valid email address.");
 	});
 
-	it("POST /auth/login/code sends the code and shows the code step", async () => {
+	it("POST /auth/login/code emails a code and shows the code step", async () => {
 		const mock = authFetchMock();
 		globalThis.fetch = mock as unknown as typeof fetch;
 		const res = await loginRoutes.request(
 			"/auth/login/code",
-			{ method: "POST", body: new URLSearchParams({ email: "bharath@test.dev" }) },
+			{ method: "POST", headers: routeIp(2), body: new URLSearchParams({ email: "bharath@test.dev" }) },
 			routeEnv,
 		);
 		expect(res.status).toBe(200);
@@ -486,56 +526,198 @@ describe("login routes", () => {
 		expect(html).toContain("Enter the code");
 		expect(html).toContain("bharath@test.dev");
 		expect(mock).toHaveBeenCalledWith(
-			expect.stringContaining("/passwordless/start"),
+			"https://api.resend.com/emails",
 			expect.anything(),
 		);
+		// A pending code is persisted (hashed).
+		const pending = await store.getOtp("bharath@test.dev");
+		expect(pending).not.toBeNull();
+		expect(pending?.codeHash).not.toContain(codeFromResend(mock));
 	});
 
-	it("POST /auth/login/verify sets the session cookie and redirects", async () => {
-		globalThis.fetch = authFetchMock() as unknown as typeof fetch;
-		const res = await loginRoutes.request(
+	it("full round trip: code → verify → session cookie → redirect", async () => {
+		const mock = authFetchMock({ userExists: true });
+		globalThis.fetch = mock as unknown as typeof fetch;
+
+		const codeRes = await loginRoutes.request(
+			"/auth/login/code",
+			{ method: "POST", headers: routeIp(3), body: new URLSearchParams({ email: "bharath@test.dev", return_to: "/dashboard" }) },
+			routeEnv,
+		);
+		expect(codeRes.status).toBe(200);
+		const code = codeFromResend(mock);
+
+		const verifyRes = await loginRoutes.request(
 			"/auth/login/verify",
 			{
 				method: "POST",
-				body: new URLSearchParams({
-					email: "bharath@test.dev",
-					code: "123456",
-					return_to: "/dashboard",
-				}),
+				body: new URLSearchParams({ email: "bharath@test.dev", code, return_to: "/dashboard" }),
 			},
 			routeEnv,
 		);
-		expect(res.status).toBe(302);
-		expect(res.headers.get("Location")).toBe("/dashboard");
-		const setCookie = res.headers.get("Set-Cookie") ?? "";
+		expect(verifyRes.status).toBe(302);
+		expect(verifyRes.headers.get("Location")).toBe("/dashboard");
+		const setCookie = verifyRes.headers.get("Set-Cookie") ?? "";
 		expect(setCookie).toContain("a404_session=");
 		expect(setCookie).toContain("HttpOnly");
+		// Code consumed.
+		expect(await store.getOtp("bharath@test.dev")).toBeNull();
+		// Existing user reused, no create call.
+		expect(
+			mock.mock.calls.some(([u]) => String(u).endsWith("/api/v2/users") && String(u) !== "/api/v2/users-by-email"),
+		).toBe(false);
 	});
 
-	it("POST /auth/login/verify shows a friendly error on a bad code", async () => {
-		globalThis.fetch = authFetchMock({ validCode: "123456" }) as unknown as typeof fetch;
+	it("the issued session cookie is recognized on the next request (regression)", async () => {
+		const mock = authFetchMock({ userExists: true });
+		globalThis.fetch = mock as unknown as typeof fetch;
+		await loginRoutes.request(
+			"/auth/login/code",
+			{ method: "POST", headers: routeIp(7), body: new URLSearchParams({ email: "bharath@test.dev" }) },
+			routeEnv,
+		);
+		const code = codeFromResend(mock);
+		const verifyRes = await loginRoutes.request(
+			"/auth/login/verify",
+			{
+				method: "POST",
+				body: new URLSearchParams({ email: "bharath@test.dev", code, return_to: "/dashboard" }),
+			},
+			routeEnv,
+		);
+		const match = /a404_session=([^;]+)/.exec(verifyRes.headers.get("Set-Cookie") ?? "");
+		expect(match).toBeTruthy();
+
+		// The cookie must be readable from the Cookie header on the next request.
+		const next = await loginRoutes.request(
+			"/auth/login",
+			{ headers: { Cookie: `a404_session=${match![1]}` } },
+			routeEnv,
+		);
+		expect(next.status).toBe(302);
+		expect(next.headers.get("Location")).toBe("/dashboard");
+	});
+
+	it("POST /auth/login/code respects a 30s cooldown (friendly message, no JSON 429)", async () => {
+		const mock = authFetchMock();
+		globalThis.fetch = mock as unknown as typeof fetch;
+		const first = await loginRoutes.request(
+			"/auth/login/code",
+			{ method: "POST", headers: routeIp(8), body: new URLSearchParams({ email: "bharath@test.dev" }) },
+			routeEnv,
+		);
+		expect(first.status).toBe(200);
+		expect(await first.text()).toContain("Enter the code");
+
+		const second = await loginRoutes.request(
+			"/auth/login/code",
+			{ method: "POST", headers: routeIp(8), body: new URLSearchParams({ email: "bharath@test.dev" }) },
+			routeEnv,
+		);
+		const html = await second.text();
+		expect(html).toContain("Please wait");
+		expect(html).not.toContain("Too many requests");
+		// Resend was only called once.
+		expect(
+			mock.mock.calls.filter(([u]) => String(u) === "https://api.resend.com/emails"),
+		).toHaveLength(1);
+	});
+
+	it("creates a new Auth0 user on first sign-in", async () => {
+		const mock = authFetchMock(); // userExists: false
+		globalThis.fetch = mock as unknown as typeof fetch;
+		await loginRoutes.request(
+			"/auth/login/code",
+			{ method: "POST", headers: routeIp(4), body: new URLSearchParams({ email: "new@test.dev" }) },
+			routeEnv,
+		);
+		const code = codeFromResend(mock);
+		const verifyRes = await loginRoutes.request(
+			"/auth/login/verify",
+			{
+				method: "POST",
+				body: new URLSearchParams({ email: "new@test.dev", code }),
+			},
+			routeEnv,
+		);
+		expect(verifyRes.status).toBe(302);
+		expect(
+			mock.mock.calls.some(([u]) => String(u).endsWith("/api/v2/users")),
+		).toBe(true);
+	});
+
+	it("POST /auth/login/verify shows a friendly error on a wrong code", async () => {
+		const mock = authFetchMock();
+		globalThis.fetch = mock as unknown as typeof fetch;
+		await loginRoutes.request(
+			"/auth/login/code",
+			{ method: "POST", headers: routeIp(5), body: new URLSearchParams({ email: "bharath@test.dev" }) },
+			routeEnv,
+		);
+		codeFromResend(mock); // consume to get the real code out of the way
+
 		const res = await loginRoutes.request(
 			"/auth/login/verify",
 			{
 				method: "POST",
-				body: new URLSearchParams({ email: "bharath@test.dev", code: "654321" }),
+				body: new URLSearchParams({ email: "bharath@test.dev", code: "999999" }),
 			},
 			routeEnv,
 		);
 		expect(res.status).toBe(200);
-		const text = await res.text();
-		expect(text).toContain("right or has expired");
+		expect(await res.text()).toContain("isn&#39;t right");
+	});
+
+	it("rejects expired codes", async () => {
+		await store.saveOtp("bharath@test.dev", hashOtp("111111"), new Date(Date.now() - 1000));
+		const res = await loginRoutes.request(
+			"/auth/login/verify",
+			{
+				method: "POST",
+				body: new URLSearchParams({ email: "bharath@test.dev", code: "111111" }),
+			},
+			routeEnv,
+		);
+		expect(res.status).toBe(200);
+		expect(await res.text()).toContain("expired");
+		expect(await store.getOtp("bharath@test.dev")).toBeNull();
+	});
+
+	it("locks out after too many incorrect attempts", async () => {
+		await store.saveOtp("bharath@test.dev", hashOtp("111111"), new Date(Date.now() + 60_000));
+		let lastHtml = "";
+		for (let i = 0; i < 5; i++) {
+			const res = await loginRoutes.request(
+				"/auth/login/verify",
+				{
+					method: "POST",
+					body: new URLSearchParams({ email: "bharath@test.dev", code: "000000" }),
+				},
+				routeEnv,
+			);
+			expect(res.status).toBe(200);
+			lastHtml = await res.text();
+		}
+		expect(lastHtml).toContain("Too many incorrect attempts");
+		expect(await store.getOtp("bharath@test.dev")).toBeNull();
 	});
 
 	it("blocks a phishing return_to on verify", async () => {
-		globalThis.fetch = authFetchMock() as unknown as typeof fetch;
+		const mock = authFetchMock({ userExists: true });
+		globalThis.fetch = mock as unknown as typeof fetch;
+		await loginRoutes.request(
+			"/auth/login/code",
+			{ method: "POST", headers: routeIp(6), body: new URLSearchParams({ email: "bharath@test.dev" }) },
+			routeEnv,
+		);
+		const code = codeFromResend(mock);
 		const res = await loginRoutes.request(
 			"/auth/login/verify",
 			{
 				method: "POST",
 				body: new URLSearchParams({
 					email: "bharath@test.dev",
-					code: "123456",
+					code,
 					return_to: "https://evil.com",
 				}),
 			},
