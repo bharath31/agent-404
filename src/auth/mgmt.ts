@@ -89,6 +89,53 @@ export async function getMgmtToken(
 
 /* ---- users ---- */
 
+interface MgmtUserRecord {
+	user_id?: string;
+	email?: string;
+	name?: string;
+	email_verified?: boolean;
+	identities?: Array<{ connection?: string }>;
+	created_at?: string;
+}
+
+/**
+ * Pick the canonical user for an email. The tenant can hold several users
+ * with the same email (different connections over the years) — the app's
+ * sites are keyed to the passwordless-email identity, so prefer:
+ *   1. verified users whose connection is one of the app's passwordless
+ *      email connections ("email" / "agent404-email")
+ *   2. other verified users
+ *   3. among ties, the oldest account
+ * Never bind a login to an unverified placeholder (e.g. an old
+ * Username-Password-Authentication stub).
+ */
+function pickCanonicalUser(users: MgmtUserRecord[]): MgmtUserRecord | null {
+	const VERIFIED_BONUS = 10;
+	const EMAIL_CONN_BONUS = 100;
+	const APP_CONNECTIONS = new Set(["email", "agent404-email"]);
+
+	let best: MgmtUserRecord | null = null;
+	let bestScore = -1;
+	let bestCreated = "";
+	for (const user of users) {
+		if (!user.user_id || user.email_verified !== true) continue;
+		const connection = user.identities?.[0]?.connection ?? "";
+		let score = VERIFIED_BONUS;
+		if (APP_CONNECTIONS.has(connection)) score += EMAIL_CONN_BONUS;
+		if (connection === "email") score += 10; // the historical login connection
+		const created = user.created_at ?? "";
+		if (
+			score > bestScore ||
+			(score === bestScore && created && created < bestCreated)
+		) {
+			best = user;
+			bestScore = score;
+			bestCreated = created;
+		}
+	}
+	return best;
+}
+
 async function findUserByEmail(
 	cfg: Auth0AppConfig,
 	token: string,
@@ -110,17 +157,13 @@ async function findUserByEmail(
 		console.error(`[mgmt] users-by-email failed (${res.status})`);
 		throw new OtpFlowError("Sign-in is temporarily unavailable. Try again.", 502);
 	}
-	const users = (await res.json().catch(() => [])) as Array<{
-		user_id?: string;
-		email?: string;
-		name?: string;
-	}>;
-	const first = users[0];
-	if (!first?.user_id) return null;
+	const users = (await res.json().catch(() => [])) as MgmtUserRecord[];
+	const chosen = pickCanonicalUser(users);
+	if (!chosen?.user_id) return null;
 	return {
-		sub: first.user_id,
-		email: first.email || email,
-		name: first.name,
+		sub: chosen.user_id,
+		email: chosen.email || email,
+		name: chosen.name,
 	};
 }
 

@@ -287,7 +287,29 @@ describe("findOrCreateUser (Management API)", () => {
 				return new Response(
 					JSON.stringify(
 						opts.existing
-							? [{ user_id: "auth0|existing", email: "bharath@test.dev", name: "Bharath" }]
+							? [
+									{
+										user_id: "auth0|placeholder",
+										email: "bharath@test.dev",
+										email_verified: false,
+										identities: [{ connection: "Username-Password-Authentication" }],
+									},
+									{
+										user_id: "email|6a81a7ac",
+										email: "bharath@test.dev",
+										name: "Bharath",
+										email_verified: true,
+										identities: [{ connection: "email" }],
+										created_at: "2026-08-16T00:00:00.000Z",
+									},
+									{
+										user_id: "email|test-artifact",
+										email: "bharath@test.dev",
+										email_verified: true,
+										identities: [{ connection: "agent404-email" }],
+										created_at: "2026-08-19T00:00:00.000Z",
+									},
+								]
 							: [],
 					),
 					{ status: 200 },
@@ -304,12 +326,13 @@ describe("findOrCreateUser (Management API)", () => {
 		return { fn, calls };
 	}
 
-	it("reuses an existing Auth0 user by email", async () => {
-		const { fn, calls } = mgmtFetchMock({ existing: true });
+	it("picks the verified passwordless-email user, not an unverified placeholder", async () => {
+		const { fn } = mgmtFetchMock({ existing: true });
 		const user = await findOrCreateUser(authCfg()!, "bharath@test.dev", fn as unknown as typeof fetch);
-		expect(user).toEqual({ sub: "auth0|existing", email: "bharath@test.dev", name: "Bharath" });
-		expect(calls.some((u) => u.includes("/api/v2/users-by-email"))).toBe(true);
-		expect(calls.some((u) => u.endsWith("/api/v2/users"))).toBe(false);
+		// The response lists the unverified UPA stub first; the canonical user
+		// is the verified one on the historical "email" connection.
+		expect(user.sub).toBe("email|6a81a7ac");
+		expect(user.name).toBe("Bharath");
 	});
 
 	it("creates a user when none exists (email_verified: true)", async () => {
@@ -404,7 +427,16 @@ function authFetchMock(opts: { userExists?: boolean } = {}) {
 			return new Response(
 				JSON.stringify(
 					opts.userExists
-						? [{ user_id: "auth0|existing", email: "bharath@test.dev", name: "Bharath" }]
+						? [
+								{
+									user_id: "email|6a81a7ac",
+									email: "bharath@test.dev",
+									name: "Bharath",
+									email_verified: true,
+									identities: [{ connection: "email" }],
+									created_at: "2026-08-16T00:00:00.000Z",
+								},
+							]
 						: [],
 				),
 				{ status: 200 },
