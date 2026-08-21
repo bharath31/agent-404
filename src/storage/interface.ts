@@ -68,6 +68,12 @@ export interface StorageAdapter {
 	): Promise<void>;
 	/** Aggregate conversion metrics across all funnel stages, computed from durable storage. */
 	getFunnelMetrics(): Promise<FunnelConversionMetrics>;
+	/**
+	 * BAT-26: hand-label precision ground truth over retained suggestion_logs
+	 * rows (migration 0013). Raw rows are pruned after the retention window,
+	 * so this reflects recent labeling — which is what the weekly loop wants.
+	 */
+	getLabelPrecision(): Promise<{ labeled: number; correct: number }>;
 
 	/**
 	 * BAT-61: durable record of a 404 suggestion served to an agent/visitor,
