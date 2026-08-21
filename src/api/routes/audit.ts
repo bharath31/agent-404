@@ -146,6 +146,7 @@ audit.post("/", async (c) => {
 	const body = await c.req.json<{ domain?: string; deadPath?: string; deep?: boolean }>().catch(() => ({
 		domain: "",
 		deadPath: "",
+		deep: false,
 	}));
 	const rawDomain = body.domain || "";
 	const domain = normalizeDomain(rawDomain);
