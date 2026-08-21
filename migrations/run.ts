@@ -99,6 +99,7 @@ async function run() {
 		"0012_login_otp.sql",
 		"0013_suggestion_labels.sql",
 		"0014_partition_vector_index.sql",
+		"0015_audit_analysis.sql",
 	];
 	for (const file of migrations) {
 		console.log(`\nRunning migration: ${file}`);

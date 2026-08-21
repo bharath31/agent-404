@@ -1,19 +1,28 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi, beforeEach } from "vitest";
 import { Hono } from "hono";
 import { audit } from "../src/api/routes/audit.js";
 import { report } from "../src/api/routes/report.js";
 import { probeClaudeBotResponse } from "../src/engine/claudebot-probe.js";
-import type { PostgresStorage } from "../src/storage/postgres.js";
+import { discoverDemoPages } from "../src/engine/discovery.js";
+import { analyzeSite } from "../src/engine/analyzer.js";
+import { PostgresStorage } from "../src/storage/postgres.js";
 import type { StandingAuditReport, FunnelStep } from "../src/types.js";
 
+// The deep-audit path (BAT-22) fans out into real network crawls — mock both
+// engines so tests stay hermetic. The probe path (claudebot-probe) is NOT
+// mocked; existing tests above exercise its real behavior.
+vi.mock("../src/engine/discovery.js", () => ({ discoverDemoPages: vi.fn() }));
+vi.mock("../src/engine/analyzer.js", () => ({ analyzeSite: vi.fn() }));
+
 /** Minimal durable-storage double for the two methods audit.ts / report.ts
- * actually call — mirrors the Map the real Postgres table replaces, but
- * proves both routes now go through StorageAdapter instead of a
- * module-level in-memory cache (BAT-38/39 review finding). */
+ *  actually call — mirrors the Map the real Postgres table replaces, but
+ *  proves both routes now go through StorageAdapter instead of a
+ *  module-level in-memory cache (BAT-38/39 review finding). */
 function createAuditStorage(): PostgresStorage {
 	const reports = new Map<string, StandingAuditReport>();
 	const funnelEvents: { step: FunnelStep; domain?: string; metadata?: Record<string, unknown> }[] = [];
-	return {
+	const storage = {
+		events: funnelEvents,
 		async saveAuditReport(r: StandingAuditReport) {
 			reports.set(r.id, r);
 		},
@@ -24,6 +33,7 @@ function createAuditStorage(): PostgresStorage {
 			funnelEvents.push({ step, domain, metadata });
 		},
 	} as unknown as PostgresStorage;
+	return storage;
 }
 
 function createTestApp() {
@@ -170,6 +180,132 @@ describe("ClaudeBot Probe & Standing Audit (BAT-38, BAT-39)", () => {
 			expect(res.status).toBe(404);
 			const html = await res.text();
 			expect(html).toContain("Audit report not found");
+		});
+	});
+
+	describe("deep audit mode (BAT-22)", () => {
+		beforeEach(() => {
+			vi.clearAllMocks();
+		});
+
+		const ANALYSIS = {
+			analyzedAt: "2026-08-21T12:00:00.000Z",
+			source: "sitemap" as const,
+			pagesAnalyzed: 2,
+			brokenLinks: [{ sourcePage: "https://deep.example.com/", targetUrl: "https://deep.example.com/gone" }],
+			orphanPages: ["https://deep.example.com/orphan"],
+		};
+
+		function mockDeepPipeline() {
+			vi.mocked(discoverDemoPages).mockResolvedValue({
+				domain: "deep.example.com",
+				pages: [
+					{ url: "https://deep.example.com/", title: "Home", description: "home" },
+					{ url: "https://deep.example.com/docs", title: "Docs" },
+				],
+				source: "sitemap",
+			});
+			vi.mocked(analyzeSite).mockResolvedValue({
+				domain: "deep.example.com",
+				...ANALYSIS,
+			});
+		}
+
+		it("runs discovery + analysis, persists and returns the analysis when deep:true", async () => {
+			mockDeepPipeline();
+			const { app, storage } = createTestApp();
+
+			const createRes = await app.request("/api/audit", {
+				method: "POST",
+				headers: { "Content-Type": "application/json", "x-forwarded-for": "10.1.0.1" },
+				body: JSON.stringify({ domain: "deep.example.com", deadPath: "/gone", deep: true }),
+			});
+
+			expect(createRes.status).toBe(201);
+			const created = await createRes.json();
+			expect(created.analysis).toEqual(ANALYSIS);
+			expect(discoverDemoPages).toHaveBeenCalledWith("deep.example.com", "/gone");
+			expect(analyzeSite).toHaveBeenCalledTimes(1);
+
+			// Round-trips through the permalink fetch.
+			const getRes = await app.request(`/api/audit/${created.id}`);
+			expect(getRes.status).toBe(200);
+			const fetched = await getRes.json();
+			expect(fetched.analysis).toEqual(ANALYSIS);
+
+			// Funnel telemetry records the deep intent at the start step.
+			const events = (
+				storage as unknown as {
+					events: { step: FunnelStep; metadata?: Record<string, unknown> }[];
+				}
+			).events;
+			const started = events.find((e) => e.step === "audit_started");
+			expect(started?.metadata).toMatchObject({ deep: true });
+		});
+
+		it("degrades to a probe-only report when the deep pipeline fails", async () => {
+			vi.mocked(discoverDemoPages).mockRejectedValue(new Error("crawl exploded"));
+			const { app } = createTestApp();
+
+			const createRes = await app.request("/api/audit", {
+				method: "POST",
+				headers: { "Content-Type": "application/json", "x-forwarded-for": "10.1.0.2" },
+				body: JSON.stringify({ domain: "broken-crawl.example.com", deadPath: "/gone", deep: true }),
+			});
+
+			expect(createRes.status).toBe(201);
+			const created = await createRes.json();
+			expect(created.analysis).toBeNull();
+			expect(created.claudeBotProbe).toBeDefined();
+
+			const getRes = await app.request(`/api/audit/${created.id}`);
+			const fetched = await getRes.json();
+			expect(fetched.analysis).toBeNull();
+		});
+
+		it("omits analysis entirely for non-deep audits", async () => {
+			mockDeepPipeline();
+			const { app } = createTestApp();
+
+			const createRes = await app.request("/api/audit", {
+				method: "POST",
+				headers: { "Content-Type": "application/json", "x-forwarded-for": "10.1.0.3" },
+				body: JSON.stringify({ domain: "quick.example.com", deadPath: "/gone" }),
+			});
+
+			expect(createRes.status).toBe(201);
+			const created = await createRes.json();
+			expect(created.analysis).toBeUndefined();
+			expect(discoverDemoPages).not.toHaveBeenCalled();
+			expect(analyzeSite).not.toHaveBeenCalled();
+		});
+
+		it("round-trips the analysis column through the Postgres row mapper", () => {
+			// neon() connects lazily, so constructing with a dummy URL is safe —
+			// this exercises only the JSONB mapping, not the network.
+			const storage = new PostgresStorage("postgres://user:pass@localhost:5432/test");
+			const mapper = (
+				storage as unknown as {
+					mapAuditReportRow(row: Record<string, unknown>): StandingAuditReport;
+				}
+			).mapAuditReportRow.bind(storage);
+
+			const baseRow = {
+				id: "audit_x_1",
+				domain: "mapper.example.com",
+				created_at: new Date(),
+				score: 50,
+				claudebot_probe: JSON.stringify({ status: 404 }),
+				summary: JSON.stringify({ status: "warning" }),
+				permalink: "/report/audit_x_1",
+				og_image_url: "/api/audit/audit_x_1/og.svg",
+			};
+
+			const withAnalysis = mapper({ ...baseRow, analysis: JSON.stringify(ANALYSIS) });
+			expect(withAnalysis.analysis).toEqual(ANALYSIS);
+
+			const withoutAnalysis = mapper(baseRow);
+			expect(withoutAnalysis.analysis).toBeNull();
 		});
 	});
 });

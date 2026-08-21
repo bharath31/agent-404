@@ -382,6 +382,31 @@ export const demoPageHtml = `<!DOCTYPE html>
       font-family: var(--font-mono);
     }
 
+    .site-health-compact {
+      margin-top: 1rem;
+      padding-top: 1rem;
+      border-top: 1px solid var(--border-subtle);
+      font-size: 0.8rem;
+    }
+    .sh-title {
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--text-muted);
+      font-family: var(--font-mono);
+      margin-bottom: 0.5rem;
+    }
+    .sh-counts {
+      display: flex;
+      gap: 1.25rem;
+      flex-wrap: wrap;
+      margin-bottom: 0.5rem;
+      font-family: var(--font-mono);
+    }
+    .sh-ok { color: var(--emerald); }
+    .sh-bad { color: var(--rose); }
+    .sh-list { color: var(--text-secondary); font-family: var(--font-mono); line-height: 1.7; word-break: break-all; }
+
     .check-icon-pass { color: var(--emerald); }
     .check-icon-fail { color: var(--rose); }
 
@@ -706,6 +731,10 @@ export const demoPageHtml = `<!DOCTYPE html>
         <div class="check-item"><span id="check-headers">●</span> RFC 5988 Link Headers</div>
         <div class="check-item"><span id="check-jsonld">●</span> schema.org ItemList JSON-LD</div>
       </div>
+      <div class="site-health-compact" id="audit-site-health" style="display:none"></div>
+      <button type="button" class="btn btn-secondary btn-sm" id="btn-deep-audit" onclick="runDeepAudit()" style="display:none;width:100%;margin-top:1rem;justify-content:center">
+        Run full site audit &mdash; crawl sitemap for broken links &amp; orphans
+      </button>
     </div>
 
     <!-- Workspace Tabs: Suggestions, Raw HTTP, JSON-LD, Crawler Trace -->
@@ -1080,6 +1109,7 @@ export const demoPageHtml = `<!DOCTYPE html>
           renderResults(fullUrl, scored, 'Matched against local sitemap index for ' + host);
         } else {
           // Live audit check
+          lastLiveAudit = { domain: host, deadPath: parsed.pathname || '/docs/non-existent-link' };
           const res = await fetch('/api/audit', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -1109,6 +1139,8 @@ export const demoPageHtml = `<!DOCTYPE html>
       }
     }
 
+    let lastLiveAudit = null;
+
     function showAuditReport(report, deadUrl) {
       const card = document.getElementById('audit-card');
       card.style.display = 'block';
@@ -1129,6 +1161,8 @@ export const demoPageHtml = `<!DOCTYPE html>
       jsonldEl.textContent = report.summary.jsonLdConfigured ? '✓' : '✗';
       jsonldEl.className = report.summary.jsonLdConfigured ? 'check-icon-pass' : 'check-icon-fail';
 
+      renderSiteHealth(report.analysis);
+
       const dummySugg = [
         {
           url: 'https://' + report.domain + '/docs/latest',
@@ -1142,6 +1176,72 @@ export const demoPageHtml = `<!DOCTYPE html>
       renderResults(deadUrl, dummySugg, 'Standing audit probe report for ' + report.domain);
     }
 
+    function escHtml(s) {
+      const d = document.createElement('div');
+      d.textContent = s == null ? '' : String(s);
+      return d.innerHTML;
+    }
+
+    // Deep mode (BAT-22): compact broken-link / orphan summary inside the
+    // standing-audit card, plus the opt-in trigger when no analysis exists.
+    function renderSiteHealth(analysis) {
+      const wrap = document.getElementById('audit-site-health');
+      const deepBtn = document.getElementById('btn-deep-audit');
+      if (!analysis) {
+        wrap.style.display = 'none';
+        wrap.innerHTML = '';
+        deepBtn.style.display = lastLiveAudit ? 'flex' : 'none';
+        return;
+      }
+      deepBtn.style.display = 'none';
+      wrap.style.display = 'block';
+      const broken = analysis.brokenLinks || [];
+      const orphans = analysis.orphanPages || [];
+      const items = [];
+      broken.slice(0, 5).forEach(function (l) {
+        items.push('<div>' + escHtml(l.sourcePage) + ' &rarr; <span class="sh-bad">' + escHtml(l.targetUrl) + '</span></div>');
+      });
+      orphans.slice(0, 5).forEach(function (u) {
+        items.push('<div>orphan &middot; <span class="sh-bad">' + escHtml(u) + '</span></div>');
+      });
+      const moreCount = Math.max(0, broken.length - 5) + Math.max(0, orphans.length - 5);
+      if (moreCount > 0) {
+        items.push('<div>+' + moreCount + ' more</div>');
+      }
+      wrap.innerHTML =
+        '<div class="sh-title">Site health &middot; ' + analysis.pagesAnalyzed + ' pages via ' + escHtml(analysis.source) + '</div>' +
+        '<div class="sh-counts">' +
+          '<span class="' + (broken.length ? 'sh-bad' : 'sh-ok') + '">' + broken.length + ' broken internal link' + (broken.length === 1 ? '' : 's') + '</span>' +
+          '<span class="' + (orphans.length ? 'sh-bad' : 'sh-ok') + '">' + orphans.length + ' orphan page' + (orphans.length === 1 ? '' : 's') + '</span>' +
+        '</div>' +
+        (items.length ? '<div class="sh-list">' + items.join('') + '</div>' : '');
+    }
+
+    async function runDeepAudit() {
+      if (!lastLiveAudit) return;
+      const btn = document.getElementById('btn-deep-audit');
+      btn.disabled = true;
+      btn.textContent = 'Crawling sitemap… this can take up to a minute';
+      try {
+        const res = await fetch('/api/audit', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ domain: lastLiveAudit.domain, deadPath: lastLiveAudit.deadPath, deep: true })
+        });
+        if (res.ok) {
+          showAuditReport(await res.json(), 'https://' + lastLiveAudit.domain + lastLiveAudit.deadPath);
+          showToast('Full site audit complete');
+        } else {
+          showToast('Deep audit failed — showing probe results');
+        }
+      } catch (err) {
+        showToast('Deep audit failed — showing probe results');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Run full site audit — crawl sitemap for broken links & orphans';
+      }
+    }
+
     // Check query param for standing audit permalink
     const urlParams = new URLSearchParams(window.location.search);
     const auditId = urlParams.get('audit');
@@ -1150,6 +1250,7 @@ export const demoPageHtml = `<!DOCTYPE html>
         .then(r => r.json())
         .then(rep => {
           if (rep && !rep.error) {
+            lastLiveAudit = { domain: rep.domain, deadPath: '/docs/broken-link' };
             showAuditReport(rep, 'https://' + rep.domain + '/docs/broken-link');
           }
         })
