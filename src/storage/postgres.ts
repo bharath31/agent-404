@@ -704,7 +704,6 @@ export class PostgresStorage implements StorageAdapter {
 		};
 	}
 
-
 	async getTotalSiteCount(): Promise<number> {
 		const { rows } = await this.sql`SELECT COUNT(*) AS count FROM sites`;
 		return Number(rows[0]?.count ?? 0);
@@ -712,7 +711,7 @@ export class PostgresStorage implements StorageAdapter {
 
 	async saveAuditReport(report: StandingAuditReport): Promise<void> {
 		await this.sql`
-			INSERT INTO audit_reports (id, domain, created_at, score, claudebot_probe, summary, permalink, og_image_url)
+			INSERT INTO audit_reports (id, domain, created_at, score, claudebot_probe, summary, permalink, og_image_url, analysis)
 			VALUES (
 				${report.id},
 				${report.domain},
@@ -721,7 +720,8 @@ export class PostgresStorage implements StorageAdapter {
 				${JSON.stringify(report.claudeBotProbe)}::jsonb,
 				${JSON.stringify(report.summary)}::jsonb,
 				${report.permalink},
-				${report.ogImageUrl}
+				${report.ogImageUrl},
+				${report.analysis ? JSON.stringify(report.analysis) : null}::jsonb
 			)
 			ON CONFLICT (id) DO NOTHING
 		`;
@@ -742,6 +742,7 @@ export class PostgresStorage implements StorageAdapter {
 			summary: parseJsonColumn(row.summary),
 			permalink: row.permalink as string,
 			ogImageUrl: row.og_image_url as string,
+			analysis: row.analysis ? parseJsonColumn(row.analysis) : null,
 		};
 	}
 

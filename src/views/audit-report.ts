@@ -1,5 +1,5 @@
 import { CANONICAL_ORIGIN } from "../config.js";
-import type { StandingAuditReport } from "../types.js";
+import type { AuditAnalysis, StandingAuditReport } from "../types.js";
 
 function escapeHtml(str: string): string {
 	return str
@@ -54,6 +54,43 @@ function checkRow(label: string, ok: boolean): string {
     <span class="check-icon ${ok ? "ok" : "bad"}">${ok ? "✓" : "✗"}</span>
     <span>${escapeHtml(label)}</span>
   </div>`;
+}
+
+/** Deep-crawl section (BAT-22) — only rendered when the audit was created
+ *  with deep:true and the crawl succeeded. */
+function siteHealthHtml(analysis: AuditAnalysis | null | undefined): string {
+	if (!analysis) return "";
+	const broken = analysis.brokenLinks.slice(0, 10);
+	const orphans = analysis.orphanPages.slice(0, 10);
+	const brokenRows =
+		broken.length > 0
+			? broken
+					.map(
+						(l) =>
+							`<div class="link-row"><span class="link-url">${escapeHtml(l.sourcePage)}</span><span class="link-arrow">&rarr;</span><span class="link-url link-broken">${escapeHtml(l.targetUrl)}</span></div>`,
+					)
+					.join("")
+			: `<div class="health-empty">None found in the crawled pages.</div>`;
+	const orphanRows =
+		orphans.length > 0
+			? orphans.map((u) => `<div class="link-row"><span class="link-url">${escapeHtml(u)}</span></div>`).join("")
+			: `<div class="health-empty">Every crawled page has at least one inbound link.</div>`;
+	return `
+      <div class="site-health">
+        <h2>Site health</h2>
+        <div class="health-meta">Deep crawl &middot; ${analysis.pagesAnalyzed} page${analysis.pagesAnalyzed === 1 ? "" : "s"} analyzed &middot; discovered via ${escapeHtml(analysis.source)}</div>
+        <div class="health-grid">
+          <div class="health-col">
+            <div class="health-head">${checkRow(`${analysis.brokenLinks.length} broken internal link${analysis.brokenLinks.length === 1 ? "" : "s"}`, analysis.brokenLinks.length === 0)}</div>
+            ${brokenRows}
+          </div>
+          <div class="health-col">
+            <div class="health-head">${checkRow(`${analysis.orphanPages.length} orphan page${analysis.orphanPages.length === 1 ? "" : "s"}`, analysis.orphanPages.length === 0)}</div>
+            ${orphanRows}
+          </div>
+        </div>
+        <div class="probe-meta">Lists capped at 10 entries each &middot; full counts above</div>
+      </div>`;
 }
 
 export function auditReportPageHtml(report: StandingAuditReport): string {
@@ -159,6 +196,42 @@ export function auditReportPageHtml(report: StandingAuditReport): string {
     .check-icon.ok { background: rgba(34, 197, 94, 0.15); color: var(--green); }
     .check-icon.bad { background: rgba(239, 68, 68, 0.15); color: var(--red); }
     .probe-meta { font-family: var(--mono); font-size: 0.78rem; color: var(--text-muted); margin-top: 1.25rem; }
+    .site-health { margin-top: 1.5rem; }
+    .site-health h2 {
+      font-size: 0.8rem;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--text-secondary);
+      margin-bottom: 0.35rem;
+    }
+    .health-meta { font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.9rem; }
+    .health-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+    @media (max-width: 640px) { .health-grid { grid-template-columns: 1fr; } }
+    .health-col {
+      background: var(--surface-elevated);
+      border: 1px solid var(--border-subtle);
+      border-radius: 10px;
+      padding: 0.75rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+    }
+    .health-col .check-row { padding: 0.4rem 0.6rem; }
+    .link-row {
+      display: flex;
+      align-items: baseline;
+      gap: 0.4rem;
+      font-family: var(--mono);
+      font-size: 0.72rem;
+      color: var(--text-secondary);
+      padding: 0.3rem 0.5rem;
+      border-top: 1px solid var(--border-subtle);
+      word-break: break-all;
+    }
+    .link-arrow { color: var(--text-muted); flex-shrink: 0; }
+    .link-broken { color: var(--red); }
+    .health-empty { font-size: 0.78rem; color: var(--text-muted); padding: 0.25rem 0.5rem; }
     .og-preview { width: 100%; border-radius: 10px; border: 1px solid var(--border); margin-top: 1.5rem; }
     .cta-row { display: flex; gap: 0.75rem; flex-wrap: wrap; }
     .btn {
@@ -204,6 +277,8 @@ export function auditReportPageHtml(report: StandingAuditReport): string {
         ${checkRow("Link alternate header recovery configured", summary.linkHeadersConfigured)}
         ${checkRow("schema.org ItemList JSON-LD configured", summary.jsonLdConfigured)}
       </div>
+
+      ${siteHealthHtml(report.analysis)}
 
       <div class="probe-meta">
         Probed as ClaudeBot &middot; target status ${claudeBotProbe.status} &middot; verdict: ${escapeHtml(claudeBotProbe.verdict)}

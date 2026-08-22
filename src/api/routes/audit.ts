@@ -5,6 +5,8 @@ import { probeClaudeBotResponse } from "../../engine/claudebot-probe.js";
 import { rateLimiter } from "../middleware/rate-limit.js";
 import { trackFunnelEvent } from "../../lib/funnel-telemetry.js";
 import { scoreCleanStatus, scoreLinkHeaders, scoreJsonLd, READINESS_WEIGHTS } from "../../engine/readiness-score.js";
+import { discoverDemoPages } from "../../engine/discovery.js";
+import { analyzeSite } from "../../engine/analyzer.js";
 import type { PostgresStorage } from "../../storage/postgres.js";
 import type { StandingAuditReport } from "../../types.js";
 
@@ -141,7 +143,11 @@ audit.use("/*", rateLimiter({ windowMs: 60_000, max: 30 }));
 
 // Create or run a new standing audit
 audit.post("/", async (c) => {
-	const body = await c.req.json<{ domain?: string; deadPath?: string }>().catch(() => ({ domain: "", deadPath: "" }));
+	const body = await c.req.json<{ domain?: string; deadPath?: string; deep?: boolean }>().catch(() => ({
+		domain: "",
+		deadPath: "",
+		deep: false,
+	}));
 	const rawDomain = body.domain || "";
 	const domain = normalizeDomain(rawDomain);
 
@@ -155,7 +161,8 @@ audit.post("/", async (c) => {
 	if (deadPath.length > 2048) {
 		return c.json({ error: "deadPath too long" }, 400);
 	}
-	trackFunnelEvent(c.get("storage"), "audit_started", domain, { deadPath });
+	const deep = body.deep === true;
+	trackFunnelEvent(c.get("storage"), "audit_started", domain, deep ? { deadPath, deep: true } : { deadPath });
 	const probe = await probeClaudeBotResponse(domain, deadPath);
 
 	// Quick-check score — shares its weights with the CLI's comprehensive
@@ -192,6 +199,36 @@ audit.post("/", async (c) => {
 		permalink,
 		ogImageUrl,
 	};
+
+	// Deep mode (BAT-22): prove the problem on the visitor's own domain by
+	// running the same discovery + link-analysis pipeline as the CLI audit.
+	// Opt-in because it can take tens of seconds; a failure here degrades to
+	// the probe-only report above rather than failing the request.
+	if (deep) {
+		try {
+			const discovery = await discoverDemoPages(domain, deadPath);
+			if (discovery.pages.length === 0) {
+				report.analysis = null;
+			} else {
+				const analysis = await analyzeSite(
+					discovery.pages.map((p) => ({ url: p.url, title: p.title })),
+					domain,
+				);
+				report.analysis =
+					analysis.pagesAnalyzed > 0
+						? {
+								analyzedAt: analysis.analyzedAt,
+								source: discovery.source,
+								pagesAnalyzed: analysis.pagesAnalyzed,
+								brokenLinks: analysis.brokenLinks,
+								orphanPages: analysis.orphanPages,
+							}
+						: null;
+			}
+		} catch {
+			report.analysis = null;
+		}
+	}
 
 	// Postgres-backed (migrations/0007_audit_reports.sql) — no in-memory size
 	// cap needed. If audit_reports grows large enough to matter, add a

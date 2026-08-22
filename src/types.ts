@@ -205,6 +205,17 @@ export interface FunnelConversionMetrics {
 	};
 }
 
+/** Deep-crawl health analysis attached to a standing audit when the caller
+ *  opts in (`deep: true`). Produced by the same discovery + analyzer
+ *  pipeline the CLI audit runs (src/engine/discovery.ts, analyzer.ts). */
+export interface AuditAnalysis {
+	analyzedAt: string;
+	source: "llms.txt" | "sitemap" | "crawl" | "none";
+	pagesAnalyzed: number;
+	brokenLinks: { sourcePage: string; targetUrl: string }[];
+	orphanPages: string[];
+}
+
 /** A standing, shareable audit snapshot (BAT-38, BAT-39). Persisted in
  *  Postgres (`audit_reports`) — see StorageAdapter#saveAuditReport /
  *  #getAuditReport — so a report created on one serverless isolate is
@@ -225,4 +236,8 @@ export interface StandingAuditReport {
 	};
 	permalink: string;
 	ogImageUrl: string;
+	/** Present only when the audit was created with `deep: true` (BAT-22).
+	 *  Null when a deep run was requested but the crawl failed — the probe
+	 *  payload above is still valid in that case. */
+	analysis?: AuditAnalysis | null;
 }
