@@ -1,1 +1,1 @@
-export { auditReportPageHtml, auditReportNotFoundHtml } from "./views/audit-report.js";
+export { auditReportPageHtml, auditReportNotFoundHtml } from "./views/audit-report";

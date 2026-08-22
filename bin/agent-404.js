@@ -36,7 +36,11 @@ function isPrivateOrReservedIp(ip) {
 
 // src/engine/claudebot-probe.ts
 var CLAUDEBOT_UA = "Mozilla/5.0 (compatible; ClaudeBot/1.0; +https://www.anthropic.com/claudebot)";
-async function probeClaudeBotResponse(domain, path = "/non-existent-probe-agent-404") {
+function deriveProbePath(seed) {
+  const token = (seed ?? crypto.randomUUID().replace(/-/g, "")).slice(0, 10);
+  return `/agent404-probe-${token}`;
+}
+async function probeClaudeBotResponse(domain, path = deriveProbePath()) {
   const cleanDomain = domain.replace(/^https?:\/\//, "").replace(/\/+$/, "").toLowerCase();
   if (isBlockedInternalHost(cleanDomain)) {
     throw new Error("Invalid or blocked domain");

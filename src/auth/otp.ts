@@ -13,9 +13,7 @@
  */
 
 import { createHash, createHmac, randomInt, timingSafeEqual } from "node:crypto";
-import type { Context } from "hono";
-import { getCookie } from "hono/cookie";
-import { AUTH_SESSION_COOKIE, SESSION_ABSOLUTE_SECONDS, SESSION_INACTIVITY_SECONDS } from "./config.js";
+import { AUTH_SESSION_COOKIE, SESSION_ABSOLUTE_SECONDS, SESSION_INACTIVITY_SECONDS } from "./config";
 
 /* ------------------------------------------------------------------ */
 /* Errors                                                              */
@@ -197,12 +195,53 @@ export interface ParsedSession {
  * Read + verify the app session cookie. Returns null when absent/invalid/
  * expired (including sessions past the absolute duration).
  */
+type CookieSource =
+	| string
+	| Request
+	| { get: (name: string) => unknown }
+	| {
+		cookies?: { get: (name: string) => unknown };
+		req?: { header?: (name: string) => string | undefined };
+		headers?: Headers | { get: (name: string) => string | null };
+	};
+
+function cookieValue(source: CookieSource): string | null {
+	if (typeof source === "string") {
+		// A raw token has two dots. Everything else is interpreted as a Cookie
+		// header, which keeps this helper useful outside of any web framework.
+		if (source.split(".").length === 3 && !source.includes("=")) return source;
+		const match = source.match(new RegExp(`(?:^|;\\s*)${AUTH_SESSION_COOKIE}=([^;]*)`));
+		if (!match) return null;
+		try {
+			return decodeURIComponent(match[1]);
+		} catch {
+			return null;
+		}
+	}
+	const honoCookie = "req" in source ? source.req?.header?.("cookie") : undefined;
+	if (honoCookie) return cookieValue(honoCookie);
+	if ("get" in source && typeof source.get === "function") {
+		const value = source.get(AUTH_SESSION_COOKIE) as { value?: string } | string | undefined;
+		if (typeof value === "string") return value;
+		return typeof value?.value === "string" ? value.value : null;
+	}
+	const cookies = "cookies" in source ? source.cookies : undefined;
+	const fromJar = cookies?.get(AUTH_SESSION_COOKIE) as { value?: string } | string | undefined;
+	if (typeof fromJar === "string") return fromJar;
+	if (fromJar && typeof fromJar.value === "string") return fromJar.value;
+	if (source instanceof Request) return cookieValue(source.headers.get("cookie") || "");
+	const directHeaders = "headers" in source ? source.headers : undefined;
+	const directCookie = directHeaders?.get("cookie");
+	if (directCookie) return cookieValue(directCookie);
+	return null;
+}
+
 export function readSessionCookie(
-	c: Context,
+	source: CookieSource,
 	secret: string,
 	now: number = Math.floor(Date.now() / 1000),
 ): ParsedSession | null {
-	const token = getCookie(c, AUTH_SESSION_COOKIE);
+	const token = cookieValue(source);
 	if (!token) return null;
 	const raw = verifyHs256(token, secret);
 	if (!raw) return null;

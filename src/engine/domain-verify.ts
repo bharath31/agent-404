@@ -2,8 +2,8 @@ import {
 	isBlockedInternalHost,
 	isPrivateOrReservedIp,
 	ipsFromDnsJson,
-} from "../lib/ssrf-guard.js";
-import { readBodyCapped } from "./crawler.js";
+} from "../lib/ssrf-guard";
+import { readBodyCapped } from "./crawler";
 
 const TXT_NAME_PREFIX = "_agent404.";
 const WELL_KNOWN_MAX_BYTES = 4096;

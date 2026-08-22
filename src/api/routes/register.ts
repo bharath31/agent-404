@@ -1,10 +1,10 @@
 import { Hono } from "hono";
-import type { PostgresStorage } from "../../storage/postgres.js";
-import { registerPage } from "../../engine/indexer.js";
-import { urlBelongsToSite } from "../../lib/site-host.js";
-import { trackFunnelEvent } from "../../lib/funnel-telemetry.js";
-import { recordFollowOnFetch } from "../../lib/recovery-tracker.js";
-import type { SiteRecord } from "../../types.js";
+import type { PostgresStorage } from "../../storage/postgres";
+import { registerPage } from "../../engine/indexer";
+import { urlBelongsToSite } from "../../lib/site-host";
+import { trackFunnelEvent } from "../../lib/funnel-telemetry";
+import { recordFollowOnFetch } from "../../lib/recovery-tracker";
+import type { SiteRecord } from "../../types";
 
 type Env = { Variables: { storage: PostgresStorage; siteId: string; site: SiteRecord } };
 

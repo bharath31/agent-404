@@ -1,4 +1,4 @@
-import { CANONICAL_ORIGIN } from "../config.js";
+import { CANONICAL_ORIGIN } from "../config";
 
 export type Auth0AppConfig = {
 	domain: string;

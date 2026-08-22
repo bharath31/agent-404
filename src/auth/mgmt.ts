@@ -10,8 +10,8 @@
  * create:users) on the agent-404 client — no tenant-level changes.
  */
 
-import type { Auth0AppConfig } from "./config.js";
-import { OtpFlowError } from "./otp.js";
+import type { Auth0AppConfig } from "./config";
+import { OtpFlowError } from "./otp";
 
 export interface MgmtUser {
 	sub: string;

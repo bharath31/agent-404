@@ -35,13 +35,14 @@
     "README.md"
   ],
   "scripts": {
-    "dev": "vercel dev",
-    "dev:cf": "wrangler dev",
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
     "deploy": "vercel --prod",
-    "deploy:cf": "wrangler deploy",
     "build:script": "tsx script/build.ts",
     "build:types": "tsc -p tsconfig.adapters.json",
     "build:packages": "tsx script/build-packages.ts all",
+    "verify": "npm test && npm run build && npm run build:types && npm run build:packages && npm run build:script",
     "prepublishOnly": "npm run build:script && npm run build:types",
     "db:migrate": "tsx migrations/run.ts",
     "labels:sample": "tsx scripts/label-suggestions.ts",
@@ -51,22 +52,23 @@
     "test:browser": "npx playwright test"
   },
   "dependencies": {
-    "@auth0/auth0-hono": "^1.2.6",
-    "@auth0/auth0-server-js": "^1.12.1",
-    "@hono/node-server": "^2.1.1",
     "@neondatabase/serverless": "^1.0.2",
     "@vercel/analytics": "^2.0.1",
-    "hono": "^4.6.0"
+    "geist": "^1.7.2",
+    "next": "^16.3.2",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20260313.1",
+    "@auth0/auth0-server-js": "^1.12.1",
     "@playwright/test": "^1.58.2",
     "@types/node": "^26.2.0",
-    "@vercel/node": "^5.6.15",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
     "esbuild": "^0.24.0",
+    "hono": "^4.13.3",
     "tsx": "^4.19.0",
     "typescript": "^5.7.0",
-    "vitest": "^3.2.4",
-    "wrangler": "^4.73.0"
+    "vitest": "^3.2.4"
   }
 }

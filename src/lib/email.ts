@@ -10,7 +10,7 @@
  *   RESEND_FROM     — sender, e.g. "agent-404 <noreply@newsletter.bharath.sh>"
  */
 
-import { OtpFlowError } from "../auth/otp.js";
+import { OtpFlowError } from "../auth/otp";
 
 export interface ResendConfig {
 	apiKey: string;

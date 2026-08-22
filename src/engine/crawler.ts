@@ -1,4 +1,4 @@
-import { isBlockedInternalHost } from "../lib/ssrf-guard.js";
+import { isBlockedInternalHost } from "../lib/ssrf-guard";
 
 export const DEFAULT_USER_AGENT =
 	"Mozilla/5.0 (compatible; agent-404-bot/1.0; +https://agent-404.vercel.app)";

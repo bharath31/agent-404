@@ -1,4 +1,4 @@
-import { isBlockedInternalHost } from "../lib/ssrf-guard.js";
+import { isBlockedInternalHost } from "../lib/ssrf-guard";
 
 export interface ClaudeBotProbeResult {
 	targetUrl: string;

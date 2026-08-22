@@ -1,6 +1,6 @@
 import { Hono } from "hono";
-import type { PostgresStorage } from "../../storage/postgres.js";
-import { analyzeSite } from "../../engine/analyzer.js";
+import type { PostgresStorage } from "../../storage/postgres";
+import { analyzeSite } from "../../engine/analyzer";
 
 type Env = { Variables: { storage: PostgresStorage; siteId: string } };
 

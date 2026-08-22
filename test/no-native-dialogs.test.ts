@@ -2,10 +2,11 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const files = [
-	"src/views/landing.ts",
-	"src/views/dashboard.ts",
-	"src/views/demo.ts",
-	"public/index.html",
+	"src/app/page.tsx",
+	"src/app/demo/page.tsx",
+	"src/components/dashboard/site-switcher.tsx",
+	"src/components/dashboard/installation-controls.tsx",
+	"src/components/dashboard/settings-controls.tsx",
 ];
 
 describe("served UI has no native dialogs", () => {
@@ -19,7 +20,7 @@ describe("served UI has no native dialogs", () => {
 	}
 
 	it("landing does not tell people to contact support", () => {
-		const src = readFileSync("src/views/landing.ts", "utf8");
+		const src = readFileSync("src/app/page.tsx", "utf8");
 		expect(src.toLowerCase()).not.toContain("contact support");
 		expect(src.toLowerCase()).not.toContain("already registered");
 	});

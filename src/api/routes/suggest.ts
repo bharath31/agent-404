@@ -1,12 +1,12 @@
 import { Hono } from "hono";
 import type { Context } from "hono";
-import type { PostgresStorage } from "../../storage/postgres.js";
-import { findSuggestions } from "../../engine/matcher.js";
-import { generateDeadUrlEmbedding } from "../../engine/embeddings.js";
-import { getCachedSuggest, setCachedSuggest } from "../../engine/suggest-cache.js";
-import { normalizeDeadUrl, pathHint } from "../../engine/url-normalize.js";
-import { buildJsonLd, buildLinkHeader } from "../../../adapters/core.js";
-import { recordSuggestionServedEvent } from "../../lib/recovery-tracker.js";
+import type { PostgresStorage } from "../../storage/postgres";
+import { findSuggestions } from "../../engine/matcher";
+import { generateDeadUrlEmbedding } from "../../engine/embeddings";
+import { getCachedSuggest, setCachedSuggest } from "../../engine/suggest-cache";
+import { normalizeDeadUrl, pathHint } from "../../engine/url-normalize";
+import { buildJsonLd, buildLinkHeader } from "../../../adapters/core";
+import { recordSuggestionServedEvent } from "../../lib/recovery-tracker";
 
 type Env = { Variables: { storage: PostgresStorage; siteId: string } };
 

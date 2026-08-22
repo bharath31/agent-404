@@ -1,7 +1,7 @@
 import { Hono } from "hono";
-import type { PostgresStorage } from "../../storage/postgres.js";
-import { trackFunnelEvent } from "../../lib/funnel-telemetry.js";
-import { rateLimiter } from "../middleware/rate-limit.js";
+import type { PostgresStorage } from "../../storage/postgres";
+import { trackFunnelEvent } from "../../lib/funnel-telemetry";
+import { rateLimiter } from "../middleware/rate-limit";
 
 type Env = { Variables: { storage?: PostgresStorage } };
 

@@ -1,13 +1,13 @@
 import { Hono } from "hono";
 import type { Context } from "hono";
 import type { ServerClient } from "@auth0/auth0-server-js";
-import type { PostgresStorage } from "../../storage/postgres.js";
-import { requireOwnerPage } from "../../auth/owner.js";
-import { normalizeDomain } from "../domain.js";
-import { dashboardHtml } from "../../dashboard.js";
-import { deriveInstallState } from "../../lib/install-state.js";
-import type { DashboardSiteData } from "../../types.js";
-import { verificationInstructions } from "./sites.js";
+import type { PostgresStorage } from "../../storage/postgres";
+import { requireOwnerPage } from "../../auth/owner";
+import { normalizeDomain } from "../domain";
+import { dashboardHtml } from "../../dashboard";
+import { deriveInstallState } from "../../lib/install-state";
+import type { DashboardSiteData } from "../../types";
+import { verificationInstructions } from "./sites";
 
 type Env = {
 	Variables: {

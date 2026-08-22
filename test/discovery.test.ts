@@ -1,13 +1,20 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import app from "../src/index.js";
+import { handleApiRequest } from "../src/lib/http/api-handler";
+
+function demoRequest(path: string, forwardedFor = `test-${Math.random()}`) {
+	return handleApiRequest(
+		new Request(`https://www.agent404.dev${path}`, {
+			headers: { "x-forwarded-for": forwardedFor },
+		}),
+		["demo", "sitemap"],
+	);
+}
 
 // Helper to call the demo sitemap endpoint
 async function discoverPages(domain: string, path = "") {
 	let url = `/api/demo/sitemap?domain=${encodeURIComponent(domain)}`;
 	if (path) url += `&path=${encodeURIComponent(path)}`;
-	const res = await app.request(url, {
-		headers: { "x-forwarded-for": `test-${Math.random()}` },
-	});
+	const res = await demoRequest(url);
 	return res.json() as Promise<{
 		domain: string;
 		pages: { url: string; title: string; description?: string }[];
@@ -141,23 +148,17 @@ describe("Demo page discovery", () => {
 
 	describe("Input validation", () => {
 		it("rejects missing domain", async () => {
-			const res = await app.request("/api/demo/sitemap", {
-				headers: { "x-forwarded-for": "val-1" },
-			});
+			const res = await demoRequest("/api/demo/sitemap", "val-1");
 			expect(res.status).toBe(400);
 		});
 
 		it("rejects domains with slashes", async () => {
-			const res = await app.request("/api/demo/sitemap?domain=example.com/foo", {
-				headers: { "x-forwarded-for": "val-2" },
-			});
+			const res = await demoRequest("/api/demo/sitemap?domain=example.com/foo", "val-2");
 			expect(res.status).toBe(400);
 		});
 
 		it("rejects private hosts", async () => {
-			const res = await app.request("/api/demo/sitemap?domain=localhost", {
-				headers: { "x-forwarded-for": "val-3" },
-			});
+			const res = await demoRequest("/api/demo/sitemap?domain=localhost", "val-3");
 			expect(res.status).toBe(400);
 		});
 	});

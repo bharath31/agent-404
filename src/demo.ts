@@ -1,1 +1,1 @@
-export { demoPageHtml } from "./views/demo.js";
+export { demoPageHtml } from "./views/demo";

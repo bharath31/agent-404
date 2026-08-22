@@ -1,7 +1,7 @@
 import { Hono } from "hono";
-import type { PostgresStorage } from "../../storage/postgres.js";
-import { probeClaudeBotResponse, deriveProbePath } from "../../engine/claudebot-probe.js";
-import type { InstallProbe } from "../../types.js";
+import type { PostgresStorage } from "../../storage/postgres";
+import { probeClaudeBotResponse, deriveProbePath } from "../../engine/claudebot-probe";
+import type { InstallProbe } from "../../types";
 
 // `requireOwnerApi` is applied by the parent (src/index.ts) before this
 // sub-app mounts, so ownerSub is guaranteed present and set here.

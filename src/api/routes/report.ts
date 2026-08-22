@@ -1,6 +1,6 @@
 import { Hono } from "hono";
-import type { PostgresStorage } from "../../storage/postgres.js";
-import { auditReportPageHtml, auditReportNotFoundHtml } from "../../views/audit-report.js";
+import type { PostgresStorage } from "../../storage/postgres";
+import { auditReportPageHtml, auditReportNotFoundHtml } from "../../views/audit-report";
 
 type Env = { Variables: { storage: PostgresStorage } };
 

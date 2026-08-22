@@ -1,18 +1,18 @@
 import { Hono } from "hono";
-import { normalizeDomain } from "../domain.js";
-import { isBlockedInternalHost } from "../../lib/ssrf-guard.js";
-import { probeClaudeBotResponse } from "../../engine/claudebot-probe.js";
-import { rateLimiter } from "../middleware/rate-limit.js";
-import { trackFunnelEvent } from "../../lib/funnel-telemetry.js";
-import { scoreCleanStatus, scoreLinkHeaders, scoreJsonLd, READINESS_WEIGHTS } from "../../engine/readiness-score.js";
-import { discoverDemoPages } from "../../engine/discovery.js";
-import { analyzeSite } from "../../engine/analyzer.js";
-import type { PostgresStorage } from "../../storage/postgres.js";
-import type { StandingAuditReport } from "../../types.js";
+import { normalizeDomain } from "../domain";
+import { isBlockedInternalHost } from "../../lib/ssrf-guard";
+import { probeClaudeBotResponse } from "../../engine/claudebot-probe";
+import { rateLimiter } from "../middleware/rate-limit";
+import { trackFunnelEvent } from "../../lib/funnel-telemetry";
+import { scoreCleanStatus, scoreLinkHeaders, scoreJsonLd, READINESS_WEIGHTS } from "../../engine/readiness-score";
+import { discoverDemoPages } from "../../engine/discovery";
+import { analyzeSite } from "../../engine/analyzer";
+import type { PostgresStorage } from "../../storage/postgres";
+import type { StandingAuditReport } from "../../types";
 
 // Re-exported for callers that imported the type from this module before it
 // moved to src/types.ts (so it can also be shared by StorageAdapter).
-export type { StandingAuditReport } from "../../types.js";
+export type { StandingAuditReport } from "../../types";
 
 function generateAuditId(domain: string): string {
 	const hash = Math.random().toString(36).substring(2, 10);

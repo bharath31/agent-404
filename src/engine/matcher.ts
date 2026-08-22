@@ -1,6 +1,6 @@
-import type { PageRecord, Suggestion } from "../types.js";
-import { stemToken } from "./stemmer.js";
-import { normalizePathname } from "./url-normalize.js";
+import type { PageRecord, Suggestion } from "../types";
+import { stemToken } from "./stemmer";
+import { normalizePathname } from "./url-normalize";
 
 const SCORE_THRESHOLD = 0.2;
 const MAX_RESULTS = 5;

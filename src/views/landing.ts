@@ -1,4 +1,4 @@
-import { CANONICAL_SCRIPT_URL } from "../config.js";
+import { CANONICAL_SCRIPT_URL } from "../config";
 
 export function landingPageHtml(opts: { signedIn?: boolean } = {}): string {
 	const signedIn = Boolean(opts.signedIn);
