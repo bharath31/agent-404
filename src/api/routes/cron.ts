@@ -6,6 +6,11 @@ import { buildEmbeddingText, generateBatchEmbeddings } from "../../engine/embedd
 import { invalidateSuggestCache } from "../../engine/suggest-cache.js";
 import { probeClaudeBotResponse, deriveProbePath } from "../../engine/claudebot-probe.js";
 import { isCronAuthorized } from "./admin.js";
+import {
+	pruneSuggestionLogs,
+	rollupSuggestionDay,
+	utcDayStart,
+} from "../../lib/suggestion-rollups.js";
 
 type Env = {
 	Bindings: { CRON_SECRET?: string };
@@ -157,6 +162,21 @@ cron.get("/", async (c) => {
 		console.error("install_probe_pass failed:", err instanceof Error ? err.message : err);
 	}
 
+	// BAT-55: roll yesterday's raw suggestion_logs into suggestion_rollups and
+	// prune rows past retention. Both are idempotent and bounded (see
+	// src/lib/suggestion-rollups.ts); a missed run self-heals because the
+	// rollup recomputes from raw rows and stats count uncovered raw rows.
+	let sitesRolledUp = 0;
+	let logsPruned = 0;
+	try {
+		const yesterday = utcDayStart(new Date(Date.now() - 24 * 3600 * 1000));
+		sitesRolledUp = await rollupSuggestionDay(sql, yesterday);
+		logsPruned = await pruneSuggestionLogs(sql);
+	} catch (err) {
+		// Rollups are an optimization; they must never fail the cron.
+		console.error("suggestion_rollup_pass failed:", err instanceof Error ? err.message : err);
+	}
+
 	// BAT-62: computed once per cron run (not per shard site) so the north-star
 	// number — live installs against the 1,000-instance goal — is durable in
 	// logs even without hitting /api/admin/metrics.
@@ -175,6 +195,8 @@ cron.get("/", async (c) => {
 			platform: process.env.VERCEL ? "vercel-daily" : "hourly-capable",
 			probesRan,
 			probesBroken,
+			sitesRolledUp,
+			logsPruned,
 			liveInstalls,
 			totalSites,
 			goalTarget: 1000,
@@ -187,6 +209,8 @@ cron.get("/", async (c) => {
 		remainingBacklog: Math.max(0, remainingAtStart - results.length),
 		stoppedForBudget,
 		results,
+		sitesRolledUp,
+		logsPruned,
 		liveInstalls,
 		totalSites,
 		goalTarget: 1000,

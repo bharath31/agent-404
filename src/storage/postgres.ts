@@ -301,11 +301,26 @@ export class PostgresStorage implements StorageAdapter {
 		`;
 	}
 
+	/**
+	 * BAT-55: historical suggestion counts come from the daily rollup table;
+	 * only raw rows newer than the last rolled-up day are counted live, so
+	 * this no longer runs COUNT(*) over the full suggestion_logs table. The
+	 * uncovered-raw boundary (last rollup day + 1) also keeps the total
+	 * correct if a cron run is ever missed — those days get rolled up late.
+	 */
 	async getStats(siteId: string): Promise<SiteStats> {
 		const pages =
 			await this.sql`SELECT COUNT(*) as count FROM pages WHERE site_id = ${siteId}`;
-		const suggestions =
-			await this.sql`SELECT COUNT(*) as count FROM suggestion_logs WHERE site_id = ${siteId}`;
+		const rollup = await this.sql`
+			SELECT COALESCE(SUM(total), 0) as total FROM suggestion_rollups WHERE site_id = ${siteId}
+		`;
+		const uncovered = await this.sql`
+			SELECT COUNT(*) as count FROM suggestion_logs
+			WHERE site_id = ${siteId}
+				AND created_at >= (
+					SELECT COALESCE(MAX(day) + 1, DATE 'epoch') FROM suggestion_rollups WHERE site_id = ${siteId}
+				)
+		`;
 
 		const lastSeen = await this.sql`
 			SELECT MAX(last_seen) as last_seen FROM pages WHERE site_id = ${siteId}
@@ -313,7 +328,8 @@ export class PostgresStorage implements StorageAdapter {
 
 		return {
 			pageCount: Number(pages.rows[0]?.count ?? 0),
-			suggestionsServed: Number(suggestions.rows[0]?.count ?? 0),
+			suggestionsServed:
+				Number(rollup.rows[0]?.total ?? 0) + Number(uncovered.rows[0]?.count ?? 0),
 			lastBeaconAt: lastSeen.rows[0]?.last_seen ? String(lastSeen.rows[0].last_seen) : null,
 		};
 	}
@@ -336,27 +352,48 @@ export class PostgresStorage implements StorageAdapter {
 		}));
 	}
 
+	/**
+	 * BAT-55: the all-time match-type distribution reads from the daily
+	 * rollup (queryable columns, no more LIKE '%moved%' over a JSON blob)
+	 * plus raw rows newer than the last rolled-up day. The recent activity
+	 * windows stay on raw rows — retention (60d) always covers the 30d
+	 * window, and rows inside those windows may already be rolled up, so
+	 * they must not be restricted to uncovered rows.
+	 */
 	async getMatchQualityStats(siteId: string): Promise<MatchQualityStats> {
 		const { rows } = await this.sql`
+			WITH boundary AS (
+				SELECT COALESCE(MAX(day) + 1, DATE 'epoch') AS d
+				FROM suggestion_rollups WHERE site_id = ${siteId}
+			)
 			SELECT
 				COUNT(*) FILTER (WHERE created_at > NOW() - INTERVAL '24 hours') as last_24h,
 				COUNT(*) FILTER (WHERE created_at > NOW() - INTERVAL '7 days') as last_7d,
 				COUNT(*) FILTER (WHERE created_at > NOW() - INTERVAL '30 days') as last_30d,
-				COUNT(*) FILTER (WHERE match_types LIKE '%moved%') as moved_count,
-				COUNT(*) FILTER (WHERE match_types LIKE '%similar%') as similar_count,
-				COUNT(*) FILTER (WHERE match_types LIKE '%related%') as related_count
+				COUNT(*) FILTER (WHERE created_at >= (SELECT d FROM boundary) AND match_types::jsonb @> '"moved"'::jsonb) as moved_uncovered,
+				COUNT(*) FILTER (WHERE created_at >= (SELECT d FROM boundary) AND match_types::jsonb @> '"similar"'::jsonb) as similar_uncovered,
+				COUNT(*) FILTER (WHERE created_at >= (SELECT d FROM boundary) AND match_types::jsonb @> '"related"'::jsonb) as related_uncovered
 			FROM suggestion_logs
 			WHERE site_id = ${siteId}
 		`;
+		const rollup = await this.sql`
+			SELECT
+				COALESCE(SUM(moved_count), 0) as moved,
+				COALESCE(SUM(similar_count), 0) as similar,
+				COALESCE(SUM(related_count), 0) as related
+			FROM suggestion_rollups
+			WHERE site_id = ${siteId}
+		`;
 		const row = rows[0] || {};
+		const ru = rollup.rows[0] || {};
 		return {
 			last24h: Number(row.last_24h ?? 0),
 			last7d: Number(row.last_7d ?? 0),
 			last30d: Number(row.last_30d ?? 0),
 			matchTypeDistribution: {
-				moved: Number(row.moved_count ?? 0),
-				similar: Number(row.similar_count ?? 0),
-				related: Number(row.related_count ?? 0),
+				moved: Number(ru.moved ?? 0) + Number(row.moved_uncovered ?? 0),
+				similar: Number(ru.similar ?? 0) + Number(row.similar_uncovered ?? 0),
+				related: Number(ru.related ?? 0) + Number(row.related_uncovered ?? 0),
 			},
 		};
 	}
@@ -650,6 +687,23 @@ export class PostgresStorage implements StorageAdapter {
 		`;
 		return Number(rows[0]?.count ?? 0);
 	}
+
+	// BAT-26: precision ground truth from hand labels (migration 0013). Reads
+	// only retained raw rows — the weekly labeling loop judges recent matcher
+	// behavior, and raw rows are pruned after the retention window.
+	async getLabelPrecision(): Promise<{ labeled: number; correct: number }> {
+		const { rows } = await this.sql`
+			SELECT
+				COUNT(*) FILTER (WHERE label IS NOT NULL) AS labeled,
+				COUNT(*) FILTER (WHERE label = 'correct') AS correct
+			FROM suggestion_logs
+		`;
+		return {
+			labeled: Number(rows[0]?.labeled ?? 0),
+			correct: Number(rows[0]?.correct ?? 0),
+		};
+	}
+
 
 	async getTotalSiteCount(): Promise<number> {
 		const { rows } = await this.sql`SELECT COUNT(*) AS count FROM sites`;
