@@ -688,6 +688,23 @@ export class PostgresStorage implements StorageAdapter {
 		return Number(rows[0]?.count ?? 0);
 	}
 
+	// BAT-26: precision ground truth from hand labels (migration 0013). Reads
+	// only retained raw rows — the weekly labeling loop judges recent matcher
+	// behavior, and raw rows are pruned after the retention window.
+	async getLabelPrecision(): Promise<{ labeled: number; correct: number }> {
+		const { rows } = await this.sql`
+			SELECT
+				COUNT(*) FILTER (WHERE label IS NOT NULL) AS labeled,
+				COUNT(*) FILTER (WHERE label = 'correct') AS correct
+			FROM suggestion_logs
+		`;
+		return {
+			labeled: Number(rows[0]?.labeled ?? 0),
+			correct: Number(rows[0]?.correct ?? 0),
+		};
+	}
+
+
 	async getTotalSiteCount(): Promise<number> {
 		const { rows } = await this.sql`SELECT COUNT(*) AS count FROM sites`;
 		return Number(rows[0]?.count ?? 0);
