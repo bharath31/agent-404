@@ -6,7 +6,7 @@
  */
 
 import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
-import { getDatabaseUrl } from "../config.js";
+import { getDatabaseUrl } from "../config";
 
 export interface PendingOtp {
 	codeHash: string;

@@ -1,4 +1,4 @@
-import type { ClaudeBotProbeResult } from "./engine/claudebot-probe.js";
+import type { ClaudeBotProbeResult } from "./engine/claudebot-probe";
 
 export interface SiteRecord {
 	id: string;

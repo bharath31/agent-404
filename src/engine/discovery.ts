@@ -1,4 +1,4 @@
-import { readBodyCapped } from "./crawler.js";
+import { readBodyCapped } from "./crawler";
 
 // ── Demo page discovery constants ──
 const DEMO_FETCH_TIMEOUT_MS = 8_000;

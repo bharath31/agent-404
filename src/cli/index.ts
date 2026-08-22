@@ -1,5 +1,5 @@
-import { runCliAudit, printCliAuditReport, type AuditCliOptions } from "./audit.js";
-import { c, renderBanner } from "./format.js";
+import { runCliAudit, printCliAuditReport, type AuditCliOptions } from "./audit";
+import { c, renderBanner } from "./format";
 
 const VERSION = "0.1.0";
 

@@ -1,9 +1,9 @@
 import { Hono } from "hono";
-import type { PostgresStorage } from "../../storage/postgres.js";
-import { getCronSecret } from "../../config.js";
-import { getFunnelMetrics } from "../../lib/funnel-telemetry.js";
-import { getRecoveryRateStats } from "../../lib/recovery-tracker.js";
-import { adminMetricsPageHtml } from "../../views/admin-metrics.js";
+import type { PostgresStorage } from "../../storage/postgres";
+import { getCronSecret } from "../../config";
+import { getFunnelMetrics } from "../../lib/funnel-telemetry";
+import { getRecoveryRateStats } from "../../lib/recovery-tracker";
+import { adminMetricsPageHtml } from "../../views/admin-metrics";
 
 type Env = {
 	Bindings: { CRON_SECRET?: string };

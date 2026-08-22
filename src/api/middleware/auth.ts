@@ -1,7 +1,7 @@
 import type { Context, Next } from "hono";
-import type { PostgresStorage } from "../../storage/postgres.js";
-import type { SiteRecord } from "../../types.js";
-import { originBelongsToSite } from "../../lib/site-host.js";
+import type { PostgresStorage } from "../../storage/postgres";
+import type { SiteRecord } from "../../types";
+import { originBelongsToSite } from "../../lib/site-host";
 
 function timingSafeEqual(a: string, b: string): boolean {
 	if (a.length !== b.length) return false;

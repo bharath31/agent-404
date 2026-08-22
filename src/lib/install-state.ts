@@ -3,7 +3,7 @@ import type {
 	InstallStateId,
 	InstallStateView,
 	InstallStepView,
-} from "../types.js";
+} from "../types";
 
 /** A probe is only meaningful evidence while it's recent. */
 export const PROBE_FRESH_MS = 48 * 60 * 60 * 1000;

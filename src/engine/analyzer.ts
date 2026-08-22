@@ -1,5 +1,5 @@
-import type { AnalysisReport } from "../types.js";
-import { isBlockedInternalHost } from "../lib/ssrf-guard.js";
+import type { AnalysisReport } from "../types";
+import { isBlockedInternalHost } from "../lib/ssrf-guard";
 
 interface PageInfo {
 	url: string;

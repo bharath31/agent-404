@@ -1,1 +1,1 @@
-export { dashboardHtml } from "./views/dashboard.js";
+export { dashboardHtml } from "./views/dashboard";

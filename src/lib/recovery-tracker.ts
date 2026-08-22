@@ -1,5 +1,5 @@
-import type { StorageAdapter } from "../storage/interface.js";
-import type { AgentCategory, RecoveryEvent, RecoveryRateStats } from "../types.js";
+import type { StorageAdapter } from "../storage/interface";
+import type { AgentCategory, RecoveryEvent, RecoveryRateStats } from "../types";
 
 export type { AgentCategory, RecoveryEvent, RecoveryRateStats };
 

@@ -19,8 +19,8 @@
 
 import { Hono } from "hono";
 import type { Context } from "hono";
-import type { Env } from "../index.js";
-import { AUTH_LOGIN_PATH, AUTH_LOGOUT_PATH, readAuth0Config } from "./config.js";
+import type { ServerClient } from "@auth0/auth0-server-js";
+import { AUTH_LOGIN_PATH, AUTH_LOGOUT_PATH, readAuth0Config } from "./config";
 import {
 	OTP_MAX_ATTEMPTS,
 	OTP_TTL_MS,
@@ -36,12 +36,19 @@ import {
 	sessionCookieString,
 	verifyOtp,
 	type OtpIdentity,
-} from "./otp.js";
-import { readResendConfig, sendOtpEmail } from "../lib/email.js";
-import { findOrCreateUser } from "./mgmt.js";
-import { loginPageHtml } from "../views/login.js";
-import { getDatabaseUrl } from "../config.js";
-import { PostgresOtpStore, type OtpStore } from "../storage/otp.js";
+} from "./otp";
+import { readResendConfig, sendOtpEmail } from "../lib/email";
+import { findOrCreateUser } from "./mgmt";
+import { loginPageHtml } from "../views/login";
+import { getDatabaseUrl } from "../config";
+import { PostgresOtpStore, type OtpStore } from "../storage/otp";
+
+/** Legacy Hono contract harness retained only for parity tests during the
+ * Next cutover. Production auth is implemented in src/app/auth + src/lib/auth. */
+type Env = {
+	Bindings: Record<string, string | undefined>;
+	Variables: { auth0Client?: ServerClient<Context> };
+};
 
 export const loginRoutes = new Hono<Env>();
 

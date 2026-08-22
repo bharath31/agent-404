@@ -1,5 +1,5 @@
-import { CANONICAL_ORIGIN } from "../config.js";
-import type { AuditAnalysis, StandingAuditReport } from "../types.js";
+import { CANONICAL_ORIGIN } from "../config";
+import type { AuditAnalysis, StandingAuditReport } from "../types";
 
 function escapeHtml(str: string): string {
 	return str

@@ -1,7 +1,7 @@
-import type { PageRecord } from "../types.js";
-import type { StorageAdapter } from "../storage/interface.js";
-import { isBlockedInternalHost } from "../lib/ssrf-guard.js";
-import { buildEmbeddingText, generateBatchEmbeddings } from "./embeddings.js";
+import type { PageRecord } from "../types";
+import type { StorageAdapter } from "../storage/interface";
+import { isBlockedInternalHost } from "../lib/ssrf-guard";
+import { buildEmbeddingText, generateBatchEmbeddings } from "./embeddings";
 
 const EMBEDDING_BATCH_SIZE = 100;
 const MAX_SITEMAP_URLS = 5000;

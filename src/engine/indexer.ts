@@ -1,7 +1,7 @@
-import type { PageRecord } from "../types.js";
-import type { StorageAdapter } from "../storage/interface.js";
-import { generatePageEmbedding } from "./embeddings.js";
-import { invalidateSuggestCache } from "./suggest-cache.js";
+import type { PageRecord } from "../types";
+import type { StorageAdapter } from "../storage/interface";
+import { generatePageEmbedding } from "./embeddings";
+import { invalidateSuggestCache } from "./suggest-cache";
 
 export async function registerPage(
 	storage: StorageAdapter,

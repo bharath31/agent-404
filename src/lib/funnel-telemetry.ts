@@ -1,5 +1,5 @@
-import type { StorageAdapter } from "../storage/interface.js";
-import type { FunnelStep, FunnelConversionMetrics } from "../types.js";
+import type { StorageAdapter } from "../storage/interface";
+import type { FunnelStep, FunnelConversionMetrics } from "../types";
 
 export type { FunnelStep, FunnelConversionMetrics };
 

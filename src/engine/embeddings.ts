@@ -1,5 +1,5 @@
-import type { PageRecord } from "../types.js";
-import { getCloudflareEmbeddingConfig, getEmbeddingConfig } from "../config.js";
+import type { PageRecord } from "../types";
+import { getCloudflareEmbeddingConfig, getEmbeddingConfig } from "../config";
 
 const DIMENSIONS = 768;
 const CLOUDFLARE_MODEL = "@cf/baai/bge-base-en-v1.5";

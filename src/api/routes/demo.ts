@@ -1,7 +1,7 @@
 import { Hono } from "hono";
-import { rateLimiter } from "../middleware/rate-limit.js";
-import { isBlockedInternalHost } from "../../lib/ssrf-guard.js";
-import { discoverDemoPages } from "../../engine/discovery.js";
+import { rateLimiter } from "../middleware/rate-limit";
+import { isBlockedInternalHost } from "../../lib/ssrf-guard";
+import { discoverDemoPages } from "../../engine/discovery";
 
 const demo = new Hono();
 

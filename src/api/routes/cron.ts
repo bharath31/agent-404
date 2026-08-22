@@ -1,16 +1,16 @@
 import { Hono } from "hono";
-import type { PostgresStorage } from "../../storage/postgres.js";
-import { crawlSitemap } from "../../engine/sitemap.js";
-import { pruneStalePages } from "../../engine/indexer.js";
-import { buildEmbeddingText, generateBatchEmbeddings } from "../../engine/embeddings.js";
-import { invalidateSuggestCache } from "../../engine/suggest-cache.js";
-import { probeClaudeBotResponse, deriveProbePath } from "../../engine/claudebot-probe.js";
-import { isCronAuthorized } from "./admin.js";
+import type { PostgresStorage } from "../../storage/postgres";
+import { crawlSitemap } from "../../engine/sitemap";
+import { pruneStalePages } from "../../engine/indexer";
+import { buildEmbeddingText, generateBatchEmbeddings } from "../../engine/embeddings";
+import { invalidateSuggestCache } from "../../engine/suggest-cache";
+import { probeClaudeBotResponse, deriveProbePath } from "../../engine/claudebot-probe";
+import { isCronAuthorized } from "./admin";
 import {
 	pruneSuggestionLogs,
 	rollupSuggestionDay,
 	utcDayStart,
-} from "../../lib/suggestion-rollups.js";
+} from "../../lib/suggestion-rollups";
 
 type Env = {
 	Bindings: { CRON_SECRET?: string };

@@ -1,20 +1,20 @@
-import { probeClaudeBotResponse, type ClaudeBotProbeResult } from "../engine/claudebot-probe.js";
-import { discoverDemoPages, type DemoPage } from "../engine/discovery.js";
-import { analyzeSite } from "../engine/analyzer.js";
+import { probeClaudeBotResponse, type ClaudeBotProbeResult } from "../engine/claudebot-probe";
+import { discoverDemoPages, type DemoPage } from "../engine/discovery";
+import { analyzeSite } from "../engine/analyzer";
 import {
 	predictAndEvaluateHallucinations,
 	type HallucinationAuditSummary,
-} from "../engine/hallucination-predictor.js";
-import { normalizeDomain } from "../api/domain.js";
-import { isBlockedInternalHost } from "../lib/ssrf-guard.js";
-import type { AnalysisReport } from "../types.js";
+} from "../engine/hallucination-predictor";
+import { normalizeDomain } from "../api/domain";
+import { isBlockedInternalHost } from "../lib/ssrf-guard";
+import type { AnalysisReport } from "../types";
 import {
 	scoreCleanStatus,
 	scoreLinkHeaders,
 	scoreJsonLd,
 	scoreHallucinationRecovery,
 	scoreBrokenLinkHealth,
-} from "../engine/readiness-score.js";
+} from "../engine/readiness-score";
 import {
 	renderBanner,
 	renderScoreBadge,
@@ -22,7 +22,7 @@ import {
 	renderCheckItem,
 	renderDiffBox,
 	c,
-} from "./format.js";
+} from "./format";
 
 export interface AuditCliOptions {
 	domain: string;

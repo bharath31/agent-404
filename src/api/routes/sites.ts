@@ -1,15 +1,15 @@
 import { Hono } from "hono";
-import type { PostgresStorage } from "../../storage/postgres.js";
-import { crawlSitemap } from "../../engine/sitemap.js";
-import { normalizeDomain } from "../domain.js";
+import type { PostgresStorage } from "../../storage/postgres";
+import { crawlSitemap } from "../../engine/sitemap";
+import { normalizeDomain } from "../domain";
 import {
 	proveDomainOwnership,
 	verificationTxtName,
 	wellKnownUrl,
-} from "../../engine/domain-verify.js";
-import { isDisposableSmokeDomain } from "../../lib/disposable-smoke-domain.js";
-import { trackFunnelEvent } from "../../lib/funnel-telemetry.js";
-import type { SiteRecord } from "../../types.js";
+} from "../../engine/domain-verify";
+import { isDisposableSmokeDomain } from "../../lib/disposable-smoke-domain";
+import { trackFunnelEvent } from "../../lib/funnel-telemetry";
+import type { SiteRecord } from "../../types";
 
 export const VERIFIED_RECLAIM_GRACE_MS = 24 * 60 * 60 * 1000;
 

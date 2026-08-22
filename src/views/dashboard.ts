@@ -1,5 +1,5 @@
-import { CANONICAL_SCRIPT_URL } from "../config.js";
-import type { DashboardData, DashboardSiteData } from "../types.js";
+import { CANONICAL_SCRIPT_URL } from "../config";
+import type { DashboardData, DashboardSiteData } from "../types";
 
 function escapeHtml(str: string): string {
 	return str

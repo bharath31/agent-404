@@ -1,4 +1,4 @@
-import { isTestDomain } from "./disposable-smoke-domain.js";
+import { isTestDomain } from "./disposable-smoke-domain";
 
 /**
  * BAT-62: "Report verified installs, not registrations."

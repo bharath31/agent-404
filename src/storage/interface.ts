@@ -11,7 +11,19 @@ import type {
 	AgentCategory,
 	StandingAuditReport,
 	InstallProbe,
-} from "../types.js";
+} from "../types";
+import type {
+	ActivityPage,
+	ActivityPageOptions,
+	IndexedPagePage,
+	IndexedPagePageOptions,
+	RotateSiteKeyOutcome,
+	SiteInstallation,
+	SiteKeyKind,
+	SiteOverview,
+	SiteSettings,
+	SiteSummary,
+} from "../data/dashboard";
 
 export interface StorageAdapter {
 	createSite(domain: string, ownerSub: string): Promise<SiteRecord>;
@@ -19,11 +31,35 @@ export interface StorageAdapter {
 	getSiteByApiKey(apiKey: string): Promise<SiteRecord | null>;
 	getSiteByKey(key: string): Promise<{ site: SiteRecord; keyType: "secret" | "public" } | null>;
 	getSiteByDomain(domain: string): Promise<SiteRecord | null>;
+	/** Owner-scoped lookup used by domain dashboard routes to avoid tenant enumeration. */
+	getOwnedSiteByDomain(domain: string, ownerSub: string): Promise<SiteRecord | null>;
 	markVerified(id: string): Promise<void>;
 	rotateReclaimToken(id: string): Promise<string>;
 	reclaimSite(id: string, ownerSub: string): Promise<SiteRecord>;
 	listSitesByOwner(ownerSub: string): Promise<SiteRecord[]>;
+	/** One batched portfolio query; returned rows never include a write key. */
+	listSiteSummaries(ownerSub: string): Promise<SiteSummary[]>;
 	claimSite(domain: string, apiKey: string, ownerSub: string): Promise<SiteRecord | null>;
+	getSiteOverview(domain: string, ownerSub: string): Promise<SiteOverview | null>;
+	getActivityPage(siteId: string, opts?: ActivityPageOptions): Promise<ActivityPage>;
+	getIndexedPagePage(siteId: string, opts?: IndexedPagePageOptions): Promise<IndexedPagePage>;
+	getSiteInstallation(domain: string, ownerSub: string): Promise<SiteInstallation | null>;
+	getSiteSettings(domain: string, ownerSub: string): Promise<SiteSettings | null>;
+	rotateSiteKey(
+		siteId: string,
+		ownerSub: string,
+		kind: SiteKeyKind,
+		overlapHours?: number,
+	): Promise<RotateSiteKeyOutcome>;
+	/** Put the site at the front of the crawl backlog and return its safe identity. */
+	requestSiteReindex(
+		siteId: string,
+		ownerSub: string,
+	): Promise<{ id: string; domain: string } | null>;
+	/** Clear the explicit request marker after a successful manual crawl. */
+	completeSiteReindex(siteId: string): Promise<void>;
+	/** Exact owner + normalized-domain match; site-owned rows cascade in one statement. */
+	deleteOwnedSite(siteId: string, ownerSub: string, normalizedDomain: string): Promise<boolean>;
 
 	upsertPage(
 		siteId: string,

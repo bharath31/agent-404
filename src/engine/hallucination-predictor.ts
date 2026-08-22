@@ -1,8 +1,8 @@
-import type { PageRecord, Suggestion } from "../types.js";
-import { findSuggestions } from "./matcher.js";
-import { stemToken } from "./stemmer.js";
-import { buildEmbeddingText, deadUrlEmbeddingText, generateBatchEmbeddings } from "./embeddings.js";
-import { normalizePathname } from "./url-normalize.js";
+import type { PageRecord, Suggestion } from "../types";
+import { findSuggestions } from "./matcher";
+import { stemToken } from "./stemmer";
+import { buildEmbeddingText, deadUrlEmbeddingText, generateBatchEmbeddings } from "./embeddings";
+import { normalizePathname } from "./url-normalize";
 
 export interface HallucinationPrediction {
 	hallucinatedPath: string;

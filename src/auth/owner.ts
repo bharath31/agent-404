@@ -1,13 +1,13 @@
 import type { Context, Next } from "hono";
 import type { ServerClient } from "@auth0/auth0-server-js";
-import { AUTH_LOGIN_PATH, readAuth0Config } from "./config.js";
+import { AUTH_LOGIN_PATH, readAuth0Config } from "./config";
 import {
 	readSessionCookie,
 	rollSessionCookie,
 	sessionCookieString,
-} from "./otp.js";
-import { normalizeDomain } from "../api/domain.js";
-import { isDisposableSmokeDomain } from "../lib/disposable-smoke-domain.js";
+} from "./otp";
+import { normalizeDomain } from "../api/domain";
+import { isDisposableSmokeDomain } from "../lib/disposable-smoke-domain";
 
 type AuthVars = {
 	ownerSub?: string;
