@@ -963,22 +963,22 @@ export function dashboardHtml(data: DashboardData): string {
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
   :root {
-    --bg: #09090b;
-    --bg-subtle: #0f0f12;
-    --surface: #121215;
-    --surface-elevated: #18181c;
-    --surface-hover: #1f1f24;
+    --bg: #0a0a0a;
+    --bg-subtle: #0f0f11;
+    --surface: #121214;
+    --surface-elevated: #18181b;
+    --surface-hover: #1e1e21;
     --border: #27272a;
-    --border-subtle: #1e1e22;
+    --border-subtle: #1d1d20;
     --border-focus: #52525b;
-    --text: #f4f4f5;
+    --text: #fafafa;
     --text-secondary: #a1a1aa;
     --text-muted: #71717a;
     --accent: #3b82f6;
     --accent-hover: #2563eb;
     --accent-subtle: rgba(59, 130, 246, 0.12);
-    --emerald: #10b981;
-    --emerald-subtle: rgba(16, 185, 129, 0.12);
+    --emerald: #34d399;
+    --emerald-subtle: rgba(52, 211, 153, 0.12);
     --amber: #f59e0b;
     --amber-subtle: rgba(245, 158, 11, 0.12);
     --rose: #f43f5e;
@@ -997,6 +997,15 @@ export function dashboardHtml(data: DashboardData): string {
     min-height: 100vh;
     line-height: 1.5;
     -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  ::selection { background: rgba(52, 211, 153, 0.25); }
+
+  :is(a, button, input):focus-visible {
+    outline: 2px solid var(--emerald);
+    outline-offset: 2px;
+    border-radius: var(--radius-sm);
   }
 
   a { color: var(--text); text-decoration: none; }
@@ -1010,10 +1019,16 @@ export function dashboardHtml(data: DashboardData): string {
 
   /* Top Navigation */
   header.nav-header {
+    position: sticky;
+    top: 0;
+    z-index: 100;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 1.25rem 0;
+    padding: 0.9rem 0;
+    background: rgba(10, 10, 10, 0.8);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
     border-bottom: 1px solid var(--border-subtle);
     margin-bottom: 2rem;
   }
