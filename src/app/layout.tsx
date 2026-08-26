@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
-import { GeistMono } from "geist/font/mono";
-import { GeistSans } from "geist/font/sans";
 import { Analytics } from "@vercel/analytics/next";
+import "@fontsource-variable/instrument-sans";
+import "@fontsource/ibm-plex-mono/400.css";
+import "@fontsource/ibm-plex-mono/500.css";
+import "@fontsource/ibm-plex-mono/600.css";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -17,9 +19,7 @@ export const metadata: Metadata = {
 const themeBoot = `(() => {
   try {
     const saved = localStorage.getItem('a404-theme');
-    const theme = saved === 'light' || saved === 'dark'
-      ? saved
-      : matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    const theme = saved === 'dark' ? 'dark' : 'light';
     document.documentElement.dataset.theme = theme;
     document.documentElement.style.colorScheme = theme;
   } catch (_) {}
@@ -27,7 +27,7 @@ const themeBoot = `(() => {
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
 	return (
-		<html lang="en" suppressHydrationWarning className={`${GeistSans.variable} ${GeistMono.variable}`}>
+		<html lang="en" suppressHydrationWarning>
 			<head>
 				<script dangerouslySetInnerHTML={{ __html: themeBoot }} />
 			</head>

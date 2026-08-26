@@ -26,10 +26,12 @@ describe("Next dashboard UI", () => {
 
 	it("defines the approved light/dark tokens and reduced-motion fallback", async () => {
 		const css = await readFile(new URL("../src/app/globals.css", import.meta.url), "utf8");
-		expect(css).toContain("--canvas: #fafafa");
-		expect(css).toContain("--signal: #1fa971");
-		expect(css).toContain('--canvas: #000000');
-		expect(css).toContain("--signal: #45d699");
+		expect(css).toContain("--canvas: #f3f5f2");
+		expect(css).toContain("--signal: #138a58");
+		expect(css).toContain('--canvas: #080b09');
+		expect(css).toContain("--signal: #43d493");
+		expect(css).toContain('"Instrument Sans Variable"');
+		expect(css).toContain('"IBM Plex Mono"');
 		expect(css).toContain("prefers-reduced-motion: reduce");
 	});
 
