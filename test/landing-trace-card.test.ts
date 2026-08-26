@@ -31,6 +31,15 @@ describe("landing request-trace card", () => {
 		expect(block).toContain("white-space: nowrap");
 	});
 
+	it("draws the vertical rail on the trace rail, not the whole card, so it cannot run through the topbar", () => {
+		const card = css.match(/\.heroEvidence\s*\{[^}]*\}/)?.[0] ?? "";
+		expect(card).not.toContain("::before");
+		const rail = ruleBlock(".traceRail::before");
+		expect(rail).toContain("top: 0");
+		expect(rail).toContain("bottom: 0");
+		expect(ruleBlock(".traceRail")).toContain("position: relative");
+	});
+
 	it("keeps the trace card structure with right-aligned step metadata", async () => {
 		const page = await readFile(new URL("../src/app/page.tsx", import.meta.url), "utf8");
 		expect(page).toContain('aria-label="Live recovery protocol trace"');
