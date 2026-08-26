@@ -245,7 +245,7 @@
 	overflow: hidden;
 }
 
-.heroEvidence::before {
+.traceRail::before {
 	position: absolute;
 	top: 0;
 	bottom: 0;
