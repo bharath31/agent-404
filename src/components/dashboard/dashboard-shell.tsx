@@ -67,6 +67,15 @@ export function DashboardShell({ sites, viewerEmail, children }: { sites: SiteNa
 					<div className={styles.topbarActions}><a href="/skills/agent-404" target="_blank" rel="noreferrer">Docs <ExternalIcon size={13} /></a><ThemeToggle /></div>
 				</header>
 				<main id="dashboard-content" className={styles.main}>{children}</main>
+				{activeDomain ? (
+					<nav className={styles.mobileDock} aria-label={`${activeDomain} mobile navigation`}>
+						{scopedNav.map(({ suffix, label, icon: Icon }) => {
+							const href = `${base}${suffix}`;
+							const active = pathname === href;
+							return <Link key={label} href={href} className={active ? styles.mobileDockActive : undefined} aria-current={active ? "page" : undefined}><Icon size={17} /><span>{label}</span></Link>;
+						})}
+					</nav>
+				) : null}
 			</div>
 		</div>
 	);

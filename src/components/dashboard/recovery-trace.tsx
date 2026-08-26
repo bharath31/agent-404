@@ -18,7 +18,7 @@ export function RecoveryTrace({ request, match, hasProtocolEvidence, destination
 	const completed = stages.filter((stage) => stage.done).length;
 
 	return <div className={styles.trace} data-complete={completed}>
-		<div className={styles.traceRail} aria-hidden="true"><span style={{ width: `${Math.max(0, ((completed - 1) / 3) * 100)}%` }} /><i /></div>
+		<div className={styles.traceRail} aria-hidden="true"><span style={{ height: `${Math.max(0, ((completed - 1) / 3) * 100)}%` }} /><i /></div>
 		{stages.map((stage, index) => <div className={styles.traceStage} key={stage.key}>
 			<div className={`${styles.traceNode} ${stage.done ? styles.traceNodeDone : ""}`}>{stage.done ? <CheckIcon size={12} /> : <span>{index + 1}</span>}</div>
 			<div><p>{stage.label}</p><code title={stage.value}>{stage.value}</code></div>
