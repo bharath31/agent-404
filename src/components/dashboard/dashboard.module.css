@@ -782,7 +782,9 @@
 }
 
 .railBrand {
-	height: 68px;
+	/* Keep the brand row exactly as tall as the topbar so the two bottom
+	   borders form one continuous line across the seam (was a hardcoded 68px). */
+	height: var(--topbar-height);
 	border-bottom-color: var(--rail-border);
 	padding-inline: 20px;
 }
