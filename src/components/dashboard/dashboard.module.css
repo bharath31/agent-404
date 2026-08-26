@@ -101,17 +101,27 @@
 }
 
 .switcherPanel {
+	/* The panel lives inside the dark rail (which sets --rail-ink text), but
+	   paints a raised surface. Re-anchor ink/muted here so options stay
+	   readable in both themes instead of rendering white-on-white. */
 	position: absolute;
 	top: calc(100% + 7px);
 	left: 0;
 	z-index: 80;
 	width: min(330px, calc(100vw - 28px));
 	overflow: hidden;
+	color: var(--ink);
 	border: 1px solid var(--border-strong);
 	border-radius: 11px;
 	background: var(--surface-raised);
 	box-shadow: var(--shadow-menu);
 }
+
+.switcherOption { color: var(--ink); }
+.optionText small,
+.switcherEmpty,
+.switcherSearch { color: var(--muted); }
+.switcherFooter button { color: var(--ink); }
 
 .switcherSearch {
 	display: flex;
