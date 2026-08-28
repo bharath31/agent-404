@@ -4,9 +4,9 @@ import { DomainStartForm, IntegrationWorkbench } from "./landing-client";
 import styles from "./public.module.css";
 
 export const metadata: Metadata = {
-	title: "agent-404 — Recovery infrastructure for broken documentation URLs",
+	title: "agent-404 — Self-healing 404s for AI agents & crawlers",
 	description:
-		"Resolve dead documentation URLs for AI agents with ranked destinations, RFC Link headers, and JSON-LD recovery evidence.",
+		"Prevent AI agents from hallucinating on dead links. agent-404 answers any 404 at the HTTP layer with RFC Link headers and JSON-LD recovery evidence.",
 };
 
 const Arrow = () => <span aria-hidden="true">↗</span>;
@@ -33,17 +33,24 @@ export default function LandingPage() {
 			<section className={styles.hero}>
 				<div className={styles.heroCopy}>
 					<p className={styles.eyebrow}>
-						<span className={styles.liveDot} aria-hidden="true" /> Recovery infrastructure for agent traffic
+						<span className={styles.liveDot} aria-hidden="true" /> Self-healing 404s for AI agents &amp; crawlers
 					</p>
 					<h1>
-						Your docs moved.
-						<span>The answer did not disappear.</span>
+						Your pages moved.
+						<span>AI agents still get the right answer.</span>
 					</h1>
 					<p className={styles.heroDescription}>
-						agent-404 turns a dead URL into a machine-readable route forward. AI crawlers get the closest
-						live page in a Link header and JSON-LD—without changing the honest 404 status.
+						agent-404 answers dead URLs at the HTTP layer — docs, product, pricing, any page in your
+						sitemap. Cursor, Claude, and search bots get the closest live page in a Link header and
+						JSON-LD, while your 404 stays an honest 404. Three lines of middleware, under 25ms at the edge.
 					</p>
 					<DomainStartForm />
+					<ul className={styles.proofStrip} aria-label="Product highlights">
+						<li><strong>3 lines</strong> of middleware</li>
+						<li><strong>&lt;25ms</strong> edge resolution</li>
+						<li><strong>60s</strong> to install</li>
+						<li><strong>MIT</strong> open source</li>
+					</ul>
 				</div>
 
 				<div className={styles.heroEvidence} aria-label="Live recovery protocol trace">
@@ -53,7 +60,7 @@ export default function LandingPage() {
 					</div>
 					<div className={styles.requestLine}>
 						<span className={styles.method}>GET</span>
-						<code>/docs/v1/authentication</code>
+						<code>/api/v1/authentication</code>
 						<span className={styles.status404}>404</span>
 					</div>
 					<div className={styles.traceRail}>
@@ -75,18 +82,18 @@ export default function LandingPage() {
 							<span>03</span>
 							<div>
 								<strong>Followed destination</strong>
-								<code>/docs/v2/auth</code>
+								<code>/api/v2/auth</code>
 							</div>
 						</div>
 					</div>
 					<pre className={styles.responseEvidence}>
-						<code>{`HTTP/1.1 404 Not Found\nLink: </docs/v2/auth>; rel="alternate"\nX-Agent-404-Match: moved\nX-Agent-404-Score: 0.964`}</code>
+						<code>{`HTTP/1.1 404 Not Found\nLink: </api/v2/auth>; rel="alternate"\nX-Agent-404-Match: moved\nX-Agent-404-Score: 0.964`}</code>
 					</pre>
 				</div>
 			</section>
 
 			<section className={styles.agentBand} aria-label="Compatible AI agents">
-				<span>Designed for the clients that keep old URLs in context</span>
+				<span>Recovers the agents that still remember your old URLs</span>
 				<ul>
 					<li>ClaudeBot</li>
 					<li>GPTBot</li>
@@ -175,7 +182,7 @@ export default function LandingPage() {
 				</div>
 				<div className={styles.finalActions}>
 					<Link className={styles.primaryButton} href="/auth/login?return_to=/dashboard">
-						Add your first site
+						Claim your domain
 					</Link>
 					<Link className={styles.secondaryButton} href="/demo">
 						Run an audit

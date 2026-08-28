@@ -3,7 +3,7 @@
 *Last updated: March 2025*
 
 ## Product Overview
-**One-liner:** Autonomous HTTP-layer 404 recovery that prevents AI agents, coding assistants, and search engines from hallucinating on dead documentation links.
+**One-liner:** Autonomous HTTP-layer 404 recovery that prevents AI agents, coding assistants, and search engines from hallucinating on dead links — on docs, API routes, marketing pages, e-commerce, or any page in a sitemap.
 **What it does:** agent-404 sits at your application's edge middleware. When an AI assistant (Cursor, Claude Code, ChatGPT, Perplexity) or developer hits a moved or deprecated route, agent-404 matches the dead path against your indexed sitemap using 4-signal hybrid vector search (<25ms) and returns RFC 5988 `Link: rel="alternate"` headers and `schema.org/ItemList` JSON-LD so models recover in a single hop.
 **Product category:** AI Search & Agent Readiness Infrastructure (GEO / AI SEO / Developer Experience)
 **Product type:** Hosted Edge Developer SaaS + Open Source Edge Adapters
@@ -12,7 +12,7 @@
 ## Target Audience
 **Target companies:** Developer tool companies, API providers, SaaS platforms, open-source libraries, technical documentation portals, and content-heavy tech sites.
 **Decision-makers:** Head of Developer Relations (DevRel), Technical SEO Leads, VP of Engineering, Lead Docs Engineers, Tech Leads, and Full-Stack Architects.
-**Primary use case:** Preventing AI coding agents (Claude Code, Cursor, Copilot) and AI answer engines (Perplexity, ChatGPT Search) from failing or hallucinating outdated code when technical documentation URLs change or are restructured.
+**Primary use case:** Preventing AI coding agents (Claude Code, Cursor, Copilot) and AI answer engines (Perplexity, ChatGPT Search) from failing or hallucinating when any URL changes or is restructured — a docs migration, a deprecated API route, a renamed product page, or a moved blog post. Docs/API is the sharpest, most bot-dense case and leads; the mechanism is identical for every page.
 **Jobs to be done:**
 - "Make sure developers using Cursor and Claude Code never hit dead docs links and hallucinate deprecated APIs."
 - "Preserve our SEO authority and AI search visibility (GEO) through documentation restructures and major version bumps."
