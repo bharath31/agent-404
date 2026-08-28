@@ -63,7 +63,7 @@ export function DomainStartForm() {
 		const data = new FormData(event.currentTarget);
 		const domain = normalizeDomain(String(data.get("domain") || ""));
 		if (!domain) {
-			setError("Enter a domain such as docs.example.com.");
+			setError("Enter a domain such as example.com.");
 			return;
 		}
 		setError("");
@@ -81,7 +81,7 @@ export function DomainStartForm() {
 		<div>
 			<form className={styles.domainForm} onSubmit={submit} noValidate>
 				<label className={styles.srOnly} htmlFor="landing-domain">
-					Documentation domain
+					Your domain
 				</label>
 				<span className={styles.formProtocol} aria-hidden="true">
 					https://
@@ -90,7 +90,7 @@ export function DomainStartForm() {
 					id="landing-domain"
 					name="domain"
 					autoComplete="url"
-					placeholder="docs.yourcompany.com"
+					placeholder="yourcompany.com"
 					aria-describedby={error ? "landing-domain-error" : "landing-domain-help"}
 					aria-invalid={Boolean(error)}
 				/>
